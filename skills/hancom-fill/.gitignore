@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.bak
+# Cache directory will live under ~/.claude/cache/ — not in skill dir, but
+# guard against accidental local copies:
+cache/

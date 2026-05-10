@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "hancom-fill v0.1 plan",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["slot_id", "value"],
+    "properties": {
+      "slot_id": { "type": "string", "pattern": "^slot-\\d+$" },
+      "value":   { "type": "string" }
+    },
+    "additionalProperties": false
+  }
+}
