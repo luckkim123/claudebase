@@ -283,6 +283,23 @@ done
 
 \hi{Threshold 선택}: 180 초 (3 분) 는 long-thinking (Cogitated 1m+) 흔한 워커에서 false-positive 빈번. \hi{300 초 (5 분) 가 실전 안전}. 단순 작업 (한 파일 edit, 빌드 1회) 만 monitor 하면 180 도 OK.
 
+**Monitor 실행 모드 — eval 인라인 vs 셸 스크립트 파일**
+
+위 monitor 를 `Bash run_in_background: true` 의 인라인 eval 로 띄우면 zsh `eval` 의 큰 코드 + python3 here-doc quoting 충돌로 \hi{silent 죽음} 가능 (2026-05-19 라이온 prep 세션에서 task 6 monitor 가 polling 자체 안 함). 해결:
+
+1. \hi{셸 스크립트 파일로 분리} — `~/claude-settings/claude/scripts/omc_monitor.sh` 가 영구 보존 위치 (claude-settings 에 커밋된 정본). 임시 디버깅용으로만 `/tmp/omc_monitor.sh` 사용
+2. Bash background 호출: `bash ~/claude-settings/claude/scripts/omc_monitor.sh <team> <id> <pane> [stale_sec] [cwd]`
+3. 스크립트 내부에서 매 polling 결과를 `echo "[POLL ... status=... version=... stale=...]"` 로 \hi{log} → 디버깅·진행 가시성 동시 확보
+
+스크립트 구조 (필수 요소):
+- `#!/bin/bash` shebang (zsh 충돌 회피)
+- arg 4 개 + optional 2 개 (team / id / pane / stale_sec / cwd)
+- 위 status 분기 (completed / failed / pending / in_progress / 빈응답)
+- iteration counter + log echo (가시성)
+- 종료 코드: 0=done / 1=fail / 2=stale / 3=arg 오류
+
+\hi{언제 인라인 OK}: 단순 monitor (status only, log 없음) 는 인라인도 작동. 3-signal + log 같이 복잡해지면 셸 파일 분리가 안전.
+
 \hi{종료 경로 3개}: `completed` → 정상, `failed` → 실패, `STALE_THRESHOLD` 초 정체 → \hi{stale alert} (사용자에게 ``워커 nudge 필요'' 신호). 셋 다 push 알림이라 사각지대 0.
 
 \hi{Stale 처리 표준}: stale alert 받으면 메인 패널이 (1) `tmux capture-pane` 으로 워커 현재 상태 확인, (2) nudge 메시지 + 2-step Enter 로 깨움, (3) 깨어나면 새 monitor 재시작, (4) 안 깨어나면 사용자에게 ``shutdown 후 재 dispatch'' 옵션 제안.
