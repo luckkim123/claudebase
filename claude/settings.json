@@ -1,6 +1,13 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "defaultMode": "auto"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
   },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
@@ -36,10 +43,6 @@
   "alwaysThinkingEnabled": false,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "statusLine": {
-    "type": "command",
-    "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
-  },
   "omcHud": {
     "preset": "focused",
     "locale": "en",
@@ -55,10 +58,10 @@
       "backgroundTasks": true,
       "showCache": false,
       "showCost": false,
-      "showTokens": false
+      "showTokens": false,
+      "model": true,
+      "modelFormat": "short"
     }
   },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  }
+  "skipDangerousModePermissionPrompt": true
 }
