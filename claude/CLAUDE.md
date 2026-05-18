@@ -96,6 +96,50 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 ---
 
+## OMC (oh-my-claudecode) Orchestration
+
+`oh-my-claudecode@yeachan-heo` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: middle** — Claude does not auto-route to OMC, but **proposes** OMC delegation when a task clearly benefits from it.
+
+### When to propose OMC (proactive)
+
+Propose OMC at the start of a task when **two or more** of these are true:
+
+- The user describes work that touches **3+ distinct files or subsystems**.
+- The work has **clear independent subtasks** that can run in parallel (e.g., "implement A, B, C, and wire them together").
+- The user explicitly asks for **autonomous, long-running work** ("just do it", "until done", "don't ask me each step").
+- The task fits a named OMC command pattern below.
+
+Proposal format (one short sentence, then continue if user agrees):
+
+> "이 작업은 `/oh-my-claudecode:<command>`로 위임하는 게 빠를 것 같은데, 그렇게 진행할까요?"
+
+If the user says yes — invoke the OMC command. If no, fall back to the normal Brainstorm → Plan → Execute workflow above.
+
+### When NOT to propose OMC
+
+- Single-file edit, typo, one-liner, or trivial fix.
+- The user is in **learning output style** (current goal is to teach/explain — autopilot would defeat that).
+- Reference-based writing (concept notes, paper reviews) — see Evidence Before Assertion; OMC's parallel mode increases hallucination risk on citation-bound work.
+- Tasks already inside an active `superpowers:executing-plans` flow — finish the current plan instead of switching meta-runners.
+
+### Useful OMC commands (use directly when the pattern matches)
+
+| Pattern | OMC command | Notes |
+|:---|:---|:---|
+| Full multi-step feature from natural-language brief | `/oh-my-claudecode:autopilot` | Replaces brainstorm → plan → execute when user explicitly wants hands-off. |
+| Bounded refactor / many parallel small edits | `/oh-my-claudecode:ultrawork` | Max parallel subagents. Good for "rename X in 20 files". |
+| Multi-role review (architect + QA + critic) | `/oh-my-claudecode:team` | Use before merging non-trivial PRs. |
+| Long-running iterative loop (write-test-fix) | `/oh-my-claudecode:ralph` | When success is checkable (tests pass, lints clean). |
+| Deep research into a library/topic before designing | `/oh-my-claudecode:deep-interview` | Pairs well with `context7` MCP. |
+
+### Coexistence rules
+
+- **HUD statusline**: OMC owns it. Configuration lives in `omcHud` block of `~/.claude/settings.json`. To switch presets in-session: `/oh-my-claudecode:hud minimal|focused|full`.
+- **Do not** propose OMC's `team` or `autopilot` for tasks inside this `claude-settings` repo itself — meta-changes to the settings that orchestrate OMC should stay surgical and reviewed line-by-line.
+- **Subagent dispatch precedence**: `superpowers:subagent-driven-development` is preferred when a written plan already exists (it enforces reviewer agents per task). OMC `/team` is preferred when no plan exists and the user wants the team to scope-then-execute.
+
+---
+
 ## Versioned Release Workflow (preferred for non-trivial features)
 
 When the user proposes a non-trivial change to a versioned package
@@ -178,5 +222,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-05-14
+**Last Updated**: 2026-05-18
 **Managed by**: [`claude-settings`](https://github.com/luckkim123/claude-settings) — edit at `~/claude-settings/claude/CLAUDE.md`, the symlink picks up changes automatically.

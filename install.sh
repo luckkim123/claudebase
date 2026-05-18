@@ -226,6 +226,15 @@ PY
     fi
   fi
 
+  # Yeachan-Heo marketplace (oh-my-claudecode — multi-agent orchestration)
+  if echo "$enabled" | grep -q "@yeachan-heo"; then
+    if ! claude plugin marketplace list 2>/dev/null | grep -q "^yeachan-heo"; then
+      log "adding marketplace: Yeachan-Heo/oh-my-claudecode (yeachan-heo)"
+      run claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
+        || log "  WARNING: failed to add yeachan-heo marketplace; check network"
+    fi
+  fi
+
   local plugin current ok=0 fixed=0 failed=0
   while IFS= read -r plugin || [[ -n "$plugin" ]]; do
     [[ -z "$plugin" ]] && continue
@@ -332,6 +341,16 @@ sync_plugins
 LOCAL_FILE="$CLAUDE_HOME/settings.local.json"
 if [[ ! -e "$LOCAL_FILE" ]]; then
   log "hint: no $LOCAL_FILE — see templates/settings.local.example.json for per-machine plugin overrides"
+fi
+
+# 8. oh-my-claudecode HUD setup hint
+#    OMC's HUD statusline is installed lazily on first /oh-my-claudecode:hud or
+#    /omc-setup invocation. Auto-running it here would require a live Claude Code
+#    session, so we only print the next step instead of automating it.
+if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@yeachan-heo') else 1)" 2>/dev/null; then
+  if [[ ! -f "$CLAUDE_HOME/hud/omc-hud.mjs" ]]; then
+    log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
+  fi
 fi
 
 log "done. backup dir created only if a non-symlink file was overwritten."

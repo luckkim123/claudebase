@@ -2,10 +2,6 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "statusLine": {
-    "type": "command",
-    "command": "input=$(cat); model=$(echo \"$input\" | jq -r '.model.display_name'); remaining=$(echo \"$input\" | jq -r '.context_window.remaining_percentage // \"?\"'); dir=$(echo \"$input\" | jq -r '.workspace.current_dir' | xargs basename); echo \"${model}  ctx:${remaining}%  ${dir}\""
-  },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
@@ -20,7 +16,8 @@
     "pr-review-toolkit@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "axlabs-mckinsey-pptx@axlabs": true
+    "axlabs-mckinsey-pptx@axlabs": true,
+    "oh-my-claudecode@yeachan-heo": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
@@ -28,6 +25,30 @@
         "source": "github",
         "repo": "seulee26/mckinsey-pptx"
       }
+    },
+    "yeachan-heo": {
+      "source": {
+        "source": "github",
+        "repo": "Yeachan-Heo/oh-my-claudecode"
+      }
+    }
+  },
+  "omcHud": {
+    "preset": "focused",
+    "locale": "en",
+    "elements": {
+      "contextBar": true,
+      "agents": true,
+      "todos": true,
+      "omcLabel": true,
+      "ralph": true,
+      "autopilot": true,
+      "activeSkills": true,
+      "lastSkill": true,
+      "backgroundTasks": true,
+      "showCache": false,
+      "showCost": false,
+      "showTokens": false
     }
   },
   "alwaysThinkingEnabled": false,
