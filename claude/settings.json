@@ -17,7 +17,7 @@
     "pyright-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
-    "oh-my-claudecode@yeachan-heo": true
+    "oh-my-claudecode@omc": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
@@ -26,13 +26,16 @@
         "repo": "seulee26/mckinsey-pptx"
       }
     },
-    "yeachan-heo": {
+    "omc": {
       "source": {
         "source": "github",
         "repo": "Yeachan-Heo/oh-my-claudecode"
       }
     }
   },
+  "alwaysThinkingEnabled": false,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
   "omcHud": {
     "preset": "focused",
     "locale": "en",
@@ -50,8 +53,5 @@
       "showCost": false,
       "showTokens": false
     }
-  },
-  "alwaysThinkingEnabled": false,
-  "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  }
 }

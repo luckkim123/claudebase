@@ -98,7 +98,7 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 ## OMC (oh-my-claudecode) Orchestration
 
-`oh-my-claudecode@yeachan-heo` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: middle** — Claude does not auto-route to OMC, but **proposes** OMC delegation when a task clearly benefits from it.
+`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: middle** — Claude does not auto-route to OMC, but **proposes** OMC delegation when a task clearly benefits from it.
 
 ### When to propose OMC (proactive)
 
