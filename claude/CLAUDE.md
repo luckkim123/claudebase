@@ -237,8 +237,11 @@ Polling 간격: 30 초가 표준. 길면 응답성 저하, 짧으면 `omc team a
 
 ```bash
 # zsh 호환성: $status, $hash 는 zsh 의 read-only 예약 변수 — 절대 사용 X
-# (사용 시 'read-only variable' 에러로 monitor 즉시 exit 1 — 2026-05-19 라이온 prep 세션에서 첫 회귀)
-TEAM=...; ID=...; PANE=...; STALE_THRESHOLD=180   # 3 분 정체 = stale 판정
+# (사용 시 'read-only variable' 에러로 monitor 즉시 exit 1)
+#
+# Stale 카운트는 'in_progress' 상태에서만 누적 — pending / completed / failed / 빈 status 는 reset
+# (이 보호 없으면 completed 후 잔존 polling 1 회에서 pane idle → 잘못된 stale alert 발사. 2026-05-19 false-positive)
+TEAM=...; ID=...; PANE=...; STALE_THRESHOLD=300   # 5 분 정체 = stale (3 분은 long-thinking 시 false-positive)
 
 prev_version=""
 prev_hash=""
@@ -252,13 +255,16 @@ while true; do
   case "$task_status" in
     completed) echo "[ALERT-DONE] task=$ID completed at $(date +%H:%M:%S)"; exit 0 ;;
     failed)    echo "[ALERT-FAIL] task=$ID failed at $(date +%H:%M:%S)";    exit 1 ;;
+    pending)   stale_count=0; sleep 30; continue ;;   # 워커가 claim 전, stale 아님
+    in_progress) ;;                                    # 아래 stale 체크
+    *)         stale_count=0; sleep 30; continue ;;   # 빈 응답 / 알 수 없는 상태
   esac
 
   pane_hash=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null | md5sum | cut -d' ' -f1)
   if [ "$version" = "$prev_version" ] && [ "$pane_hash" = "$prev_hash" ]; then
     stale_count=$((stale_count + 30))
     if [ $stale_count -ge $STALE_THRESHOLD ]; then
-      echo "[ALERT-STALE] task=$ID frozen ${stale_count}s — pane=$PANE need nudge"
+      echo "[ALERT-STALE] task=$ID frozen ${stale_count}s in in_progress — pane=$PANE need nudge"
       exit 2
     fi
   else
@@ -268,6 +274,14 @@ while true; do
   sleep 30
 done
 ```
+
+\hi{Stale 카운트 룰} (false-positive 방지 핵심):
+- `pending`: 워커가 claim 전 — 정상 대기. stale 카운트 reset
+- `in_progress`: stale 체크 대상 — version + pane hash 둘 다 안 바뀌어야 stale 누적
+- `completed` / `failed`: 즉시 exit (정상 종료)
+- 빈 응답: API 일시 오류 가능 — stale reset (다음 polling 에서 재확인)
+
+\hi{Threshold 선택}: 180 초 (3 분) 는 long-thinking (Cogitated 1m+) 흔한 워커에서 false-positive 빈번. \hi{300 초 (5 분) 가 실전 안전}. 단순 작업 (한 파일 edit, 빌드 1회) 만 monitor 하면 180 도 OK.
 
 \hi{종료 경로 3개}: `completed` → 정상, `failed` → 실패, `STALE_THRESHOLD` 초 정체 → \hi{stale alert} (사용자에게 ``워커 nudge 필요'' 신호). 셋 다 push 알림이라 사각지대 0.
 
