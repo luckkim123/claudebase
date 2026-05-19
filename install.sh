@@ -245,6 +245,18 @@ PY
       run claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
         || log "  WARNING: failed to add omc marketplace; check network"
     fi
+
+    # OMC shell CLI (oh-my-claude-sisyphus) — required for `omc team` / tmux pane workers.
+    # Plugin alone only provides slash commands; the shell `omc` binary is a separate npm package.
+    if ! command -v omc >/dev/null 2>&1; then
+      if command -v npm >/dev/null 2>&1; then
+        log "installing omc shell CLI: npm i -g oh-my-claude-sisyphus@latest"
+        run npm i -g oh-my-claude-sisyphus@latest >/dev/null 2>&1 \
+          || log "  WARNING: failed to install oh-my-claude-sisyphus; run manually"
+      else
+        log "  WARNING: npm not found; skipping omc shell CLI install"
+      fi
+    fi
   fi
 
   local plugin current ok=0 fixed=0 failed=0
