@@ -166,7 +166,7 @@ tmux send-keys -t <pane-id> C-m
 
 1. \hi{omc CLI stdout/stderr 섞임} — `omc team api ...` 의 첫 줄에 ``[team] canonicalized duplicate worker entries: worker-1'' 같은 비-JSON 라인이 stdout 으로 떨어짐. 단순 `... | python -m json.tool` 깨짐. ==회피: `grep '^{' | head -1` 로 첫 JSON 라인만 추출==
 2. \hi{omc state wipe (orphan-cleanup self-invoke)} — 워커가 lease expiry 시 \hi{자기 task / team 전체를 삭제}. 회복 불가. \hi{디스크 산출물은 살아남음}. ==회피: 워커 SOP 에 ``orphan-cleanup is leader-only — never self-invoke. On lease expiry, send-message + idle.'' 명시==
-3. \hi{Claude TUI pane title 동적 override} — 워커가 작업 시작하면 pane\_title 을 ``✳ Execute worker task and report progress'' 같은 자체 문구로 덮음. ==회피: `omc_pane_label.sh reapply` 주기적 호출 (또는 사용자가 헷갈릴 때 1회)==
+3. \hi{Claude TUI pane title 동적 override} — 워커가 작업 시작하면 OSC escape 로 pane\_title 을 ``✳ Execute worker task and report progress'' 같은 자체 문구로 덮음. thinking 중 매 100-500ms 마다 spam → border flicker. ==회피: `omc_pane_label.sh apply` 가 v3 부터 `tmux set -g allow-set-title off` 까지 함께 적용 → tmux 가 OSC title escape 자체를 ignore. pane\_title 영구 고정, watchdog 불필요. (`clear` 호출 시 자동 복원)==
 4. \hi{Monitor stale-aware 의 thinking-카운터 사각지대} — ``Cogitated / Cooked / Brewed / Churned XmYs'' 카운터가 매 분 갱신되어 pane content hash 가 바뀜. stale 카운터 reset 됨. \hi{API 529 (서버 과부하) 도 status 변화 없이 13+ 분 freeze}. ==회피: pane hash 추출 시 ``Cogitated/Cooked/Brewed/Churned'' 라인 제외 OR task version 단독 polling==. 사용자가 직접 발견하는 fallback 도 인정
 
 **표준 진단 절차 (매 사용자 발언 전 의무)**
