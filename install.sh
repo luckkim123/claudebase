@@ -208,9 +208,21 @@ PY
     return
   fi
 
+  # Marketplace-exists check. `claude plugin marketplace list` prints entries
+  # as `  ❯ <name>` followed by `    Source: ...` — we extract just the names.
+  # Previous per-marketplace grep patterns were inconsistent (^name vs name vs
+  # \bname\b), causing the axlabs branch to re-add on every run because the
+  # leading "  ❯ " prefix never matched `^axlabs`.
+  marketplace_exists() {
+    local name="$1"
+    claude plugin marketplace list 2>/dev/null \
+      | awk '/❯/ {print $2}' \
+      | grep -qx "$name"
+  }
+
   # Ensure canonical marketplace exists if any plugin references it
   if echo "$enabled" | grep -q "@claude-plugins-official"; then
-    if ! claude plugin marketplace list 2>/dev/null | grep -q claude-plugins-official; then
+    if ! marketplace_exists "claude-plugins-official"; then
       log "adding marketplace: anthropics/claude-plugins-official"
       run claude plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 \
         || log "  WARNING: failed to add marketplace; check network"
@@ -219,7 +231,7 @@ PY
 
   # AX Labs marketplace (mckinsey-pptx for ppt-academic skill)
   if echo "$enabled" | grep -q "@axlabs"; then
-    if ! claude plugin marketplace list 2>/dev/null | grep -q "^axlabs"; then
+    if ! marketplace_exists "axlabs"; then
       log "adding marketplace: seulee26/mckinsey-pptx (axlabs)"
       run claude plugin marketplace add seulee26/mckinsey-pptx >/dev/null 2>&1 \
         || log "  WARNING: failed to add axlabs marketplace; check network"
@@ -228,7 +240,7 @@ PY
 
   # OMC marketplace (Yeachan-Heo/oh-my-claudecode — multi-agent orchestration)
   if echo "$enabled" | grep -q "@omc"; then
-    if ! claude plugin marketplace list 2>/dev/null | grep -qw "omc"; then
+    if ! marketplace_exists "omc"; then
       log "adding marketplace: Yeachan-Heo/oh-my-claudecode (omc)"
       run claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
         || log "  WARNING: failed to add omc marketplace; check network"
@@ -350,6 +362,16 @@ fi
 if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
   if [[ ! -f "$CLAUDE_HOME/hud/omc-hud.mjs" ]]; then
     log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
+  fi
+fi
+
+# 9. settings.json drift check (warn-only)
+#    settings.json is symlinked, so the Claude Code CLI writes straight back
+#    into the repo when it auto-formats or persists new settings. Surface this
+#    so the user can decide to commit, discard, or update the canonical file.
+if command -v git >/dev/null 2>&1; then
+  if [[ -n "$(git -C "$REPO_DIR" status --porcelain claude/settings.json 2>/dev/null)" ]]; then
+    log "drift: claude/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff claude/settings.json"
   fi
 fi
 

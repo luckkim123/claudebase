@@ -158,15 +158,26 @@ try {
     $Enabled = (Get-Content "$ClaudeHome/settings.json" -Raw | ConvertFrom-Json).enabledPlugins.PSObject.Properties | Where-Object { $_.Value -eq $true } | ForEach-Object { $_.Name }
 } catch {}
 
+# Marketplace-exists check (mirror of install.sh helper). `claude plugin
+# marketplace list` prints entries as `  ❯ <name>` — extract just the names
+# and exact-match. The previous per-marketplace -match patterns matched
+# arbitrary substrings, causing axlabs to re-add on every run.
+function Marketplace-Exists([string]$name) {
+    $list = claude plugin marketplace list 2>$null
+    if (-not $list) { return $false }
+    $names = $list | Select-String -Pattern '❯\s+(\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+    return $names -contains $name
+}
+
 if ($Enabled -match '@axlabs') {
-    if (-not ((claude plugin marketplace list 2>$null) -match 'axlabs')) {
+    if (-not (Marketplace-Exists 'axlabs')) {
         Log "adding marketplace: seulee26/mckinsey-pptx (axlabs)"
         Run { claude plugin marketplace add seulee26/mckinsey-pptx 2>$null | Out-Null }
     }
 }
 
 if ($Enabled -match '@omc') {
-    if (-not ((claude plugin marketplace list 2>$null) -match '\bomc\b')) {
+    if (-not (Marketplace-Exists 'omc')) {
         Log "adding marketplace: Yeachan-Heo/oh-my-claudecode (omc)"
         Run { claude plugin marketplace add Yeachan-Heo/oh-my-claudecode 2>$null | Out-Null }
     }
@@ -182,6 +193,16 @@ if (-not (Test-Path -LiteralPath $LocalFile)) {
 if ($Enabled -match 'oh-my-claudecode@omc') {
     if (-not (Test-Path -LiteralPath "$ClaudeHome/hud/omc-hud.mjs")) {
         Log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
+    }
+}
+
+# 8. settings.json drift check (mirror of install.sh step 9) — warn-only.
+#    Claude Code CLI writes straight back into the symlinked repo file when
+#    it auto-formats or persists new settings.
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $drift = git -C $RepoDir status --porcelain claude/settings.json 2>$null
+    if ($drift) {
+        Log "drift: claude/settings.json modified by Claude CLI - review with: git -C $RepoDir diff claude/settings.json"
     }
 }
 
