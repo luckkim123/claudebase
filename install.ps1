@@ -148,10 +148,41 @@ if (Test-Path $PlatformInstaller) {
     Run { & $PlatformInstaller }
 }
 
+# 5b. plugin marketplaces — mirror of install.sh's sync_plugins marketplace-add
+#     block. install.ps1 does NOT yet implement the full plugin-sync flow
+#     (parity gap vs install.sh — tracked separately); these adds are a no-op
+#     until a Windows machine actually exercises `claude plugin install`, but
+#     keeping them aligned avoids drift later.
+$Enabled = @()
+try {
+    $Enabled = (Get-Content "$ClaudeHome/settings.json" -Raw | ConvertFrom-Json).enabledPlugins.PSObject.Properties | Where-Object { $_.Value -eq $true } | ForEach-Object { $_.Name }
+} catch {}
+
+if ($Enabled -match '@axlabs') {
+    if (-not ((claude plugin marketplace list 2>$null) -match 'axlabs')) {
+        Log "adding marketplace: seulee26/mckinsey-pptx (axlabs)"
+        Run { claude plugin marketplace add seulee26/mckinsey-pptx 2>$null | Out-Null }
+    }
+}
+
+if ($Enabled -match '@omc') {
+    if (-not ((claude plugin marketplace list 2>$null) -match '\bomc\b')) {
+        Log "adding marketplace: Yeachan-Heo/oh-my-claudecode (omc)"
+        Run { claude plugin marketplace add Yeachan-Heo/oh-my-claudecode 2>$null | Out-Null }
+    }
+}
+
 # 6. local-overrides hint
 $LocalFile = Join-Path $ClaudeHome "settings.local.json"
 if (-not (Test-Path -LiteralPath $LocalFile)) {
     Log "hint: no $LocalFile - see templates/settings.local.example.json for per-machine plugin overrides"
+}
+
+# 7. oh-my-claudecode HUD setup hint (mirror of install.sh step 8)
+if ($Enabled -match 'oh-my-claudecode@omc') {
+    if (-not (Test-Path -LiteralPath "$ClaudeHome/hud/omc-hud.mjs")) {
+        Log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
+    }
 }
 
 Log "done. backup dir created only if a non-symlink file was overwritten."
