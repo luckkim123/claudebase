@@ -36,15 +36,39 @@ esac
 CLAUDE_HOME="$HOME/.claude"
 
 # Runtime dependency check — warn-only so install.sh remains idempotent.
-# `jq` is required by the statusLine command in claude/settings.json; without
-# it the status line silently renders as literal template text (e.g. "ctx:%").
+# Each block checks one optional dependency and emits a single WARNING line
+# plus an installation hint when missing. Nothing is auto-installed — the user
+# decides whether to run the suggested command.
 check_runtime_deps() {
-  command -v jq >/dev/null 2>&1 && return
-  printf '[install] WARNING: "jq" not found — statusLine will degrade silently\n'
-  case "$PLATFORM" in
-    macos) printf '[install]   install: brew install jq\n' ;;
-    linux) printf '[install]   install: sudo apt-get install -y jq  (Debian/Ubuntu)\n' ;;
-  esac
+  # jq — required by the statusLine command in claude/settings.json; without
+  # it the status line silently renders as literal template text (e.g. "ctx:%").
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '[install] WARNING: "jq" not found — statusLine will degrade silently\n'
+    case "$PLATFORM" in
+      macos) printf '[install]   install: brew install jq\n' ;;
+      linux) printf '[install]   install: sudo apt-get install -y jq  (Debian/Ubuntu)\n' ;;
+    esac
+  fi
+
+  # gemini CLI — required by the gen-image skill (Google nano banana image
+  # generation). Without it /gen-image falls back to direct REST API calls
+  # which work but bypass the MCP tool path documented in the skill.
+  if ! command -v gemini >/dev/null 2>&1; then
+    printf '[install] WARNING: "gemini" CLI not found — gen-image skill needs it\n'
+    case "$PLATFORM" in
+      macos) printf '[install]   install: brew install gemini-cli  (or: npm install -g @google/gemini-cli)\n' ;;
+      linux) printf '[install]   install: npm install -g @google/gemini-cli\n' ;;
+    esac
+  else
+    # gemini present — also verify the nano banana extension is installed.
+    # The extension exposes the mcp_nanobanana_generate_image tool the
+    # gen-image skill expects. Without it the skill silently degrades to
+    # text-only Gemini responses.
+    if [[ ! -d "$HOME/.gemini/extensions/nanobanana" ]]; then
+      printf '[install] WARNING: nano banana extension missing — gen-image MCP path disabled\n'
+      printf '[install]   install: gemini extensions install https://github.com/gemini-cli-extensions/nanobanana\n'
+    fi
+  fi
 }
 check_runtime_deps
 BACKUP_DIR="$CLAUDE_HOME/.backup-$(date +%Y%m%d-%H%M%S)"
