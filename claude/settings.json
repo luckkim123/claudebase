@@ -41,6 +41,7 @@
     }
   },
   "alwaysThinkingEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "omcHud": {
@@ -63,8 +64,16 @@
       "modelFormat": "short"
     },
     "layout": {
-      "line1": ["hostname", "cwd", "gitRepo", "gitBranch", "model", "gitStatus", "apiKeySource", "profile"]
+      "line1": [
+        "hostname",
+        "cwd",
+        "gitRepo",
+        "gitBranch",
+        "model",
+        "gitStatus",
+        "apiKeySource",
+        "profile"
+      ]
     }
-  },
-  "skipDangerousModePermissionPrompt": true
+  }
 }
