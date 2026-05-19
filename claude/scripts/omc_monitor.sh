@@ -65,16 +65,19 @@ CONFIRM_PATTERNS='Awaiting main confirm|Decisions needed from main|STOPPING — 
 THINKING_FILTER='Cogitated|Crunched|Embellishing|Precipitating|Brewed|Cooked|Churned|Synthesizing|Pondered'
 
 # Detect "user typed at prompt but no Enter" — a "❯ <text>" line where <text> is non-trivial.
-# Claude TUI may add leading whitespace or ANSI escapes; match "❯ " anywhere on the line.
+# Claude TUI separates the ❯ marker from typed text using a NO-BREAK SPACE (U+00A0, c2 a0),
+# NOT an ASCII space, so we must use perl -CSD with a Unicode-aware class instead of
+# grep's [[:space:]] (POSIX-locale → ASCII only).
 detect_typed_noop() {
   local capture
   capture=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null)
-  # Strip ANSI escapes, then look at the last 8 non-empty lines for "❯ <text>" with >3 chars after the marker
+  # Strip ANSI escapes, drop blank lines, look at the last 8 non-empty lines,
+  # then test for "❯<any whitespace>+<at least 3 non-whitespace chars>".
   echo "$capture" \
     | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' \
     | grep -v '^[[:space:]]*$' \
     | tail -8 \
-    | grep -qE '❯ [^[:space:]].{2,}' && return 0
+    | perl -CSD -ne 'exit 0 if /❯\s+\S{3,}/; END{exit 1}' && return 0
   return 1
 }
 
@@ -123,7 +126,11 @@ while true; do
   fi
 
   # ── Confirm-pending pattern (V3 dry-run pause) ─────
-  if echo "$pane_raw" | grep -qE "$CONFIRM_PATTERNS"; then
+  # Only look at the last ~30 lines of pane (recent state), not scrollback —
+  # old G1 plan text persists in scrollback after user confirms, causing
+  # false ALERT-CONFIRM. Recent activity always lives at the bottom.
+  pane_tail=$(echo "$pane_raw" | tail -30)
+  if echo "$pane_tail" | grep -qE "$CONFIRM_PATTERNS"; then
     echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
     exit 4
   fi
