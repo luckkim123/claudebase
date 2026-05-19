@@ -126,6 +126,8 @@ fi
 
 After upgrade, re-run `claude --version` to confirm and then proceed to step 5. If the upgrade fails (network, permission, npm registry), surface the error and continue to step 5 anyway — old CLI is better than no install.
 
+**ENOTEMPTY trap (2026-05-19 ksm_Obsidian session).** Upgrading `claude` from inside a running claude session can fail with `ENOTEMPTY: directory not empty, rename '.../claude-code' -> '.../.claude-code-XXXXXX'`. npm renames the existing dir to a hidden temp name before installing the new one, and the current claude process holds files open inside it so the rename aborts mid-flight. The orphaned `.claude-code-XXXXXX` temp dir then blocks future upgrade attempts even after the original session ends. Fix: `rm -rf /opt/homebrew/lib/node_modules/@anthropic-ai/.claude-code-*` (or the equivalent path on your npm prefix), then retry `npm i -g @anthropic-ai/claude-code`. The live `claude-code/` dir is *not* touched by this — only the orphaned temp. Verified safe on 2.1.143 → 2.1.144 with an active session still running.
+
 ### 5. Run installer
 
 ```bash
