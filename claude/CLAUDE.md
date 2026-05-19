@@ -160,6 +160,29 @@ tmux send-keys -t <pane-id> C-m
 ```
 1차 시도 후 `tmux capture-pane -pt <pane-id> -S -20` 로 실제 명령이 prompt 에 입력됐는지 확인. 입력은 됐으나 실행 안 된 상태면 step 2 만 다시 보냄. 자동화 실패 시 fallback 으로 사용자에게 "워커 패널에서 Enter 한 번 부탁드립니다" 안내.
 
+**Launch 직후 워커 상태 검증 — 매 launch 마다 의무 (2026-05-19 발견)**
+
+`omc team launch` 가 \hi{launch text 를 task 1 으로 자동 등록 + worker pane 에 inbox-read nudge 까지 paste} 하지만, \hi{Enter 입력 + Claude TUI init 둘 다 보장 X}. 메인이 ``전에는 잘 됐으니 이번에도 될 것'' 으로 가정하면 \hi{워커가 prompt 에서 paste 만 된 채 멈춤} — 사용자가 직접 발견해야 알게 됨. 매 launch 직후 자동 검증 의무화:
+
+1. \hi{Launch 직후 즉시} `tmux list-panes -t 0 -F "#{pane_index} cwd=#{pane_current_path}"` 로 \hi{새 pane id 확인} (\hi{pane index 재배치 함정} — 위 별도 노트와 동일)
+2. \hi{20-30 초 후} `tmux capture-pane -pt <pane-id> -S -25` 로 워커 pane 정독:
+   - 빈 화면 (Claude TUI init 미완료) — \hi{30 초 더 대기 후 재 capture}
+   - paste 됐지만 Enter 없음 — 2-step Enter 우회 (위) 적용
+   - `[API 429]` 표시 — \hi{rate limited} — 5-10 분 대기 후 Enter 재시도, 또는 다른 워커 셧다운 후 재 launch
+   - 정상 실행 (``Reading the inbox now ...'' 등) — OK, monitor 띄움
+3. \hi{30 초 후에도 빈 화면 + paste 도 안 보임} — process 자체 실패. shutdown + 재 launch
+
+**워커 동시 launch 위험 — 가능한 한 sequential 권장**
+
+여러 워커 동시 launch (예: A 직후 바로 B) 는 위 \hi{launch 직후 검증} 룰을 \hi{둘 다} 통과해야 안전. 동시 launch 가 깨지는 \hi{검증된 케이스} (2026-05-19):
+
+- \hi{API 429}: 메인 사용 + 새 워커 두 개 동시 init = Anthropic API 부하. \hi{429 가 보이면 워커 process 살아있어도 메시지 응답 X} → 메인은 ``Enter 안 눌렸나'' 로 오해
+- \hi{TUI init 지연}: 두 워커가 동시에 `claude --dangerously-skip-permissions` 부팅 → 한쪽은 20 초, 다른 쪽은 60 초 걸림. 메인이 \hi{빠른 쪽 기준}으로만 검증하면 늦은 쪽 누락
+
+대안:
+- \hi{Sequential launch}: 워커 A launch → 검증 통과 → \hi{task 1 in\_progress 진입 확인} → 워커 B launch. 2-3 분 overhead 있으나 안정
+- \hi{병렬 필요 시}: 두 워커 launch \hi{직후} 둘 다 검증 (즉 위 절차를 2 pane 각각 적용). 429 발견 시 한 워커 \hi{셧다운} 후 sequential 로 전환
+
 **Task lifecycle 함정 — standby 를 task 로 보내지 말 것**
 
 `omc team 1:claude "<standby 컨텍스트>"` 로 launch 하면 그 컨텍스트 자체가 task 1 로 등록됨. 워커는 환경 검증만 하고 task completed 처리 → 다음 dispatch 가 안 들어옴.
