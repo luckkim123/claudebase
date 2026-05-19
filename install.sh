@@ -199,6 +199,39 @@ if [[ -f "$PLATFORM_INSTALLER" ]]; then
   run bash "$PLATFORM_INSTALLER"
 fi
 
+# 5b. project-scope hook deployment — merge OMC reference auto-loader into
+#     each known project's .claude/settings.json. Idempotent: re-runs detect
+#     and replace the existing entry via marker string. Silently skips
+#     projects that don't exist on this machine.
+HOOK_FRAGMENT="$REPO_DIR/claude/hooks/omc-reference-loader.json"
+HOOK_MERGER="$REPO_DIR/claude/hooks/merge-project-hook.py"
+HOOK_MARKER="OMC_REFERENCE_AUTO_LOAD"
+PROJECT_TARGETS=(
+  "$HOME/Desktop/workspace"
+  "$HOME/ksm_Obsidian"
+)
+if [[ -f "$HOOK_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
+  for project_root in "${PROJECT_TARGETS[@]}"; do
+    [[ -d "$project_root" ]] || { debug "skip project hook: $project_root not present"; continue; }
+    project_claude="$project_root/.claude"
+    run mkdir -p "$project_claude"
+    target_file="$project_claude/settings.json"
+    if [[ $DRY_RUN -eq 1 ]]; then
+      log "would merge OMC hook into: $target_file"
+    else
+      output=$(python3 "$HOOK_MERGER" "$HOOK_FRAGMENT" "$target_file" "$HOOK_MARKER" 2>&1)
+      rc=$?
+      case $rc in
+        0) log "project hook: $output" ;;
+        2) debug "skip project hook: parent missing for $target_file" ;;
+        *) log "WARNING: project hook merge failed (rc=$rc) for $target_file: $output" ;;
+      esac
+    fi
+  done
+else
+  debug "skip project hook deployment: fragment or merger missing"
+fi
+
 # 6. plugin sync — ensure every enabledPlugin in settings.json is installed at
 #    user scope. Idempotent: plugins already at user scope are skipped; ones
 #    registered at project/local scope (or with stale "unknown" version) are

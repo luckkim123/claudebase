@@ -1,0 +1,13 @@
+{
+  "_comment": "OMC reference catalog auto-loader. Deployed to project-scope .claude/settings.json files (currently: ~/Desktop/workspace, ~/ksm_Obsidian) by install.sh. The marker string 'OMC_REFERENCE_AUTO_LOAD' in the command lets install.sh detect existing installations for idempotent updates.",
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "# OMC_REFERENCE_AUTO_LOAD\necho '## OMC Skill Catalog (auto-loaded)' && echo '' && cat ~/.claude/plugins/cache/omc/oh-my-claudecode/*/skills/omc-reference/SKILL.md 2>/dev/null | tail -n +6 || echo 'OMC reference not found — run /oh-my-claudecode:omc-doctor'"
+        }
+      ]
+    }
+  ]
+}
