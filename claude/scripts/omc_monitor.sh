@@ -1,85 +1,140 @@
 #!/bin/bash
-# omc_monitor.sh - 3-signal monitor for omc team tasks
+# omc_monitor.sh v2 - Multi-signal monitor for omc team tasks (or pane-direct workers).
 #
-# Polls status + task version + tmux pane content hash to detect:
-#   - normal completion (status=completed)
-#   - failure (status=failed)
-#   - stale freeze (in_progress with no version change AND no pane activity)
+# Detects:
+#   ALERT-DONE       — task.status=completed (or deliverable file appeared)
+#   ALERT-FAIL       — task.status=failed
+#   ALERT-STALE      — in_progress with no version change AND no pane activity for STALE_SEC
+#   ALERT-CONFIRM    — worker is waiting for main confirm (V3 dry-run pause)  ← NEW v2
+#   ALERT-TYPED-NOOP — user typed into pane but didn't press Enter            ← NEW v2
 #
 # Usage:
-#   bash omc_monitor.sh <team_name> <task_id> <pane_id> [stale_threshold_sec] [cwd]
+#   bash omc_monitor.sh <team_name> <task_id> <pane_id> [stale_sec=300] [cwd=PWD] [deliverable_glob]
+#
+# If team_name="-" or task_id="-", skips omc API polling (pane-only mode for pane-direct workers).
+# If deliverable_glob set, additionally exits ALERT-DONE when matching file appears.
 #
 # Exit codes:
-#   0 = task completed normally
-#   1 = task transitioned to failed
-#   2 = task stale (frozen N sec in in_progress)
-#   3 = invalid args / setup error
+#   0  ALERT-DONE
+#   1  ALERT-FAIL
+#   2  ALERT-STALE
+#   3  invalid args
+#   4  ALERT-CONFIRM (worker awaiting confirm)
+#   5  ALERT-TYPED-NOOP (user typed but no Enter)
 #
 # Notes:
-#   - Logs every polling iteration to stdout for visibility.
-#   - Stale counter only accumulates in 'in_progress' (pending/empty reset).
-#   - Default threshold 300s (5min) — 180s false-positives on long-thinking workers.
-#   - Avoid zsh read-only variable names ($status, $hash) in this script.
-#   - Use shebang #!/bin/bash explicitly to bypass zsh eval quoting issues.
+#   - Pane hash strips thinking-progress lines (Cogitated/Crunched/Embellishing/Precipitating/Brewed/Cooked/Churned)
+#     so heartbeat counters don't reset stale detector (CLAUDE.md trap #4).
+#   - Confirm-pending patterns are TUI cues from ppt-edit V3 dry-run gate.
+#   - Polling interval 30s. Confirm/typed-noop alerts fire once and exit (re-arm by caller).
 
 TEAM="${1:-}"
 ID="${2:-}"
 PANE="${3:-}"
 STALE_THRESHOLD="${4:-300}"
 CWD="${5:-$PWD}"
+DELIVERABLE="${6:-}"
 
-if [ -z "$TEAM" ] || [ -z "$ID" ] || [ -z "$PANE" ]; then
-  echo "[ERR] usage: $0 <team> <id> <pane> [stale_sec] [cwd]"
+if [ -z "$PANE" ]; then
+  echo "[ERR] usage: $0 <team|-> <task_id|-> <pane> [stale_sec] [cwd] [deliverable_path_or_glob]"
   exit 3
 fi
 
 cd "$CWD" || { echo "[ERR] cd $CWD failed"; exit 3; }
 
-echo "[INFO $(date +%H:%M:%S)] monitor start: team=$TEAM task=$ID pane=$PANE stale=${STALE_THRESHOLD}s cwd=$CWD"
+PANE_ONLY=0
+if [ "$TEAM" = "-" ] || [ "$ID" = "-" ]; then
+  PANE_ONLY=1
+fi
+
+# Record monitor start epoch — only files NEWER than this count as fresh deliverables
+# (prevents false-DONE on pre-existing files like a clean cp before patches apply).
+MONITOR_START_EPOCH=$(date +%s)
+
+echo "[INFO $(date +%H:%M:%S)] monitor v2 start: team=$TEAM task=$ID pane=$PANE stale=${STALE_THRESHOLD}s cwd=$CWD pane_only=$PANE_ONLY deliverable=${DELIVERABLE:-none} start_epoch=$MONITOR_START_EPOCH"
 
 prev_version=""
 prev_hash=""
 stale_count=0
 iter=0
 
+# Regex patterns for confirm-pending detection (W1 dry-run pause cues)
+CONFIRM_PATTERNS='Awaiting main confirm|Decisions needed from main|STOPPING — Awaiting|STOP\. Will not|Apply.*\? *✅|proceed\? *✅|✅ / ❌'
+
+# Regex for thinking-heartbeat lines to strip from hash (CLAUDE.md trap #4)
+THINKING_FILTER='Cogitated|Crunched|Embellishing|Precipitating|Brewed|Cooked|Churned|Synthesizing|Pondered'
+
+# Detect "user typed at prompt but no Enter" — a "❯ <text>" line where <text> is non-trivial.
+# Claude TUI may add leading whitespace or ANSI escapes; match "❯ " anywhere on the line.
+detect_typed_noop() {
+  local capture
+  capture=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null)
+  # Strip ANSI escapes, then look at the last 8 non-empty lines for "❯ <text>" with >3 chars after the marker
+  echo "$capture" \
+    | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+    | grep -v '^[[:space:]]*$' \
+    | tail -8 \
+    | grep -qE '❯ [^[:space:]].{2,}' && return 0
+  return 1
+}
+
 while true; do
   iter=$((iter + 1))
-  resp=$(omc team api read-task --input "{\"team_name\":\"$TEAM\",\"task_id\":\"$ID\"}" --json 2>/dev/null)
-  task_status=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("status",""))' 2>/dev/null)
-  version=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("version",0))' 2>/dev/null)
 
-  echo "[POLL $(date +%H:%M:%S) iter=$iter] status=$task_status version=$version stale=${stale_count}s"
+  # ── Deliverable file check (mtime > monitor start) ──
+  # Only counts files freshly modified AFTER monitor start, so a pre-existing
+  # or cp-copied file from G1 doesn't fire ALERT-DONE prematurely.
+  if [ -n "$DELIVERABLE" ]; then
+    for f in $(compgen -G "$DELIVERABLE" 2>/dev/null); do
+      f_mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)
+      if [ -n "$f_mtime" ] && [ "$f_mtime" -gt "$MONITOR_START_EPOCH" ]; then
+        echo "[ALERT-DONE] fresh deliverable matched at $(date +%H:%M:%S) iter=$iter: $f (mtime=$f_mtime > start=$MONITOR_START_EPOCH)"
+        exit 0
+      fi
+    done
+  fi
 
-  case "$task_status" in
-    completed)
-      echo "[ALERT-DONE] task=$ID completed at $(date +%H:%M:%S) (after $iter polls)"
-      exit 0
-      ;;
-    failed)
-      echo "[ALERT-FAIL] task=$ID failed at $(date +%H:%M:%S)"
-      exit 1
-      ;;
-    pending)
-      stale_count=0
-      sleep 30
-      continue
-      ;;
-    in_progress)
-      # below stale check
-      ;;
-    *)
-      # empty or unknown - api may be transient, reset and continue
-      stale_count=0
-      sleep 30
-      continue
-      ;;
-  esac
+  # ── Team/task status check (skip in pane-only mode) ─
+  if [ $PANE_ONLY -eq 0 ]; then
+    resp=$(omc team api read-task --input "{\"team_name\":\"$TEAM\",\"task_id\":\"$ID\"}" --json 2>/dev/null)
+    task_status=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("status",""))' 2>/dev/null)
+    version=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("version",0))' 2>/dev/null)
 
-  pane_hash=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null | md5sum | cut -d' ' -f1)
+    case "$task_status" in
+      completed) echo "[ALERT-DONE] task=$ID completed at $(date +%H:%M:%S) iter=$iter"; exit 0 ;;
+      failed)    echo "[ALERT-FAIL] task=$ID failed at $(date +%H:%M:%S) iter=$iter"; exit 1 ;;
+      pending)   stale_count=0; sleep 30; continue ;;
+      in_progress) ;;   # check pane below
+      *) stale_count=0; sleep 30; continue ;;
+    esac
+  else
+    task_status="(pane-only)"
+    version="$iter"   # use iter as proxy so version always changes — pane hash is the real signal
+  fi
+
+  # ── Pane capture + hash (strip thinking heartbeats) ─
+  pane_raw=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null)
+  pane_hash=$(echo "$pane_raw" | grep -vE "$THINKING_FILTER" | md5sum | cut -d' ' -f1)
+
+  # ── Typed-no-Enter check (highest priority — actionable by Enter) ──
+  if detect_typed_noop; then
+    echo "[ALERT-TYPED-NOOP] task=$ID user typed at prompt but no Enter sent at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+    exit 5
+  fi
+
+  # ── Confirm-pending pattern (V3 dry-run pause) ─────
+  if echo "$pane_raw" | grep -qE "$CONFIRM_PATTERNS"; then
+    echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+    exit 4
+  fi
+
+  echo "[POLL $(date +%H:%M:%S) iter=$iter] status=$task_status version=$version stale=${stale_count}s hash=${pane_hash:0:8}"
+
+  # ── Stale detection ────────────────────────────────
   if [ "$version" = "$prev_version" ] && [ "$pane_hash" = "$prev_hash" ]; then
     stale_count=$((stale_count + 30))
     if [ $stale_count -ge $STALE_THRESHOLD ]; then
-      echo "[ALERT-STALE] task=$ID frozen ${stale_count}s in in_progress — pane=$PANE need nudge at $(date +%H:%M:%S)"
+      echo "[ALERT-STALE] task=$ID frozen ${stale_count}s — pane=$PANE need nudge at $(date +%H:%M:%S)"
       exit 2
     fi
   else

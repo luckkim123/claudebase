@@ -398,6 +398,26 @@ done
 
 \hi{언제 단순 vs 개선 monitor}: 단순 작업 (한 파일 surgical edit, 빌드 1회) 은 단순 monitor 충분. \hi{Multi-SOP 작업} (parsing → restructure → build → verify → report 같은 5+ step) 은 SOP 간 freeze 위험 → 개선 monitor 권장.
 
+**Monitor v2 (2026-05-20) — 5-signal 사각지대 보강**
+
+3-signal monitor 가 못 잡는 새 함정 3종을 v2 (`omc_monitor.sh`) 에서 보강:
+
+1. \hi{Dry-run confirm-pending idle} — ppt-edit V3 Provenance Lock 같은 룰로 워커가 ``Awaiting main confirm'' 으로 의도적 정지. status 는 in_progress 지만 사용자 입력 대기 중이고 stale 카운터는 hash 변경으로 reset. ==endpoint 가 deliverable 파일== 인 monitor 는 영원히 대기.
+2. \hi{User typed but no Enter} — 사용자가 `❯ ` prompt 에 답변 입력하지만 Enter 가 \hi{paste-bracketed mode 에 흡수}되어 워커가 못 받음. 메인이 send-keys 로 Enter 보내도 무시됨. \hi{회피: `C-a C-k` 로 line clear 후 새로 입력 + Enter 별도 전송}.
+3. \hi{Pre-existing deliverable false-DONE} — G1 dry-run 에서 워커가 cp 로 clean copy 생성하면 deliverable glob 매칭은 되지만 진짜 patch 는 아직 진행 중. ==mtime 비교 (mtime > monitor_start_epoch) 로 해결==.
+
+v2 신규 alert 2종 + 1종 endpoint 보강:
+- \hi{ALERT-CONFIRM (exit 4)} — pane content 에 ``Awaiting main confirm'' / ``Decisions needed'' / ``STOPPING'' / ``✅ / ❌'' 패턴 감지. 메인이 워커 plan 검토 후 응답 필요.
+- \hi{ALERT-TYPED-NOOP (exit 5)} — `❯ <text>` 가 prompt 에 입력만 되고 Enter 미전송 감지. \hi{높은 우선순위} (Enter 만 보내면 풀림, confirm 보다 actionable).
+- \hi{ALERT-DONE 보강} — deliverable 파일의 mtime 이 monitor_start_epoch 보다 \hi{새로워야} 발사. cp 직후의 untouched copy 무시.
+
+호출 형식 (pane-only 모드 추가: team_name/task_id 둘 다 ``-'' 로 두면 omc API polling 스킵, pane content 만 polling):
+```bash
+bash ~/claude-settings/claude/scripts/omc_monitor.sh <team|-> <task_id|-> <pane> [stale_sec=300] [cwd=PWD] [deliverable_glob]
+```
+
+\hi{Endpoint 선택 룰}: G2/G3 multi-step SOP 가 있는 ppt-edit 같은 작업은 \hi{최종 산출물 (report.md 등)} 을 endpoint 로 지정 — verify_report.json 이나 edited.pptx 같은 중간 파일은 false-DONE 위험. 최종 deliverable 이 \hi{마지막 step 에서만 작성}되는 파일이어야 함.
+
 ### Coexistence rules
 
 - **HUD statusline**: OMC owns it. Configuration lives in `omcHud` block of `~/.claude/settings.json`. To switch presets in-session: `/oh-my-claudecode:hud minimal|focused|full`.
