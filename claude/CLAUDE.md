@@ -160,6 +160,55 @@ tmux send-keys -t <pane-id> C-m
 ```
 1차 시도 후 `tmux capture-pane -pt <pane-id> -S -20` 로 실제 명령이 prompt 에 입력됐는지 확인. 입력은 됐으나 실행 안 된 상태면 step 2 만 다시 보냄. 자동화 실패 시 fallback 으로 사용자에게 "워커 패널에서 Enter 한 번 부탁드립니다" 안내.
 
+**누적 함정 4종 + 표준 진단 절차 (2026-05-19 디펜스 세션 발견)**
+
+이번 세션에서 메인이 ==잘못된 상태 인식 3회 누적== 했음. 사용자가 매번 정정. 원인 4가지:
+
+1. \hi{omc CLI stdout/stderr 섞임} — `omc team api ...` 의 첫 줄에 ``[team] canonicalized duplicate worker entries: worker-1'' 같은 비-JSON 라인이 stdout 으로 떨어짐. 단순 `... | python -m json.tool` 깨짐. ==회피: `grep '^{' | head -1` 로 첫 JSON 라인만 추출==
+2. \hi{omc state wipe (orphan-cleanup self-invoke)} — 워커가 lease expiry 시 \hi{자기 task / team 전체를 삭제}. 회복 불가. \hi{디스크 산출물은 살아남음}. ==회피: 워커 SOP 에 ``orphan-cleanup is leader-only — never self-invoke. On lease expiry, send-message + idle.'' 명시==
+3. \hi{Claude TUI pane title 동적 override} — 워커가 작업 시작하면 pane\_title 을 ``✳ Execute worker task and report progress'' 같은 자체 문구로 덮음. ==회피: `omc_pane_label.sh reapply` 주기적 호출 (또는 사용자가 헷갈릴 때 1회)==
+4. \hi{Monitor stale-aware 의 thinking-카운터 사각지대} — ``Cogitated / Cooked / Brewed / Churned XmYs'' 카운터가 매 분 갱신되어 pane content hash 가 바뀜. stale 카운터 reset 됨. \hi{API 529 (서버 과부하) 도 status 변화 없이 13+ 분 freeze}. ==회피: pane hash 추출 시 ``Cogitated/Cooked/Brewed/Churned'' 라인 제외 OR task version 단독 polling==. 사용자가 직접 발견하는 fallback 도 인정
+
+**표준 진단 절차 (매 사용자 발언 전 의무)**
+
+워커 상태를 발언/결정 근거로 쓰기 전:
+```bash
+cd <working dir>
+bash ~/claude-settings/claude/scripts/omc_status.sh
+```
+한 화면에 모든 team task 상태 + tmux pane state 정리. ==이 명령 결과를 보고 발언==. ``W4 가 멈춰있는 거 같다'' 같은 직관 발언 금지 — `omc_status.sh` 결과로만 판단.
+
+**Task 생성은 wrapper 사용 의무**
+
+`omc team api create-task` 직접 호출 금지. 대신:
+```bash
+bash ~/claude-settings/claude/scripts/omc_create_task.sh <team_name> "<subject>" <description_file_or_->
+```
+이 wrapper 가 — (1) JSON 안전 인코딩, (2) stderr 섞임 필터, (3) ok=false 응답 감지, (4) 중복 호출 방지 — 모두 처리. ==성공 시 task\_id stdout 출력, 실패 시 stderr + exit 1==.
+
+**Pane label 자동 부여 — 매 launch 후 표준 절차 (2026-05-19 추가)**
+
+Claude Code TUI 는 자체적으로 \hi{pane\_title 을 현재 task description 으로 동적 갱신} 함. 메인이 `tmux select-pane -T '[W1] ...'` 로 수동 부여한 라벨은 \hi{워커가 다음 작업 시작하는 순간 덮어써짐} — 사용자가 ``어느 pane 이 어느 워커지?'' 헷갈리게 됨.
+
+해결: tmux `pane-border-format` 에 \hi{pane\_index 기준 hardcoded 라벨 + Claude 동적 title 병기} 형태로 박는다. 이 작업 자동화는 `~/claude-settings/claude/scripts/omc_pane_label.sh`:
+
+```bash
+# 매 launch 직후 pane 식별 끝나면 호출
+bash ~/claude-settings/claude/scripts/omc_pane_label.sh apply \
+  '0=[MAIN] User chat' \
+  '1=[W1] PPT Editor' \
+  '2=[W2] Image' \
+  '3=[W3] Reviewer'
+```
+
+결과: 각 pane 위 border 에 \hi{`[W1] PPT Editor | ✳ Execute worker inbox task...`} 형태로 표시. 좌측은 영구 라벨, 우측은 Claude 동적 정보.
+
+\hi{Pane index 재배치 함정과 결합}: 새 워커 launch 시 기존 pane 들의 index 가 재배치되는 경우가 잦음 — apply 호출 \hi{전} `tmux list-panes -a` 로 현재 매핑 재확인 필수.
+
+기타 명령:
+- `bash omc_pane_label.sh show` — 현재 라벨 + pane 상태 확인
+- `bash omc_pane_label.sh clear` — 라벨 + tmux pane-border-status 모두 리셋 (세션 정리 시)
+
 **Launch 직후 워커 상태 검증 — 매 launch 마다 의무 (2026-05-19 발견)**
 
 `omc team launch` 가 \hi{launch text 를 task 1 으로 자동 등록 + worker pane 에 inbox-read nudge 까지 paste} 하지만, \hi{Enter 입력 + Claude TUI init 둘 다 보장 X}. 메인이 ``전에는 잘 됐으니 이번에도 될 것'' 으로 가정하면 \hi{워커가 prompt 에서 paste 만 된 채 멈춤} — 사용자가 직접 발견해야 알게 됨. 매 launch 직후 자동 검증 의무화:
@@ -253,6 +302,26 @@ Polling 간격: 30 초가 표준. 길면 응답성 저하, 짧으면 `omc team a
 - Worker process 자체 죽음 (pane prompt 그대로, status 안 바뀜)
 
 3가지 모두 사용자 입장에서 ``끝났니?'' 묻기 전엔 알 수 없음 → \hi{개선 monitor 필요}.
+
+**Cogitated 카운터 사각지대 — 새 함정 (2026-05-19 발견)**
+
+3-signal monitor (status + version + pane hash) 도 잡지 못하는 케이스:
+
+- 워커가 \hi{같은 ledger 파일을 메인과 동시 수정} → ``File must be read first'' Edit 에러 → \hi{워커가 10+ 분 thinking 으로 복구 경로 모색}
+- Claude TUI 는 thinking 동안 pane 에 \hi{`✻ Cogitated for XmYs ↓ token` 같은 라인을 분 단위로 갱신} → \hi{pane content hash 가 매 분 변함} → stale 카운터 reset → ALERT-STALE 발사 \hi{안 됨}
+- 사용자가 ``뭔가 멈춘 거 같은데?'' 직접 발견해야 알게 됨
+
+\hi{검증된 사례 (2026-05-19 디펜스 prep 세션)}: W1 워커가 dispatch\_log.md Edit 실패 → 10분 31초 thinking → 사용자 ``멈추지마.'' 입력으로 trigger → 자체 회복. monitor 는 정상 status=in\_progress 만 보고 stale 알림 zero.
+
+\hi{보완 패턴 옵션}:
+1. \hi{Pane hash 추출 시 ``Cogitated'' / ``Embellishing'' / ``Precipitating'' 라인 제외} — monitor 스크립트가 capture-pane 결과 grep -v 로 thinking 진행 표시 제거 후 hash. 변경 없이 hash 같으면 진짜 freeze
+2. \hi{Task version 단독 polling} (pane hash 무시) — omc task version 은 워커가 실질적 progress 만들 때만 증가 (claim renewal 제외). pane false-positive 회피
+3. \hi{Thinking 시간 \hi{자체}를 stale signal 로} — Cogitated XmYs 추출, 10분 초과 시 alert. \hi{단 long-thinking 자체가 잘못은 아니므로 ALERT-LONG-THINK} 형태로 정보성
+
+\hi{운영 룰} (당장 적용):
+- 메인이 워커 dispatch 직후엔 \hi{ledger 파일을 안 만지는 룰} 강화. 동시 수정 race 자체를 회피
+- Monitor 가 잠잠한데 워커 진행이 의심스러우면 \hi{사용자가 직접 capture-pane 으로 확인} 후 nudge — 자동화 한계 인지
+- Thinking 5분 초과 발견 시 monitor 로그에 정보 출력 (Stale alert 와 별도 신호) 권장
 
 **개선 monitor — 3-signal 동시 감시**
 
