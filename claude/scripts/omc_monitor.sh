@@ -1,5 +1,13 @@
 #!/bin/bash
-# omc_monitor.sh v3.1 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+# omc_monitor.sh v3.2 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+#
+# v3.2 (2026-05-20): heuristic CONFIRM_PATTERNS tightened — Korean phrases
+#   "확인 필요" / "결정 필요" / "의도 확인 필요" caused false-positives when
+#   workers wrote them as descriptive prose in plan/analysis output
+#   (e.g., "이 부분은 사용자 결정 필요"). Now only matches when accompanied
+#   by explicit synchronization markers (✅/❌, "proceed", "STOP", emoji checkbox).
+#   Also: MONITOR_NO_HEURISTIC=1 env var disables heuristic fallback entirely
+#   for plan-writing workers where prose false-positives are the norm.
 #
 # v3.1 (2026-05-20): added square-bracket sentinels [[CONFIRM_PENDING]] / [[WORKER_STOPPED]] /
 #   [[WORKER_BLOCKED]] to avoid angle-bracket self-leak in worker prose (W2 image generator
@@ -86,7 +94,14 @@ SENTINEL_PATTERN='<<AWAITING_MAIN_CONFIRM>>|<<WORKER_STOPPED>>|<<WORKER_BLOCKED>
 
 # FALLBACK: natural-language heuristics (lower priority — best-effort for workers
 # that don't emit sentinels yet). Case-insensitive grep -iE.
-CONFIRM_PATTERNS='STOP[[:space:]]*[—–-][[:space:]]*[Aa]waiting|[Aa]waiting[[:space:]]+(main[[:space:]]+)?confirm|[Aa]waiting[[:space:]]+your|Decisions[[:space:]]+needed|STOPPING[[:space:]]*[—–-]|STOP\.[[:space:]]+Will[[:space:]]+not|Apply.*\?[[:space:]]*✅|proceed\?[[:space:]]*✅|✅[[:space:]]*/[[:space:]]*❌|please[[:space:]]+confirm|shall[[:space:]]+I[[:space:]]+proceed|proceed[[:space:]]+신호[[:space:]]+필요|확인[[:space:]]+(필요|요청)|승인[[:space:]]+(필요|대기)|G2[[:space:]]+진행[[:space:]]+전.*필요'
+#
+# v3.2 IMPORTANT: removed bare "확인 필요" / "결정 필요" / "G2 진행 전.*필요" — these
+# Korean phrases appear in worker plan/analysis prose as descriptive labels (e.g.,
+# "이 부분은 사용자 결정 필요") and caused false-positive ALERT-CONFIRM during plan
+# writing. Only explicit synchronization markers retained: ✅/❌ pairs, explicit
+# "STOP" patterns, "shall I proceed" / "please confirm" English imperatives.
+# For plan-writing workers, set MONITOR_NO_HEURISTIC=1 to disable heuristic entirely.
+CONFIRM_PATTERNS='STOP[[:space:]]*[—–-][[:space:]]*[Aa]waiting|[Aa]waiting[[:space:]]+(main[[:space:]]+)?confirm|Decisions[[:space:]]+needed|STOPPING[[:space:]]*[—–-]|STOP\.[[:space:]]+Will[[:space:]]+not|Apply.*\?[[:space:]]*✅|proceed\?[[:space:]]*✅|✅[[:space:]]*/[[:space:]]*❌|please[[:space:]]+confirm|shall[[:space:]]+I[[:space:]]+proceed'
 
 # Regex for thinking-heartbeat lines to strip from hash (CLAUDE.md trap #4)
 THINKING_FILTER='Cogitated|Crunched|Embellishing|Precipitating|Brewed|Cooked|Churned|Synthesizing|Pondered'
@@ -165,10 +180,14 @@ while true; do
     exit 4
   fi
 
-  # FALLBACK: natural-language heuristics
-  if echo "$pane_tail" | grep -qiE "$CONFIRM_PATTERNS"; then
-    echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm (heuristic) at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
-    exit 4
+  # FALLBACK: natural-language heuristics (skipped when MONITOR_NO_HEURISTIC=1)
+  # Disable when worker is writing plan/analysis prose where "결정 필요" style
+  # phrases naturally occur (v3.2 trap — worker plan body false-positive).
+  if [ "${MONITOR_NO_HEURISTIC:-0}" != "1" ]; then
+    if echo "$pane_tail" | grep -qiE "$CONFIRM_PATTERNS"; then
+      echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm (heuristic) at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+      exit 4
+    fi
   fi
 
   echo "[POLL $(date +%H:%M:%S) iter=$iter] status=$task_status version=$version stale=${stale_count}s hash=${pane_hash:0:8}"

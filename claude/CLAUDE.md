@@ -318,6 +318,37 @@ dispatch 본문에서 sentinel 을 \hi{설명} 할 때는 ASCII art 로 분해�
 - Multi-SOP gate 가 있는 워커 → square bracket sentinel 박기 (`[[CONFIRM_PENDING]]`)
 - 기존 angle bracket sentinel 박은 워커 → 그대로 두기 (monitor 가 양쪽 인식)
 
+\hi{함정: Heuristic false-positive — 워커 plan 본문의 ``결정 필요'' 어구 (2026-05-20 발견)}
+
+==검증된 증상==: W1 가 Section III plan.md 작성 중 본문에 ``slide 38 정량 결과 출처 불명 → ==사용자 결정 필요=='' 같이 \hi{설명용 텍스트} 로 ``확인 필요'' / ``결정 필요'' 박았는데, monitor v3.0 의 `CONFIRM_PATTERNS` 한국어 매칭 (``확인 필요'' / ``승인 대기'' / ``G2 진행 전.*필요'') 이 즉시 매칭해서 ALERT-CONFIRM (exit 4) 발사. 워커는 \hi{plan 작성 중 진행 중} 이었고 confirm-pending 아님 → ==잘못된 알림==.
+
+원인: 한국어 ``확인 필요'' / ``결정 필요'' 는 워커 plan/analysis 본문에 자연스럽게 등장하는 \hi{descriptive label}. heuristic 이 \hi{intent (synchronization point)} 와 \hi{description (annotation)} 둘 다 잡아서 false-positive 다발.
+
+==해결 (omc_monitor.sh v3.2)==:
+
+1. ==`CONFIRM_PATTERNS` 에서 bare 한국어 어구 제거== — ``확인 필요'' / ``결정 필요'' / ``G2 진행 전.*필요'' / ``승인 대기'' 모두 빠짐. 영문 ``please confirm'' / ``shall I proceed'' 같은 \hi{명시적 imperative} 만 유지. 이모지 sync marker (`✅ / ❌`, `Apply.*\?[[:space:]]*✅`) 보존.
+2. ==`MONITOR_NO_HEURISTIC=1` env var 추가== — heuristic 완전 끄고 sentinel + deliverable + stale 만 보는 모드. plan-writing 워커처럼 prose false-positive 빈번한 경우 사용:
+   ```bash
+   MONITOR_NO_HEURISTIC=1 bash omc_monitor.sh - - %18 600 /workdir section3_plan.md
+   ```
+3. ==Deliverable-only watcher 대안== — pane 추적 자체를 끄고 \hi{파일 mtime 만} polling 하는 단순 watcher 도 옵션. monitor 스크립트 대신:
+   ```bash
+   # plan-writing 워커의 경우 가장 안전
+   DELIVERABLE=/workdir/plan.md START=$(date +%s)
+   while true; do
+     if [ -f "$DELIVERABLE" ] && [ "$(stat -f %m "$DELIVERABLE")" -gt "$START" ]; then
+       echo "[ALERT-DONE] plan.md created"; exit 0
+     fi
+     sleep 30
+   done
+   ```
+
+\hi{운영 룰} (2026-05-20+):
+- ==Plan-writing / analysis 워커 (Step 2 plan.md 작성 등)== → `MONITOR_NO_HEURISTIC=1` 또는 deliverable-only watcher 사용
+- ==Multi-SOP gate 워커== → sentinel 박는 워커라 heuristic 없이 sentinel 만 봐도 OK → `MONITOR_NO_HEURISTIC=1` 권장
+- ==Heuristic 활성 (default)== → 영문 imperative + 이모지 marker 만 잡음, 한국어 prose 무시
+- \hi{만약 사용자 친 ``확인 필요''} 같은 어구로 confirm 요청하고 싶으면 → 이모지 (`✅ / ❌`) 또는 영문 ``please confirm'' 같이 sync marker 명시
+
 **Team name slug**
 
 `omc team` 은 task description 에서 첫 단어 수개로 slug 를 만듦 (영문 만). 한글 description 은 의미 없는 slug 가 됨 → \hi{description 시작을 ASCII 영문} 으로 박을 것 (예: ``Section 5.4 LQR compression worker''). `--team-name` 같은 명시 옵션은 omc CLI 에 \hi{존재하지 않음} (시도 시 help 출력 silent fail).
