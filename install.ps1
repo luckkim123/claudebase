@@ -24,9 +24,28 @@ function Log([string]$msg)   { Write-Host "[install] $msg" }
 # `jq` is required by the statusLine command in claude/settings.json; without
 # it the status line silently renders as literal template text (e.g. "ctx:%").
 function Check-RuntimeDeps {
-    if (Get-Command jq -ErrorAction SilentlyContinue) { return }
-    Write-Host '[install] WARNING: "jq" not found — statusLine will degrade silently'
-    Write-Host '[install]   install: winget install jqlang.jq  (or: scoop install jq)'
+    if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
+        Write-Host '[install] WARNING: "jq" not found — statusLine will degrade silently'
+        Write-Host '[install]   install: winget install jqlang.jq  (or: scoop install jq)'
+    }
+
+    # gemini CLI — required by the gen-image skill (Google nano banana image
+    # generation). Without it /gen-image falls back to direct REST API calls
+    # which work but bypass the MCP tool path documented in the skill.
+    if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
+        Write-Host '[install] WARNING: "gemini" CLI not found — gen-image skill needs it'
+        Write-Host '[install]   install: npm install -g @google/gemini-cli'
+    } else {
+        # gemini present — also verify the nano banana extension is installed.
+        # The extension exposes the mcp_nanobanana_generate_image tool the
+        # gen-image skill expects. Without it the skill silently degrades to
+        # text-only Gemini responses.
+        $nanoExt = Join-Path $env:USERPROFILE ".gemini/extensions/nanobanana"
+        if (-not (Test-Path -LiteralPath $nanoExt)) {
+            Write-Host '[install] WARNING: nano banana extension missing — gen-image MCP path disabled'
+            Write-Host '[install]   install: gemini extensions install https://github.com/gemini-cli-extensions/nanobanana'
+        }
+    }
 }
 Check-RuntimeDeps
 
@@ -180,6 +199,20 @@ if ($Enabled -match '@omc') {
     if (-not (Marketplace-Exists 'omc')) {
         Log "adding marketplace: Yeachan-Heo/oh-my-claudecode (omc)"
         Run { claude plugin marketplace add Yeachan-Heo/oh-my-claudecode 2>$null | Out-Null }
+    }
+
+    # OMC shell CLI (oh-my-claude-sisyphus) — required for `omc team` / tmux pane workers.
+    # Plugin alone only provides slash commands; the shell `omc` binary is a separate npm package.
+    if (-not (Get-Command omc -ErrorAction SilentlyContinue)) {
+        if (Get-Command npm -ErrorAction SilentlyContinue) {
+            Log "installing omc shell CLI: npm i -g oh-my-claude-sisyphus@latest"
+            Run { npm i -g oh-my-claude-sisyphus@latest 2>$null | Out-Null }
+            if (-not (Get-Command omc -ErrorAction SilentlyContinue)) {
+                Log "  WARNING: failed to install oh-my-claude-sisyphus; run manually"
+            }
+        } else {
+            Log "  WARNING: npm not found; skipping omc shell CLI install"
+        }
     }
 }
 
