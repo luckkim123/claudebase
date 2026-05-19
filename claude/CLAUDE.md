@@ -282,6 +282,42 @@ sentinel 은 \hi{본문에 한 번만} 출력. 추가 설명/plan 은 sentinel \
 
 \hi{기존 worker 마이그레이션}: ppt-edit V3 dry-run gate, autopilot G1 plan, ralph iteration boundary 등에 sentinel 박기. wiki/CLAUDE.md 의 task template 도 sentinel 룰 default 포함.
 
+\hi{함정: sentinel self-leak — angle bracket self-confusion (2026-05-20 발견)}
+
+==검증된 증상==: dispatch task 본문에 ``완료 시 `<<AWAITING_MAIN_CONFIRM>>` 출력'' 같은 \hi{메타-instruction} 을 박으면, 워커가 본문 작성할 때 sentinel 문자열을 ==literal 로 박지 않으려고 자체 회피==: ``< < AWAITING\_MAIN\_CONFIRM > >'' (공백) 또는 \hi{빈 `<>`} 만 남기는 케이스. 2026-05-20 라이온 prep 세션 W2 (image generator) 에서 figure 보고 메시지 끝에 빈 `<>` 누적 발견.
+
+원인: 워커가 ``monitor 가 내 출력에서 sentinel 을 찾으니 본문 설명용 텍스트에서 실제 sentinel 박으면 false positive 날 것'' 으로 \hi{과잉 추론} → 자기 출력에서 sentinel 토큰을 ==중간 비운 빈 bracket 으로 회피==. 메인 dispatch 가 ``literal 박는 방법'' 을 명시 안 해서 발생.
+
+==해결 패턴 1 — Dispatcher 측 변형 표기==
+
+dispatch 본문에서 sentinel 을 \hi{설명} 할 때는 ASCII art 로 분해해서 박을 것 — 워커가 자기 출력에서 동일 표기를 따라 하지 않게:
+
+```markdown
+## Monitor sentinel 룰
+
+완료 시 다음 토큰을 \hi{한 줄에 붙여서} 출력 (5개 토큰 연결):
+  `<` + `<` + `AWAITING_MAIN_CONFIRM` + `>` + `>`
+
+실제 출력은 위 5개를 공백 없이 이어붙인 ==12자 문자열== (정확한 형태는 monitor regex 와 일치해야 함).
+```
+
+이렇게 박으면 워커 본문에 ``< < AWAITING\_MAIN\_CONFIRM > >'' (분해 표기) 가 보존돼서 self-confusion 없음.
+
+==해결 패턴 2 — Sentinel 자체를 angle 대신 square bracket 로==
+
+더 안전: sentinel 을 `[[CONFIRM_PENDING]]` / `[[WORKER_STOPPED]]` / `[[WORKER_BLOCKED]]` 같이 square bracket 으로 운용. angle bracket 보다 markdown/HTML 파서 충돌 적고, ``불완전 형태'' (`<>`) 같은 partial leak 발생 안 함 (`[]` 빈 형태는 monitor regex 와 명백히 다름).
+
+\hi{Monitor 양쪽 sentinel 모두 인식 (backward compat)}: omc\_monitor.sh v3.1+ 의 `SENTINEL_PATTERN` 은 angle 형식 + square 형식 둘 다 OR 매칭. 기존 워커가 angle 박아도 동작, 신규 dispatch 는 square 권장.
+
+==해결 패턴 3 — Sentinel 생략 (간단한 경우)==
+
+워커가 figure/file 생성 후 곧바로 사용자 검토 요청하는 단순 워크플로우 (W2 image generator 등) 는 sentinel 자체 \hi{생략 가능}. 메인이 워커 출력 직접 받아서 사용자께 보고만 하면 됨. ==sentinel 은 multi-SOP gate (V3 dry-run, autopilot G1) 처럼 메인 확인이 \hi{명시적 동기화 지점} 일 때만 박기==.
+
+\hi{Default 룰} (2026-05-20+):
+- 단순 generator/editor 워커 → sentinel 생략, 한 줄 보고만
+- Multi-SOP gate 가 있는 워커 → square bracket sentinel 박기 (`[[CONFIRM_PENDING]]`)
+- 기존 angle bracket sentinel 박은 워커 → 그대로 두기 (monitor 가 양쪽 인식)
+
 **Team name slug**
 
 `omc team` 은 task description 에서 첫 단어 수개로 slug 를 만듦 (영문 만). 한글 description 은 의미 없는 slug 가 됨 → \hi{description 시작을 ASCII 영문} 으로 박을 것 (예: ``Section 5.4 LQR compression worker''). `--team-name` 같은 명시 옵션은 omc CLI 에 \hi{존재하지 않음} (시도 시 help 출력 silent fail).

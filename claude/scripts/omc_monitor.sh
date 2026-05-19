@@ -1,5 +1,10 @@
 #!/bin/bash
-# omc_monitor.sh v2 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+# omc_monitor.sh v3.1 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+#
+# v3.1 (2026-05-20): added square-bracket sentinels [[CONFIRM_PENDING]] / [[WORKER_STOPPED]] /
+#   [[WORKER_BLOCKED]] to avoid angle-bracket self-leak in worker prose (W2 image generator
+#   was emitting empty `<>` after seeing `<<AWAITING_MAIN_CONFIRM>>` in task description).
+#   Both styles match (OR) for backward compat.
 #
 # Detects:
 #   ALERT-DONE       — task.status=completed (or deliverable file appeared)
@@ -66,11 +71,18 @@ iter=0
 # ── Confirm-pending detection ─────────────────────────────────────────────────
 # PRIMARY signal: explicit sentinel injected by dispatcher (deterministic, no false positives)
 #   Worker is required to emit one of these tokens at confirm-pending state.
-#   Dispatcher must inject "Output sentinel `<<AWAITING_MAIN_CONFIRM>>` when ..." in task spec.
+#   Dispatcher must inject sentinel rule in task spec.
+#
+#   Two styles supported (both matched by SENTINEL_PATTERN):
+#     - angle-bracket (legacy, v3.0):   <<AWAITING_MAIN_CONFIRM>>  <<WORKER_STOPPED>>  <<WORKER_BLOCKED>>
+#     - square-bracket (preferred, v3.1+): [[CONFIRM_PENDING]]  [[WORKER_STOPPED]]  [[WORKER_BLOCKED]]
+#   Square-bracket avoids the "empty <> leak" trap (workers seeing angle sentinel in task
+#   description sometimes emit a degenerate `<>` in their own prose). See CLAUDE.md "Sentinel
+#   self-leak — angle bracket self-confusion" subsection.
 SENTINEL_CONFIRM='<<AWAITING_MAIN_CONFIRM>>'
 SENTINEL_STOP='<<WORKER_STOPPED>>'
 SENTINEL_BLOCKED='<<WORKER_BLOCKED>>'
-SENTINEL_PATTERN='<<AWAITING_MAIN_CONFIRM>>|<<WORKER_STOPPED>>|<<WORKER_BLOCKED>>'
+SENTINEL_PATTERN='<<AWAITING_MAIN_CONFIRM>>|<<WORKER_STOPPED>>|<<WORKER_BLOCKED>>|\[\[CONFIRM_PENDING\]\]|\[\[WORKER_STOPPED\]\]|\[\[WORKER_BLOCKED\]\]'
 
 # FALLBACK: natural-language heuristics (lower priority — best-effort for workers
 # that don't emit sentinels yet). Case-insensitive grep -iE.
