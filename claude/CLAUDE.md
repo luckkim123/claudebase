@@ -245,6 +245,43 @@ Q&A 한 건마다 dispatch 하지 말고 변경 메모 **3-5 건 누적 후 한 
 - 워커는 한 번의 task 에서 여러 파일을 surgical edit 후 단일 빌드로 검증하는 게 더 안전 (회귀 발견 통합).
 - 메인 패널에서는 누적 메모를 카운터로 관리, 적정 시점에 "지금 워커로 dispatch 할까요?" 사용자 확인 후 진행.
 
+**Sentinel-emit 룰 — confirm-pending 감지 결정론화 (2026-05-20 추가)**
+
+Monitor 의 confirm-pending 감지가 자연어 heuristic (``STOP — awaiting'', ``Decisions needed'') 만 쓰면 \hi{worker 메시지 wording 에 따라 매번 깨짐} (2026-05-20 라이온 prep 세션에서 W1 의 ``STOP — awaiting main confirm. Provenance Lock V3 strict: G2 진행 전 ㄱ / OK / proceed 신호 필요.'' 못 잡음). 해결: \hi{worker dispatch 시점에 명시적 sentinel 출력 룰 박기}.
+
+\hi{Dispatch 시 task description 마지막에 다음 sentinel 룰 항상 포함}:
+
+```markdown
+## Monitor sentinel 룰 (필수)
+
+다음 상태에 도달하면 ==exact literal sentinel 한 줄 출력== — monitor 가 deterministic 하게 잡음. 자연어 묘사로 대체 X:
+
+- \hi{Dry-run / confirm-pending 도달 (G1 plan 완료, main confirm 대기)}:
+  ```
+  <<AWAITING_MAIN_CONFIRM>>
+  ```
+- \hi{Worker stop 결정 (lease 만료, race 발견, fatal error)}:
+  ```
+  <<WORKER_STOPPED>> reason: <한 줄>
+  ```
+- \hi{Worker blocked (외부 의존성 대기, 사용자 자료 필요)}:
+  ```
+  <<WORKER_BLOCKED>> need: <한 줄>
+  ```
+
+sentinel 은 \hi{본문에 한 번만} 출력. 추가 설명/plan 은 sentinel \hi{앞} 또는 \hi{뒤} 줄에. monitor 는 sentinel 라인 grep 으로 즉시 alert (heuristic 매칭 대비 false positive 0).
+```
+
+\hi{Monitor 측 (omc_monitor.sh v3+)}: `SENTINEL_PATTERN` 매칭이 \hi{primary}, 자연어 `CONFIRM_PATTERNS` 는 \hi{fallback} (sentinel 미도입 worker 호환). exit code 4 = ALERT-CONFIRM.
+
+\hi{왜 이 방식이 더 안정한가}:
+1. \hi{Wording 의존성 제거} — worker 가 ``Awaiting'' / ``STOPPING'' / ``Please confirm'' 어느 문구를 쓰든 sentinel 만 박으면 매칭
+2. \hi{한글/영문 mix wording 도 OK} — sentinel 은 ASCII fixed
+3. \hi{False positive 0} — sentinel 은 worker 가 의도적으로 박은 곳에만 등장 (scrollback 의 과거 plan 텍스트 와 충돌 X)
+4. \hi{Polling 15초 단축} — sentinel 매칭은 가벼움, polling 단축으로 응답성 ↑ (`POLL_INTERVAL=15` env var 로 추가 조정 가능)
+
+\hi{기존 worker 마이그레이션}: ppt-edit V3 dry-run gate, autopilot G1 plan, ralph iteration boundary 등에 sentinel 박기. wiki/CLAUDE.md 의 task template 도 sentinel 룰 default 포함.
+
 **Team name slug**
 
 `omc team` 은 task description 에서 첫 단어 수개로 slug 를 만듦 (영문 만). 한글 description 은 의미 없는 slug 가 됨 → \hi{description 시작을 ASCII 영문} 으로 박을 것 (예: ``Section 5.4 LQR compression worker''). `--team-name` 같은 명시 옵션은 omc CLI 에 \hi{존재하지 않음} (시도 시 help 출력 silent fail).

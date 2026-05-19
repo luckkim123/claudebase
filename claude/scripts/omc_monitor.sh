@@ -25,8 +25,13 @@
 # Notes:
 #   - Pane hash strips thinking-progress lines (Cogitated/Crunched/Embellishing/Precipitating/Brewed/Cooked/Churned)
 #     so heartbeat counters don't reset stale detector (CLAUDE.md trap #4).
-#   - Confirm-pending patterns are TUI cues from ppt-edit V3 dry-run gate.
-#   - Polling interval 30s. Confirm/typed-noop alerts fire once and exit (re-arm by caller).
+#   - Confirm-pending detection has TWO paths:
+#       PRIMARY = explicit sentinel `<<AWAITING_MAIN_CONFIRM>>` / `<<WORKER_STOPPED>>` / `<<WORKER_BLOCKED>>`
+#                 emitted by worker (deterministic — dispatcher must require this in task spec)
+#       FALLBACK = natural-language heuristics ("STOP — awaiting", "Decisions needed", etc.)
+#   - Polling interval 15s default (override via POLL_INTERVAL env var).
+#     Reduced from 30s — confirm-pending detection should fire fast.
+#   - Confirm/typed-noop alerts fire once and exit (re-arm by caller).
 
 TEAM="${1:-}"
 ID="${2:-}"
@@ -58,8 +63,18 @@ prev_hash=""
 stale_count=0
 iter=0
 
-# Regex patterns for confirm-pending detection (W1 dry-run pause cues)
-CONFIRM_PATTERNS='Awaiting main confirm|Decisions needed from main|STOPPING — Awaiting|STOP\. Will not|Apply.*\? *✅|proceed\? *✅|✅ / ❌'
+# ── Confirm-pending detection ─────────────────────────────────────────────────
+# PRIMARY signal: explicit sentinel injected by dispatcher (deterministic, no false positives)
+#   Worker is required to emit one of these tokens at confirm-pending state.
+#   Dispatcher must inject "Output sentinel `<<AWAITING_MAIN_CONFIRM>>` when ..." in task spec.
+SENTINEL_CONFIRM='<<AWAITING_MAIN_CONFIRM>>'
+SENTINEL_STOP='<<WORKER_STOPPED>>'
+SENTINEL_BLOCKED='<<WORKER_BLOCKED>>'
+SENTINEL_PATTERN='<<AWAITING_MAIN_CONFIRM>>|<<WORKER_STOPPED>>|<<WORKER_BLOCKED>>'
+
+# FALLBACK: natural-language heuristics (lower priority — best-effort for workers
+# that don't emit sentinels yet). Case-insensitive grep -iE.
+CONFIRM_PATTERNS='STOP[[:space:]]*[—–-][[:space:]]*[Aa]waiting|[Aa]waiting[[:space:]]+(main[[:space:]]+)?confirm|[Aa]waiting[[:space:]]+your|Decisions[[:space:]]+needed|STOPPING[[:space:]]*[—–-]|STOP\.[[:space:]]+Will[[:space:]]+not|Apply.*\?[[:space:]]*✅|proceed\?[[:space:]]*✅|✅[[:space:]]*/[[:space:]]*❌|please[[:space:]]+confirm|shall[[:space:]]+I[[:space:]]+proceed|proceed[[:space:]]+신호[[:space:]]+필요|확인[[:space:]]+(필요|요청)|승인[[:space:]]+(필요|대기)|G2[[:space:]]+진행[[:space:]]+전.*필요'
 
 # Regex for thinking-heartbeat lines to strip from hash (CLAUDE.md trap #4)
 THINKING_FILTER='Cogitated|Crunched|Embellishing|Precipitating|Brewed|Cooked|Churned|Synthesizing|Pondered'
@@ -130,8 +145,17 @@ while true; do
   # old G1 plan text persists in scrollback after user confirms, causing
   # false ALERT-CONFIRM. Recent activity always lives at the bottom.
   pane_tail=$(echo "$pane_raw" | tail -30)
-  if echo "$pane_tail" | grep -qE "$CONFIRM_PATTERNS"; then
-    echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+
+  # PRIMARY: explicit sentinel from worker (deterministic, no false positive)
+  if echo "$pane_tail" | grep -qE "$SENTINEL_PATTERN"; then
+    matched=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | tail -1)
+    echo "[ALERT-CONFIRM] task=$ID sentinel=$matched at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+    exit 4
+  fi
+
+  # FALLBACK: natural-language heuristics
+  if echo "$pane_tail" | grep -qiE "$CONFIRM_PATTERNS"; then
+    echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm (heuristic) at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
     exit 4
   fi
 
@@ -149,5 +173,5 @@ while true; do
   fi
   prev_version="$version"
   prev_hash="$pane_hash"
-  sleep 30
+  sleep "${POLL_INTERVAL:-15}"
 done
