@@ -318,6 +318,31 @@ dispatch 본문에서 sentinel 을 \hi{설명} 할 때는 ASCII art 로 분해�
 - Multi-SOP gate 가 있는 워커 → square bracket sentinel 박기 (`[[CONFIRM_PENDING]]`)
 - 기존 angle bracket sentinel 박은 워커 → 그대로 두기 (monitor 가 양쪽 인식)
 
+\hi{함정: Dispatcher self-leak — confirm 메시지 본문에 sentinel literal 박기 (2026-05-21 발견)}
+
+==검증된 증상== (2026-05-21 라이온 prep 세션): 메인이 워커에 ==``OK proceed — apply changes. Build failure = STOP + diagnose + \hi{[[WORKER_STOPPED]]}.''== 같이 \hi{confirm-OK 메시지 본문에 sentinel literal 박음} (worker 한테 "build 실패하면 이 sentinel 으로 보고하라" 교육 의도). 그 메시지가 worker pane 의 prompt 라인에 paste 됨 → monitor 재시작 직후 \hi{iter=1 pane capture} 에서 그 sentinel 매칭 → ALERT-CONFIRM 즉시 발사. ==Worker 는 정상 apply 중== 인데 monitor 가 ``confirm-pending'' 으로 잘못 인식.
+
+원인 2 가지 결합:
+1. \hi{Monitor 의 tail window 가 30 줄} — pane bottom 5 줄에 paste 된 메시지를 항상 캡처 (v3.3 에서 15 로 줄임)
+2. \hi{iter=1 즉시 매칭} — monitor 재시작 직후 첫 polling 에서 ``방금 paste 된 sentinel 토큰'' 을 fresh emission 으로 오인 (v3.3 에서 iter=1 매칭 스킵)
+
+==해결 패턴 1 — Dispatcher 측 rule (가장 중요)==
+
+\hi{Confirm 메시지 / dispatch instruction 본문에 sentinel literal 박지 말 것}. 워커에게 ``X 상황에 sentinel 박아라'' 라고 \hi{교육} 하려면:
+- ✅ ASCII art 분해: ``Build failure = STOP + diagnose + `[`+`[`+`WORKER_STOPPED`+`]`+`]`''
+- ✅ 우회 표현: ``Build failure = STOP + diagnose + WORKER_STOPPED sentinel''
+- ❌ Literal sentinel: ``Build failure = STOP + diagnose + [[WORKER_STOPPED]]''
+
+==해결 패턴 2 — Monitor 측 (omc_monitor.sh v3.3, 2026-05-21)==
+
+자동 보강 — dispatcher 가 실수로 literal 박아도 false-positive 차단:
+- `tail_window`: 30 → 15 줄 (워커 자체 sentinel emit 은 bottom 5 줄 안)
+- `iter=1 skip`: 첫 polling 에서 sentinel/heuristic 둘 다 스킵, iter=2 부터 매칭 (scrollback drift 한 cycle 대기)
+
+==해결 패턴 3 — 워커 정상 apply 중에 monitor 재시작 안 하기==
+
+가능하면 monitor 한 instance 가 task 전체 lifecycle (dry-run → confirm → apply → done) 을 \hi{한 번에 watch}. 재시작은 \hi{stale alert / fail alert 받았을 때만}. confirm 보낸 직후 새 monitor 재시작 = scrollback 충돌 위험.
+
 \hi{함정: Heuristic false-positive — 워커 plan 본문의 ``결정 필요'' 어구 (2026-05-20 발견)}
 
 ==검증된 증상==: W1 가 Section III plan.md 작성 중 본문에 ``slide 38 정량 결과 출처 불명 → ==사용자 결정 필요=='' 같이 \hi{설명용 텍스트} 로 ``확인 필요'' / ``결정 필요'' 박았는데, monitor v3.0 의 `CONFIRM_PATTERNS` 한국어 매칭 (``확인 필요'' / ``승인 대기'' / ``G2 진행 전.*필요'') 이 즉시 매칭해서 ALERT-CONFIRM (exit 4) 발사. 워커는 \hi{plan 작성 중 진행 중} 이었고 confirm-pending 아님 → ==잘못된 알림==.

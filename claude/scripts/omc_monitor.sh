@@ -1,5 +1,18 @@
 #!/bin/bash
-# omc_monitor.sh v3.2 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+# omc_monitor.sh v3.3 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+#
+# v3.3 (2026-05-21): two false-positive fixes from Raion Robotics interview prep
+#   session — main session embedded "[[WORKER_STOPPED]]" literal inside its
+#   confirm-OK message to worker (as a "build failure escape clause"), which
+#   landed in the pane and was matched by sentinel grep on iter=1 immediately
+#   after re-starting monitor. Also, scrollback drift: post-confirm sentinel
+#   tokens persisted in scrollback longer than tail-30 expected.
+#   Fixes:
+#     - tail window 30 → 15 lines (sentinel emit always lands at very bottom)
+#     - iter=1 skip sentinel/heuristic match (lets scrollback drift past first
+#       window; only real fresh emission matches from iter=2 onward)
+#   See claude/CLAUDE.md → "함정: Dispatcher self-leak — confirm 메시지 본문에
+#   sentinel literal 박기" rule (added same session).
 #
 # v3.2 (2026-05-20): heuristic CONFIRM_PATTERNS tightened — Korean phrases
 #   "확인 필요" / "결정 필요" / "의도 확인 필요" caused false-positives when
@@ -168,25 +181,34 @@ while true; do
   fi
 
   # ── Confirm-pending pattern (V3 dry-run pause) ─────
-  # Only look at the last ~30 lines of pane (recent state), not scrollback —
-  # old G1 plan text persists in scrollback after user confirms, causing
-  # false ALERT-CONFIRM. Recent activity always lives at the bottom.
-  pane_tail=$(echo "$pane_raw" | tail -30)
+  # Only look at the last ~15 lines of pane (v3.3: tightened from 30) —
+  # worker sentinel emit always lands at very bottom (tail 5 lines max);
+  # tail 30 included scrollback drift that matched stale sentinel tokens
+  # from past confirm messages (CLAUDE.md trap #5).
+  #
+  # v3.3: skip sentinel/heuristic matching on iter=1 — when monitor restarts
+  # right after a confirm round-trip, the just-sent "[[WORKER_STOPPED]]" or
+  # similar literal embedded in the user's confirm message body is still
+  # in tail-15 window. Wait one poll cycle (15s) for drift, only match
+  # fresh emissions from iter=2 onward.
+  pane_tail=$(echo "$pane_raw" | tail -15)
 
-  # PRIMARY: explicit sentinel from worker (deterministic, no false positive)
-  if echo "$pane_tail" | grep -qE "$SENTINEL_PATTERN"; then
-    matched=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | tail -1)
-    echo "[ALERT-CONFIRM] task=$ID sentinel=$matched at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
-    exit 4
-  fi
-
-  # FALLBACK: natural-language heuristics (skipped when MONITOR_NO_HEURISTIC=1)
-  # Disable when worker is writing plan/analysis prose where "결정 필요" style
-  # phrases naturally occur (v3.2 trap — worker plan body false-positive).
-  if [ "${MONITOR_NO_HEURISTIC:-0}" != "1" ]; then
-    if echo "$pane_tail" | grep -qiE "$CONFIRM_PATTERNS"; then
-      echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm (heuristic) at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+  if [ "$iter" -ge 2 ]; then
+    # PRIMARY: explicit sentinel from worker (deterministic, no false positive)
+    if echo "$pane_tail" | grep -qE "$SENTINEL_PATTERN"; then
+      matched=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | tail -1)
+      echo "[ALERT-CONFIRM] task=$ID sentinel=$matched at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
       exit 4
+    fi
+
+    # FALLBACK: natural-language heuristics (skipped when MONITOR_NO_HEURISTIC=1)
+    # Disable when worker is writing plan/analysis prose where "결정 필요" style
+    # phrases naturally occur (v3.2 trap — worker plan body false-positive).
+    if [ "${MONITOR_NO_HEURISTIC:-0}" != "1" ]; then
+      if echo "$pane_tail" | grep -qiE "$CONFIRM_PATTERNS"; then
+        echo "[ALERT-CONFIRM] task=$ID worker awaiting main confirm (heuristic) at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
+        exit 4
+      fi
     fi
   fi
 
