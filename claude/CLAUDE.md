@@ -239,8 +239,9 @@ tmux send-keys -t <pane-id> C-m
 ==해결 패턴 2 — Recovery (메인 측, 막혀버린 경우)==
 
 이미 사용자가 입력만 한 상태에서 메인이 Enter 못 보내는 경우:
-1. 사용자에게 \hi{직접 Enter} 부탁 (가장 빠름)
-2. 또는 메인이 ==`tmux send-keys -t <pane> C-c`== 송출 → paste-buffer interrupt → prompt reset → 새로 dispatch nudge 재송출
+1. \hi{사용자에게 직접 Enter 부탁} — 가장 빠르고 확실. 사용자 input 그대로 보존됨
+2. 또는 메인이 ==`tmux send-keys -t <pane> C-c`== 송출 → paste-buffer interrupt → prompt reset → 새로 dispatch nudge 재송출. \hi{단점}: 사용자 input 잃음
+3. ❌ \hi{``Space + Enter'' 패턴은 사용자 input 복구 안 됨} — 2026-05-21 실증: paste-mode 가 ``space 한 글자'' 받으면 풀려서 prompt 가 ``space 만 submit'' 으로 처리되는데, Claude TUI 는 그걸 \hi{empty/whitespace message 로 무시하고 prompt clear} 만 함. ==사용자가 입력한 ``OK proceed'' 같은 text 사라지고 worker 는 메시지 못 받음==. 결과적으로 idle 상태 회복은 되지만 worker 가 사용자 의도 실행 안 함. \hi{Space+Enter 는 ``prompt 청소 효과'' 만, 사용자 input 복구는 패턴 1 (직접 Enter) 만 가능}
 
 ==해결 패턴 3 — 예방 (worker launch 시점)==
 
@@ -486,9 +487,18 @@ team launch 시점 cwd 에 따라 state 디렉토리 위치 결정:
 
 같은 cwd 에서 두 번째 team launch 시도하면 \hi{silent fail} (help 출력만 떨어짐 — `omc` 가 cwd 단위 single-team 가정). 격리 필요시 두 번째 워커만 다른 cwd 로 옮기는 우회 사용.
 
-**Auto-monitor 패턴 — 모든 task 생성에 완료 알림 묶기**
+**Auto-monitor 패턴 — 모든 task 생성에 완료 알림 묶기 (\hi{의무})**
 
 매 task 생성마다 polling 스크립트를 `Bash run_in_background: true` 로 같이 띄움 → 워커 완료 시 메인 패널이 push 알림 받음. 사용자가 "끝났니?" 묻지 않아도 됨.
+
+\hi{2026-05-21 함정 — Idle worker 도 monitor 띄울 것}: Team launch / task complete 직후 worker 가 idle 진입한 시점에도 \hi{pane-only monitor (sentinel + stale)} 띄워야 함. 이유: 사용자가 워커 pane 에 직접 입력하는 경우 (paste-bracketed mode 함정) / 워커가 자발적으로 ``exit'' 시도하는 경우 (worker self-shutdown 함정) 발생 → \hi{메인이 monitor 없으면 stuck 상태 발견 못함}. Idle monitor 형식:
+```bash
+MONITOR_NO_HEURISTIC=1 bash ~/claude-settings/claude/scripts/omc_monitor.sh \
+  - - <pane-id> 1500 <workdir> - 2>&1 &
+```
+- team / task_id ``-'' = pane-only mode (omc API polling 스킵)
+- deliverable ``-'' = idle watching, ALERT-DONE 안 발사. Sentinel emit (worker 가 의도적 출력) 또는 stale 1500s 후 ALERT-STALE
+- 새 task 들어오면 이 monitor 종료 + ==task-specific monitor (team + task_id + deliverable)== 로 재시작
 
 \hi{Task 생성 = monitor 대상 — 두 경로 모두 포함}:
 - **경로 A: 새 team launch** — `omc team N:claude "<text>"` 의 launch text 자체가 \hi{task 1 로 자동 등록}. 이것도 monitor 대상. ``team launch ≠ dispatch'' 로 분리 인지하면 회귀 발생 (2026-05-19 라이온 prep 세션에서 worker2 launch 시 monitor 빠뜨림)
