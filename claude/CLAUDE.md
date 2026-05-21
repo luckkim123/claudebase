@@ -143,9 +143,70 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 **워커 launch 명령 표준 형식**
 ```bash
-omc team 1:claude "<역할 정의 + 작업 컨텍스트 + STYLE_SPEC 룰 + 표준 SOP>" --cwd <작업 디렉토리 절대경로>
+omc team N:claude "<역할 정의 + 작업 컨텍스트 + STYLE_SPEC 룰 + 표준 SOP>" --cwd <작업 디렉토리 절대경로>
 ```
 역할 정의에는 — (1) 작업 대상 파일 범위, (2) 준수해야 할 스타일 표준 파일 경로, (3) 빌드/검증 명령, (4) 표준 작업 절차 5단계 — 를 항상 명시.
+
+\hi{함정: 같은 leader session 안에 \hi{team 추가 불가} (2026-05-21 발견)}
+
+==검증된 증상==: `omc team` CLI 는 `governance.one_team_per_leader_session: true` 룰 하드코드. 한 session 에서 처음 `omc team 1:claude ...` launch 한 후, ==같은 session 에서 두 번째 `omc team 1:claude ...` 시도하면 ``Leader session already owns active team'' 에러로 막힘==. 시도해본 우회 모두 실패: `--new-window` flag (새 team launch 로 해석), `OMC_ONE_TEAM_PER_LEADER=0` env var, `OMC_TEAM_NAME=...` env var, env override 일체. `omc team api` 에도 `add-worker` 명령 없음.
+
+\hi{결정적 함의}: \hi{같은 session 도중 worker 동적 추가 불가}. 처음부터 ==N-worker team 으로 launch== 해야 함 — `omc team 2:claude "..."` 또는 `omc team 1:claude,1:codex "..."`.
+
+==해결 패턴 1 — Team shutdown + N-worker 재 launch (검증됨)==
+
+기존 team 의 task 가 모두 끝났으면:
+```bash
+# (1) 현재 in_progress task 가 있으면 force shutdown 필요
+omc team shutdown <team-name> --force
+# (2) Stale state 정리 (force shutdown 후 디렉토리 잔존)
+rm -rf .omc/state/team/<team-name>
+# (3) N-worker 로 재 launch
+omc team N:claude "<공통 role 정의 + 각 worker 역할 분리>" --no-decompose --cwd <workdir>
+```
+
+\hi{주의}: `--force` shutdown 은 \hi{leader session pane 안의 worker process 도 함께 죽임}. \hi{omc 가 관리 안 하는 수동 pane (tmux split-window 으로 만든 것)} 은 자동으로 안 죽지만 leader process 가 변경되니 ==orphan 상태로 남을 수 있음== — 사전에 `tmux kill-pane -t %<id>` 으로 정리 권장.
+
+\hi{Pre-existing state 백업 점검}: \hi{디스크 산출물 (`.worker/dispatch_log.md`, `.worker/research_briefs/`, `sections/*.tex`, `main.pdf`)} 은 shutdown 안 죽음. \hi{state directory (`.omc/state/team/...`)} 만 사라짐. session 다시 시작 시 dispatch_log 그대로 재사용 가능.
+
+==해결 패턴 2 — tmux split-window 직접 (omc 우회, 보조 worker 추가)==
+
+omc team 의 N-worker launch 가 불편한 케이스 (예: 1 worker 만 띄운 상태에서 추가 1 worker 필요한 비정형 상황):
+
+```bash
+# (1) W1 pane (omc 가 관리) 옆에 vertical split — ==-v (위아래) 필수==, -h (좌우) 면 main pane 좁아짐
+tmux split-window -t %1 -v -c <workdir>
+# (2) 새 pane id 확인 (예: %3)
+tmux list-panes -a
+# (3) 새 pane 에 claude TUI 띄움
+tmux send-keys -t %3 "claude --dangerously-skip-permissions" && sleep 1 && tmux send-keys -t %3 Enter
+# (4) 8-15 초 init 후 pane content 확인
+sleep 10 && tmux capture-pane -p -t %3
+# (5) Pane label 부여 (omc_pane_label.sh — 수동 worker 라도 라벨링)
+bash ~/claude-settings/claude/scripts/omc_pane_label.sh apply '0.0=[MAIN] ...' '0.1=[W1] ...' '0.2=[W2 manual] ...'
+# (6) Task nudge: tmux send-keys -t %3 "<task text>" → sleep 2 → tmux send-keys -t %3 Enter
+```
+
+\hi{제약 (omc 안 거치므로)}:
+- ❌ `omc team api list-tasks` 안 됨 (수동 W2 는 team 멤버 아님)
+- ❌ `omc_monitor.sh` 의 status polling 안 됨 — \hi{pane-only mode} 만 가능 (`team_name="-" task_id="-"` + deliverable file)
+- ❌ Lease / heartbeat 자동 관리 안 됨 — 메인이 capture-pane 으로 직접 감시
+- ✅ 산출물은 file-based queue (`.worker/research_inbox.md` 등) 로 메인과 통신
+- ✅ Force shutdown 영향 받지 않음 (별도 process)
+
+\hi{권장 use case}: 임시 보조 worker (한 query 만 처리 후 종료) 또는 omc state 가 망가져 재 launch 곤란할 때 응급조치. \hi{영구 worker 는 ==팀 재 launch (해결 패턴 1)== 가 깔끔}.
+
+==해결 패턴 3 — N-worker team 처음부터 launch (이상적)==
+
+세션 시작 시점에 ``2 worker 필요할 수도'' 예측되면 처음부터 2-worker team:
+
+```bash
+omc team 2:claude --no-decompose "Shared role description; W1 = <편집 전담 SOP>; W2 = <자료조사 전담 SOP>" --cwd <workdir>
+```
+
+`--no-decompose` flag 가 ==task 를 worker 수만큼 자동 분해 안 하게== 막음 (둘 다 같은 standby 컨텍스트 받음). 이후 `omc team api create-task` 로 worker-1 / worker-2 에 각각 task assign.
+
+\hi{2 worker 둘 다 같은 cwd}: omc team 제약 — 모든 worker 가 single cwd 공유. 다른 cwd 필요한 multi-repo case 는 별도 처리 (SKILL 의 Phase 2.5 multi-repo workspace 참조).
 
 **Dispatch Enter 미전송 — 검증된 2-step 우회 패턴**
 
