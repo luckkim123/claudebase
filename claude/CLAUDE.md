@@ -160,6 +160,33 @@ tmux send-keys -t <pane-id> C-m
 ```
 1차 시도 후 `tmux capture-pane -pt <pane-id> -S -20` 로 실제 명령이 prompt 에 입력됐는지 확인. 입력은 됐으나 실행 안 된 상태면 step 2 만 다시 보냄. 자동화 실패 시 fallback 으로 사용자에게 "워커 패널에서 Enter 한 번 부탁드립니다" 안내.
 
+\hi{함정: 사용자 입력과 메인 send-keys 충돌 — Claude TUI paste-bracketed mode 흡수 (2026-05-21 발견)}
+
+==검증된 증상== (2026-05-21 라이온 prep 세션, Task 3 batch dispatch 직전): 메인이 dispatch nudge 보낸 후 사용자가 \hi{직접 worker pane 으로 가서 ❯ prompt 에 ``OK proceed — apply...'' 같은 confirm 메시지 키보드 입력}. 그런데 Enter 안 누르고 메인 채팅으로 돌아옴. 메인이 ==외부 `tmux send-keys -t %1 C-m` 으로 Enter 송출 시도== → \hi{전부 흡수}, ``OK proceed'' 가 ❯ prompt 에 그대로 박혀 worker 진행 안 됨.
+
+\hi{시도해본 우회 (모두 실패)}: `C-m` 송출, `Enter` literal 송출, `set-option -g assume-paste-time 0`, `set-option -p assume-paste-time 0` (pane-level 미지원), `C-a C-k C-u` line clear. ==3-Strike Rule 발동==.
+
+원인 분석: Claude TUI 의 ❯ prompt 는 \hi{paste-bracketed mode} 로 동작. 사용자 키보드 입력 (OS keyboard event) 후 \hi{paste-buffer 가 ``open'' 상태} 유지 — 그 동안 외부 tmux send-keys (pseudo-tty escape sequence) 들어오면 \hi{전부 paste 내용의 일부로 흡수}. C-m / Enter / Ctrl-keys 모두 paste sequence 안 charactor 로 처리. 사용자가 직접 키보드로 Enter 누르거나 (OS event) `C-c` interrupt 로 paste-buffer reset 해야 풀림.
+
+==해결 패턴 1 — 운영 룰 (사용자 측, 가장 안전)==
+
+\hi{메인이 dispatch 한 후 사용자는 worker pane 직접 만지지 말 것}. 사용자가 ``확인 메시지를 직접 입력하고 싶다'' 면:
+- 옵션 A: 메인에 ``OK 적용해줘'' 같이 ==자연어로 말함==. 메인이 send-keys 로 처리.
+- 옵션 B: 사용자가 직접 입력 \hi{+ 그 자리에서 Enter 까지 누름} (한 동작 안에 완결).
+- ❌ 사용자가 입력만 하고 Enter 안 누르고 메인에 ``Enter 눌러줘'' 요청 → 막힘 케이스 발생.
+
+==해결 패턴 2 — Recovery (메인 측, 막혀버린 경우)==
+
+이미 사용자가 입력만 한 상태에서 메인이 Enter 못 보내는 경우:
+1. 사용자에게 \hi{직접 Enter} 부탁 (가장 빠름)
+2. 또는 메인이 ==`tmux send-keys -t <pane> C-c`== 송출 → paste-buffer interrupt → prompt reset → 새로 dispatch nudge 재송출
+
+==해결 패턴 3 — 예방 (worker launch 시점)==
+
+Worker launch 메시지에 \hi{``Dispatch confirm 은 사용자 직접 입력 X — 메인이 send-keys 로 처리''} 룰 명시. 사용자가 무심코 pane attach 해도 메인 채팅으로 redirect.
+
+\hi{왜 ``Dispatch Enter 미전송 — 2-step 우회''} (위 섹션) \hi{와 다른가}: 위 섹션은 \hi{메인 단독 dispatch (text + Enter) 가 깨지는} 케이스 — sleep 으로 분리해서 해결. 이번 함정은 \hi{사용자 입력 + 메인 Enter 의 충돌} — sleep 무관, paste-bracketed mode 자체 이슈. \hi{운영 룰로 회피} 가 표준.
+
 **누적 함정 4종 + 표준 진단 절차 (2026-05-19 디펜스 세션 발견)**
 
 이번 세션에서 메인이 ==잘못된 상태 인식 3회 누적== 했음. 사용자가 매번 정정. 원인 4가지:

@@ -1,5 +1,15 @@
 #!/bin/bash
-# omc_monitor.sh v3.3 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+# omc_monitor.sh v3.4 - Multi-signal monitor for omc team tasks (or pane-direct workers).
+#
+# v3.4 (2026-05-21, same session as v3.3): edge-triggered sentinel matching.
+#   v3.3 still fired ALERT-CONFIRM on iter=2 when monitor restarted while
+#   worker's plan output (containing the literal sentinel `[[CONFIRM_PENDING]]`
+#   in the dry-run plan block) was still scrolled into tail-15 window — the
+#   pane snapshot looked identical to "fresh sentinel" because the plan was
+#   the most recent worker output.
+#   Fix: track previous-iter sentinel md5 hash, only alert when current hash
+#   differs (= position/content changed between cycles = fresh emission).
+#   Stale tokens from past plan output produce stable hash → no alert.
 #
 # v3.3 (2026-05-21): two false-positive fixes from Raion Robotics interview prep
 #   session — main session embedded "[[WORKER_STOPPED]]" literal inside its
@@ -191,11 +201,23 @@ while true; do
   # similar literal embedded in the user's confirm message body is still
   # in tail-15 window. Wait one poll cycle (15s) for drift, only match
   # fresh emissions from iter=2 onward.
+  #
+  # v3.4 (2026-05-21): edge-triggered matching — keep prev sentinel hash, only
+  # alert when current sentinel match is DIFFERENT from previous (= fresh
+  # emission). v3.3 still fired on iter=2 when worker plan body contained
+  # the sentinel literal (e.g., worker echoed "[[CONFIRM_PENDING]]" in plan
+  # output, but main session restarted monitor — iter=2 saw same stale
+  # token and fired again). Edge-trigger fixes this: alert only when
+  # sentinel position/content changes between polling cycles.
   pane_tail=$(echo "$pane_raw" | tail -15)
+  sentinel_hash=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | md5sum | cut -d' ' -f1)
 
   if [ "$iter" -ge 2 ]; then
     # PRIMARY: explicit sentinel from worker (deterministic, no false positive)
-    if echo "$pane_tail" | grep -qE "$SENTINEL_PATTERN"; then
+    # Edge-triggered: only alert when sentinel hash differs from previous iter
+    # (catches fresh emissions, ignores stale plan-body sentinels).
+    if echo "$pane_tail" | grep -qE "$SENTINEL_PATTERN" && \
+       [ "$sentinel_hash" != "$prev_sentinel_hash" ]; then
       matched=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | tail -1)
       echo "[ALERT-CONFIRM] task=$ID sentinel=$matched at $(date +%H:%M:%S) iter=$iter — pane=$PANE"
       exit 4
@@ -211,6 +233,9 @@ while true; do
       fi
     fi
   fi
+
+  # Remember sentinel hash for next iter edge-detection
+  prev_sentinel_hash="$sentinel_hash"
 
   echo "[POLL $(date +%H:%M:%S) iter=$iter] status=$task_status version=$version stale=${stale_count}s hash=${pane_hash:0:8}"
 
