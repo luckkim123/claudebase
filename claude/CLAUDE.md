@@ -155,63 +155,19 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 ## Versioned Release Workflow (preferred for non-trivial features)
 
-When the user proposes a non-trivial change to a versioned package
-(`package.xml`, `setup.py`, `pyproject.toml`, `Cargo.toml`, etc.) — new
-feature, redesign, or breaking refactor — drive it through a numbered
-release cycle rather than ad-hoc commits. This keeps every change
-traceable, reviewable, and reversible.
+Versioned package 의 non-trivial 변경 (feature / redesign / breaking refactor) 은 ad-hoc commits 대신 numbered release cycle 로:
 
-**The five-stage loop**
+1. **Spec** — `superpowers:brainstorming` → design doc (`<topic>-design.md`)
+2. **Plan** — `superpowers:writing-plans` → TDD tasks (`<topic>-execution.md`)
+3. **Execute** — `superpowers:subagent-driven-development` (fresh implementer + spec-compliance reviewer + code-quality reviewer per task)
+4. **Release** — final task = version bump + `CHANGELOG.md` (Removed/Added/Changed/Verification/Notes) + README + full test suite
+5. **PR** — Summary + Test plan checklist, squash merge on explicit approval
 
-1. **Brainstorm → spec**. Use `superpowers:brainstorming` to explore the
-   problem one question at a time, settle 2–3 design decisions, then save
-   a written design doc (`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`).
-   No code yet.
-2. **Plan**. Use `superpowers:writing-plans` to break the spec into
-   bite-sized, TDD-style tasks (file paths, exact code, expected test
-   output, commit message per task). Save to
-   `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
-3. **Execute**. Prefer `superpowers:subagent-driven-development`: one
-   fresh implementer subagent per task, followed by a fresh spec-compliance
-   reviewer **and** a fresh code-quality reviewer. Each task ends in a
-   conventional-commit on the feature branch. The controller does not
-   self-implement; it dispatches and adjudicates reviewer findings.
-4. **Release**. The final task always bumps the version in every
-   manifest, fills the `[Unreleased]` block in `CHANGELOG.md` with
-   Removed / Added / Changed / Verification / Notes, refreshes the
-   user-facing section of `README.md`, and runs the full test suite +
-   build one last time.
-5. **PR**. Push the branch, open a PR with a Summary + Test plan
-   checklist. Manual smoke items live in the checklist as `[ ]` so they
-   gate merge. Merge happens only on explicit user approval, squash mode,
-   to keep main linear.
+**핵심 원칙**: 4 artefact (branch / commit chain / CHANGELOG / PR description) 동기화 + fresh subagents 로 controller context 보호 + spec compliance ≠ code quality (다른 reviewer agent).
 
-**Why this works**
+**Anti-patterns**: version bump inline / spec skip ("feels small") / controller self-implement (3+ rounds 에서 judgment 저하).
 
-- The four artefacts (branch + commit chain + CHANGELOG entry + PR
-  description) stay synchronised, so any future regression is traceable
-  to one commit, one CHANGELOG block, one reviewable PR.
-- Subagents prevent context pollution: a 10-task feature finishes with
-  the controller's context still clean enough to coordinate the release.
-- Spec compliance and code quality are reviewed by *different* fresh
-  agents — each catches issues the other misses (spec drift vs. local
-  craft).
-
-**Anti-patterns**
-
-- Bumping the version inline with feature work. Version bumps belong in
-  the dedicated final task so the diff is always "version + CHANGELOG +
-  README" — easy to audit.
-- Skipping the spec because the change "feels small". Spec-less tasks
-  consistently undershoot edge cases (migration of old config, forward-
-  compat of yaml fields, headless test gotchas).
-- Letting the controller implement to "save time". The controller's
-  judgment degrades after ~3 implementation rounds; subagent dispatch
-  preserves it for the long haul.
-
-**Patch releases (vX.Y.Z+1)** skip stage 1 and use a single-task plan:
-the bug fix + version bump + CHANGELOG patch entry + PR — same gates,
-smaller surface.
+**Patch (vX.Y.Z+1)**: stage 1 skip, single-task plan (bug fix + version + CHANGELOG + PR).
 
 ---
 

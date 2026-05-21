@@ -59,7 +59,7 @@
       "backgroundTasks": true,
       "showCache": false,
       "showCost": false,
-      "showTokens": false,
+      "showTokens": true,
       "model": true,
       "modelFormat": "short"
     },
