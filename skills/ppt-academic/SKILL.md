@@ -220,7 +220,7 @@ from mckinsey_pptx.theme import Typography
 KO_THEME = replace(
     DEFAULT_THEME,
     typography=replace(DEFAULT_THEME.typography, family="Apple SD Gothic Neo"),
-    copyright_text="ⓒ 2026"  # 사용자 이름/소속으로 커스터마이즈
+    copyright_text="ⓒ 2026 <연구자명>"  # 사용자 이름/소속으로 커스터마이즈 (예: "ⓒ 2026 김승민, POSTECH")
 )
 
 b = PresentationBuilder(theme=KO_THEME, default_section_marker="…",
