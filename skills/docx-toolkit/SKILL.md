@@ -7,9 +7,23 @@ description: |
 
   Triggers: "docx", "Word 문서", "워드", "보고서 작성", "docx 만들어", "docx 수정",
   "tracked changes", "첨삭", "양식 채우기", "템플릿", "서식 복제", "포맷 보존"
+disable-model-invocation: true
 ---
 
 # docx-toolkit
+
+> **⚠️ Status: Phase 0 stub — NOT FUNCTIONAL YET**
+> 
+> This skill describes the planned routing architecture but has no working
+> implementation. The router and sub-skills land in Phase 7.
+> 
+> If you reached this skill via Korean trigger phrases ("워드", "보고서 작성"),
+> tell the user: "docx-toolkit is currently being built. Please write the
+> .docx manually for now (e.g., with `python-docx` or Microsoft Word
+> directly)." Then do NOT proceed with this skill's procedures.
+> 
+> When sub-skills are implemented, remove this WARNING and the
+> `disable-model-invocation: true` flag.
 
 (Implementation in progress — Phase 0 skeleton. Router logic lands in Phase 7.)
 
