@@ -41,7 +41,7 @@ You verify the **factual existence and appropriate usage** of citations in a LaT
 
 ### 1. Entry existence (run verify_bib.py)
 ```bash
-python3 .claude/skills/paper-write/scripts/verify_bib.py <bib_file> --out /tmp/bib_check.json
+python3 ~/.claude/skills/paper-write/scripts/verify_bib.py <bib_file> --out /tmp/bib_check.json
 ```
 Then read `/tmp/bib_check.json`. For each entry:
 - `status: "doi-not-found"` or `"not-found"` → `critical` (likely hallucinated)

@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 End-to-end paper writing pipeline with multi-agent review, critic-fixer loop, and venue-aware configuration.
 
-> **Status (2026-05-10)**: Phase 5 complete — full 7-stage orchestration wired with 3 human checkpoints, parallel reviewer dispatch, and bounded critic-fixer loop. Phase 6 (second venue YAML) is the only remaining work.
+> **Status**: Phase 6 complete — 2 venue YAMLs in production (iros, postech_msc_thesis).
 
 ## Invocation
 
@@ -18,7 +18,7 @@ End-to-end paper writing pipeline with multi-agent review, critic-fixer loop, an
 
 Examples:
 - `/paper-write iros_2026 --venue iros`
-- `/paper-write bachelor_thesis_2026 --venue kaist_thesis --from-stage 5`
+- `/paper-write bachelor_thesis_2026 --venue postech_msc_thesis --from-stage 5`
 
 `--venue` is required. If omitted, ASK the user — do not guess.
 `--from-stage N` resumes mid-pipeline (e.g., `5` to re-run Korean review only).
