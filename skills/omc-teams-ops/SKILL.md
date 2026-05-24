@@ -223,25 +223,27 @@ Monitor 의 confirm-pending 감지가 자연어 heuristic (``STOP — awaiting''
 \hi{Dispatch 시 task description 마지막에 다음 sentinel 룰 항상 포함}:
 
 ```markdown
-## Monitor sentinel 룰 (필수)
+## Monitor sentinel 룰 (필수) — square bracket 형식이 canonical (2026-05-20+)
 
 다음 상태에 도달하면 ==exact literal sentinel 한 줄 출력== — monitor 가 deterministic 하게 잡음. 자연어 묘사로 대체 X:
 
 - \hi{Dry-run / confirm-pending 도달 (G1 plan 완료, main confirm 대기)}:
   ```
-  <<AWAITING_MAIN_CONFIRM>>
+  [[CONFIRM_PENDING]]
   ```
 - \hi{Worker stop 결정 (lease 만료, race 발견, fatal error)}:
   ```
-  <<WORKER_STOPPED>> reason: <한 줄>
+  [[WORKER_STOPPED]] reason: <한 줄>
   ```
 - \hi{Worker blocked (외부 의존성 대기, 사용자 자료 필요)}:
   ```
-  <<WORKER_BLOCKED>> need: <한 줄>
+  [[WORKER_BLOCKED]] need: <한 줄>
   ```
 
 sentinel 은 \hi{본문에 한 번만} 출력. 추가 설명/plan 은 sentinel \hi{앞} 또는 \hi{뒤} 줄에. monitor 는 sentinel 라인 grep 으로 즉시 alert (heuristic 매칭 대비 false positive 0).
 ```
+
+> **Legacy — backward compat**: angle-bracket 형식 (`<<AWAITING_MAIN_CONFIRM>>`, `<<WORKER_STOPPED>>`, `<<WORKER_BLOCKED>>`) 은 기존 워커 호환용. omc_monitor.sh v3.1+ 의 `SENTINEL_PATTERN` 이 angle + square 둘 다 OR 매칭하므로 기존 워커 수정 불필요. ==신규 dispatch 는 square bracket 만 사용==.
 
 \hi{Monitor 측 (omc_monitor.sh v3+)}: `SENTINEL_PATTERN` 매칭이 \hi{primary}, 자연어 `CONFIRM_PATTERNS` 는 \hi{fallback} (sentinel 미도입 worker 호환). exit code 4 = ALERT-CONFIRM.
 
