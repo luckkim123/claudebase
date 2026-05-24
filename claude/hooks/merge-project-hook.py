@@ -15,6 +15,7 @@ Exit codes:
 
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 
@@ -63,6 +64,21 @@ def main() -> int:
         existing = target["hooks"].setdefault(event_name, [])
         if not isinstance(new_entries, list) or not new_entries:
             continue
+
+        # Assert no duplicate markers in this fragment event — idempotency
+        # requires each marker to appear at most once per event.
+        frag_markers = [
+            hook.get("command", "")
+            for e in new_entries
+            for hook in e.get("hooks", [])
+            if marker in hook.get("command", "")
+        ]
+        dup_counts = [cmd for cmd, c in Counter(frag_markers).items() if c > 1]
+        if dup_counts:
+            raise ValueError(
+                f"fragment.json has duplicate markers for event '{event_name}', "
+                f"not yet supported: {dup_counts}"
+            )
 
         for new_entry in new_entries:
             idx = find_marker_index(existing, marker)
