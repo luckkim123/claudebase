@@ -98,7 +98,26 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 ## OMC (oh-my-claudecode) Orchestration
 
-`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: middle** — Claude does not auto-route to OMC, but **proposes** OMC delegation when a task clearly benefits from it.
+`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: hybrid auto-route** — when the user does NOT name a tool/skill, Claude **silently selects** the right entry point via the decision tree below and announces it in one line, then proceeds. Exception: irreversible / outward-facing / large-scale work gets a 1-second confirm before starting (see tree step 4).
+
+### Auto-routing decision tree (apply when user names no tool)
+
+When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. Announce the chosen entry in one line ("→ X로 갑니다") and start; only step 4 cases pause for confirmation.
+
+**Step 1 — Trivial?** Typo, one-liner, single-file obvious fix, or a pure question → just do it / answer directly. No routing, no skill ceremony. *(Conceptual "how do I…" questions about the tooling itself = answer, don't invoke.)*
+
+**Step 2 — What's ambiguous: the *how* or the *what/why*?**
+- **what/why is unsettled** (direction not chosen, 2-3 design choices, "어떤 방향이 나을까") → diverge FIRST: `superpowers:brainstorming` (decision-heavy, interactive) or `oh-my-claudecode:deep-interview` (Socratic, ambiguity-gated). Then re-enter the tree with the clarified spec.
+- **only the *how* is fuzzy** (direction clear, scope/structure hazy — "이 deck 정리해줘") → do NOT pre-extract a spec. `oh-my-claudecode:team` scopes-then-executes in one shot; a separate spec step is double work here.
+- **spec already crisp** → skip divergence entirely, go to step 3.
+
+**Step 3 — With a crisp spec, what governs the outcome: discipline or throughput?**
+- **Discipline governs** (wrong = expensive; TDD / review gates govern quality; non-trivial code; citation-bound writing) → **superpowers** lane: `writing-plans` → `subagent-driven-development` (or `test-driven-development` + `verification-before-completion`). Citation/paper work stays here or manual — never OMC parallel (hallucination risk).
+- **Throughput governs** (many *independent* units; 3+ files; "동시에 해줘") → **OMC** lane: `ultrawork` (bounded parallel edits) / `team` (needs inter-worker comms or review roles) / `autopilot` (hands-off idea→code) / `ralph` (loop until tests pass).
+
+**Step 4 — Confirm-before-start gate (1 line, Y/N).** Even when steps 1-3 pick an entry, pause for one confirmation if the work is: **irreversible** (delete/overwrite files), **outward-facing** (email, PR, anything published externally), or **large-scale** (5+ files touched, long autonomous run). Format: "20파일 rename이라 ultrawork로 갑니다. ok?" Everyday in-place work needs no confirm.
+
+This tree supersedes the older "propose only" behavior; the proactive-proposal subsection below is kept as the fallback phrasing for step-4 confirms and for when the tree is genuinely tied.
 
 ### When to propose OMC (proactive)
 
