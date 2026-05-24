@@ -72,9 +72,31 @@
         "gitRepo",
         "gitBranch",
         "model",
+        "skills",
+        "lastSkill",
         "gitStatus",
         "apiKeySource",
         "profile"
+      ],
+      "main": [
+        "omcLabel",
+        "enterpriseCost",
+        "rateLimits",
+        "customBuckets",
+        "permission",
+        "thinking",
+        "promptTime",
+        "session",
+        "tokens",
+        "ralph",
+        "autopilot",
+        "prd",
+        "contextBar",
+        "agents",
+        "background",
+        "callCounts",
+        "lastTool",
+        "sessionSummary"
       ]
     }
   }
