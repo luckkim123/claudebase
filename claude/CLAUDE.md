@@ -191,7 +191,7 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-05-18
+**Last Updated**: 2026-05-24
 **Managed by**: [`claude-settings`](https://github.com/luckkim123/claude-settings) — edit at `~/claude-settings/claude/CLAUDE.md`, the symlink picks up changes automatically.
 
 <!-- OMC:IMPORT:START -->
