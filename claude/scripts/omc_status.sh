@@ -25,6 +25,7 @@
 #   0 always (this is a read-only diagnostic; absence of teams reported as message)
 
 set -uo pipefail
+shopt -s nullglob
 
 scan_team_dir() {
   local state_dir="$1"

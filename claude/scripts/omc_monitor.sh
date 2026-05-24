@@ -1,6 +1,8 @@
 #!/bin/bash
 # omc_monitor.sh v3.4 - Multi-signal monitor for omc team tasks (or pane-direct workers).
 #
+# Dependencies: bash, tmux, python3, sed, awk, grep, perl (for detect_typed_noop with -CSD UTF-8 flag).
+#
 # v3.4 (2026-05-21, same session as v3.3): edge-triggered sentinel matching.
 #   v3.3 still fired ALERT-CONFIRM on iter=2 when monitor restarted while
 #   worker's plan output (containing the literal sentinel `[[CONFIRM_PENDING]]`
@@ -88,6 +90,28 @@ if [ "$TEAM" = "-" ] || [ "$ID" = "-" ]; then
   PANE_ONLY=1
 fi
 
+# ── Portable MD5 shim (H1: macOS ships `md5`, not `md5sum`) ──────────────────
+# `md5sum` exists on Linux and macOS+coreutils; `md5` exists on stock macOS.
+# Output format differs: md5sum prints "<hash>  <file>", md5 prints "MD5 (<file>) = <hash>".
+# md5_hash() normalises both to just the hex digest string.
+MD5_CMD=$(command -v md5sum 2>/dev/null || command -v md5 2>/dev/null || true)
+if [ -z "$MD5_CMD" ]; then
+  echo "[ERR] no md5sum or md5 available — cannot compute pane hash" >&2
+  exit 3
+fi
+md5_hash() {
+  if [[ "$MD5_CMD" == *md5sum* ]]; then
+    "$MD5_CMD" | awk '{print $1}'       # md5sum: first field is hash
+  else
+    "$MD5_CMD" | awk '{print $NF}'      # macOS md5: last field is hash
+  fi
+}
+
+# ── ANSI escape strip helper (M1: apply once before sentinel/heuristic grep) ──
+# Claude TUI wraps output in colour escapes; strip them so sentinel literals
+# (e.g. [[CONFIRM_PENDING]]) are not obscured by embedded \e[...m sequences.
+strip_ansi() { sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g'; }
+
 # Record monitor start epoch — only files NEWER than this count as fresh deliverables
 # (prevents false-DONE on pre-existing files like a clean cp before patches apply).
 MONITOR_START_EPOCH=$(date +%s)
@@ -165,15 +189,23 @@ while true; do
   # ── Team/task status check (skip in pane-only mode) ─
   if [ $PANE_ONLY -eq 0 ]; then
     resp=$(omc team api read-task --input "{\"team_name\":\"$TEAM\",\"task_id\":\"$ID\"}" --json 2>/dev/null)
-    task_status=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("status",""))' 2>/dev/null)
-    version=$(echo "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("data",{}).get("task",{}).get("version",0))' 2>/dev/null)
+    # OPT3: single python3 invocation (tab-separated) instead of 3 separate calls.
+    IFS=$'\t' read -r task_status version < <(echo "$resp" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    t = d.get('data', {}).get('task', {})
+    print(f\"{t.get('status','')}\t{t.get('version',0)}\")
+except Exception:
+    print('\t0')
+" 2>/dev/null) || true
 
     case "$task_status" in
       completed) echo "[ALERT-DONE] task=$ID completed at $(date +%H:%M:%S) iter=$iter"; exit 0 ;;
       failed)    echo "[ALERT-FAIL] task=$ID failed at $(date +%H:%M:%S) iter=$iter"; exit 1 ;;
-      pending)   stale_count=0; sleep 30; continue ;;
+      pending)   stale_count=0; sleep "${POLL_INTERVAL:-15}"; continue ;;
       in_progress) ;;   # check pane below
-      *) stale_count=0; sleep 30; continue ;;
+      *) stale_count=0; sleep "${POLL_INTERVAL:-15}"; continue ;;
     esac
   else
     task_status="(pane-only)"
@@ -182,7 +214,9 @@ while true; do
 
   # ── Pane capture + hash (strip thinking heartbeats) ─
   pane_raw=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null)
-  pane_hash=$(echo "$pane_raw" | grep -vE "$THINKING_FILTER" | md5sum | cut -d' ' -f1)
+  # M1: strip ANSI escapes once here; reuse pane_clean for both hash and sentinel grep.
+  pane_clean=$(echo "$pane_raw" | strip_ansi)
+  pane_hash=$(echo "$pane_clean" | grep -vE "$THINKING_FILTER" | md5_hash)
 
   # ── Typed-no-Enter check (highest priority — actionable by Enter) ──
   if detect_typed_noop; then
@@ -209,8 +243,9 @@ while true; do
   # output, but main session restarted monitor — iter=2 saw same stale
   # token and fired again). Edge-trigger fixes this: alert only when
   # sentinel position/content changes between polling cycles.
-  pane_tail=$(echo "$pane_raw" | tail -15)
-  sentinel_hash=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | md5sum | cut -d' ' -f1)
+  # M1: use pane_clean (ANSI-stripped) for tail and all grep checks.
+  pane_tail=$(echo "$pane_clean" | tail -15)
+  sentinel_hash=$(echo "$pane_tail" | grep -oE "$SENTINEL_PATTERN" | md5_hash)
 
   if [ "$iter" -ge 2 ]; then
     # PRIMARY: explicit sentinel from worker (deterministic, no false positive)
@@ -241,7 +276,7 @@ while true; do
 
   # ── Stale detection ────────────────────────────────
   if [ "$version" = "$prev_version" ] && [ "$pane_hash" = "$prev_hash" ]; then
-    stale_count=$((stale_count + 30))
+    stale_count=$((stale_count + ${POLL_INTERVAL:-15}))
     if [ $stale_count -ge $STALE_THRESHOLD ]; then
       echo "[ALERT-STALE] task=$ID frozen ${stale_count}s — pane=$PANE need nudge at $(date +%H:%M:%S)"
       exit 2
