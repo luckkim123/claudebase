@@ -461,6 +461,50 @@ PY
 }
 sync_plugins
 
+# 6.5. OMC bash-failure freeze workaround
+#      Gate post-tool-verifier.mjs:905 (Command failed → "fix before continuing")
+#      behind QUIET_LEVEL < 2 so OMC_QUIET=2 silences it, matching the pattern
+#      already used on line 906 for the background-detection message.
+#      Root cause (2026-05-24 investigation): "before continuing" is parsed as
+#      a pause gate by the model, freezing the session after every Bash error.
+#      Idempotent — checks for the already-patched marker before applying.
+#      See .omc/reviews/session-freeze-investigation.md for evidence.
+patch_omc_bash_freeze() {
+  local omc_root="$CLAUDE_HOME/plugins/cache/omc/oh-my-claudecode"
+  if [[ ! -d "$omc_root" ]]; then
+    debug "skip omc bash-freeze patch: $omc_root not present"
+    return
+  fi
+  local patched=0 skipped=0
+  while IFS= read -r verifier; do
+    [[ -f "$verifier" ]] || continue
+    if grep -q 'QUIET_LEVEL < 2 && detectBashFailure' "$verifier" 2>/dev/null; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+      log "would patch omc bash-freeze in: $verifier"
+      patched=$((patched + 1))
+    else
+      # In-place sed: gate the bash-failure message behind QUIET_LEVEL < 2.
+      # macOS BSD sed needs '' after -i; GNU sed accepts -i alone — handle both.
+      # BSD sed (macOS) does not support \s — use literal space class.
+      if sed --version >/dev/null 2>&1; then
+        sed -i -E 's|^(  *)\} else if \(detectBashFailure\(toolOutput\)\) \{|\1} else if (QUIET_LEVEL < 2 \&\& detectBashFailure(toolOutput)) {|' "$verifier"
+      else
+        sed -i '' -E 's|^(  *)\} else if \(detectBashFailure\(toolOutput\)\) \{|\1} else if (QUIET_LEVEL < 2 \&\& detectBashFailure(toolOutput)) {|' "$verifier"
+      fi
+      if grep -q 'QUIET_LEVEL < 2 && detectBashFailure' "$verifier" 2>/dev/null; then
+        patched=$((patched + 1))
+      else
+        log "WARNING: omc bash-freeze patch did not apply to $verifier"
+      fi
+    fi
+  done < <(find "$omc_root" -path '*/scripts/post-tool-verifier.mjs' -type f 2>/dev/null)
+  log "omc bash-freeze patch: patched=$patched, already-patched=$skipped (set OMC_QUIET=2 to silence)"
+}
+patch_omc_bash_freeze
+
 # 7. local-overrides hint
 LOCAL_FILE="$CLAUDE_HOME/settings.local.json"
 if [[ ! -e "$LOCAL_FILE" ]]; then
