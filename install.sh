@@ -518,6 +518,11 @@ fi
 if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
   if [[ ! -f "$CLAUDE_HOME/hud/omc-hud.mjs" ]]; then
     log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
+  else
+    # Re-apply local HUD customization (line1: cyan dir:/branch:, lowercase
+    # model:). `hud setup` regenerates the wrapper and drops it; this is
+    # idempotent and safe to run every install.
+    bash "$REPO_DIR/claude/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
   fi
 fi
 
