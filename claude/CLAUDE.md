@@ -41,8 +41,10 @@ Test: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 - Match existing style, even if you'd do it differently.
 - Notice unrelated dead code? Mention it — don't delete.
 - Only do what user asks, nothing more.
+- **A question is not an instruction.** "Can we delete X?" / "Isn't Y redundant?" / "Is there anything else?" asks for an answer, not an action. Answer with facts, then stop. Acting on the implied action is scope you were not given.
+- **Don't volunteer work to seem helpful.** "Is there anything else to fix?" → if you haven't inspected, say so or inspect first; never pad the answer with "this might…" guesses. An honest "nothing found" beats a speculative to-do list.
 
-Test: every changed line should trace directly to the user's request.
+Test: every changed line — and every action taken — should trace directly to something the user explicitly asked for, not to something they merely wondered about.
 
 ### 4. Goal-Driven Execution
 
