@@ -85,6 +85,10 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 - **3-Strike Rule**: same approach fails 3 times → change method immediately.
 - **15-Min Limit**: stuck > 15 min on one problem → try different approach.
+- **Deletion Safety**: destructive ops go through a recoverable path — verify before you can't undo.
+  - **Delete → recycle bin, not permanent erase.** macOS: `trash` (else move into `~/.Trash`). Linux desktop: `gio trash` / `trash-cli`. **No trash** (Docker / CI / minimal): before `rm`, confirm a copy exists elsewhere *and* get the user's explicit "this is permanent" approval. In a git repo, `git rm` + commit is itself recoverable.
+  - **Move = `mv` → verify destination has the files (`find`/`ls`) → only then delete the source.** Never `rm` the source in the same breath as the move; sync lag (iCloud/Drive) can leave files behind and the delete then loses them.
+  - Environment-adaptive: the rule is *"avoid irreversible loss,"* not *"always run `trash`."* Use the safest path the environment offers.
 
 ---
 
