@@ -128,6 +128,45 @@ After upgrade, re-run `claude --version` to confirm and then proceed to step 5. 
 
 **ENOTEMPTY trap (2026-05-19 ksm_Obsidian session).** Upgrading `claude` from inside a running claude session can fail with `ENOTEMPTY: directory not empty, rename '.../claude-code' -> '.../.claude-code-XXXXXX'`. npm renames the existing dir to a hidden temp name before installing the new one, and the current claude process holds files open inside it so the rename aborts mid-flight. The orphaned `.claude-code-XXXXXX` temp dir then blocks future upgrade attempts even after the original session ends. Fix: `rm -rf /opt/homebrew/lib/node_modules/@anthropic-ai/.claude-code-*` (or the equivalent path on your npm prefix), then retry `npm i -g @anthropic-ai/claude-code`. The live `claude-code/` dir is *not* touched by this — only the orphaned temp. Verified safe on 2.1.143 → 2.1.144 with an active session still running.
 
+**4f. OMC plugin version up-to-date?**
+
+The plugin sync in install.sh only *registers* OMC (`claude plugin install` when missing); it never *upgrades* an already-installed plugin — verified in `install.sh` (`current == user` → `ok++` and skip; no version comparison). So OMC version drift is independent of install.sh and must be checked separately here.
+
+```bash
+current="$(omc --version 2>/dev/null)"
+# `omc update --check` checks without installing (verified: `omc update --help`
+# lists `-c, --check  Only check for updates, do not install`).
+latest="$(omc update --check 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1)"
+if [[ -z "$current" ]]; then
+  echo "(4f) omc CLI not on PATH — skip (install.sh step 5 installs it if missing)"
+elif [[ -z "$latest" || "$current" == "$latest" ]]; then
+  echo "(4f) OMC up-to-date ($current)"
+else
+  echo "(4f) OMC drift: $current → $latest"
+fi
+```
+
+If versions differ, **surface the gap and ask before upgrading** — same governance as step 4e's claude CLI upgrade. `omc update` is non-idempotent (syncs plugin + npm package + CLAUDE.md together, per the OMC update banner), so it is NOT auto-run. On user confirmation:
+
+```bash
+omc update
+```
+
+**Post-update verification** (version bump alone ≠ healthy — same "applied ≠ verified" discipline as step 6). `omc update` touches three things at once (plugin, npm package, CLAUDE.md), so the most likely failure is a *conflict* between them, not a missing binary:
+
+```bash
+new="$(omc --version 2>/dev/null)"
+[[ "$new" == "$latest" ]] && echo "(4f) version applied: $new" \
+                          || echo "(4f) WARNING: expected $latest, got ${new:-<none>}"
+# `omc doctor conflicts` checks plugin coexistence + config conflicts — exactly
+# what a mid-session plugin/CLAUDE.md re-sync can break (verified: `omc doctor --help`).
+omc doctor conflicts 2>&1 | tail -20
+```
+
+Note: `omc doctor conflicts` may report pre-existing warnings unrelated to the update (e.g. unknown fields in `.omc-config.json`, no MCP registry — both present on a healthy 4.14.0 as of 2026-05-24). So the signal is **new** conflicts that appear *after* the update, not the mere presence of warnings. If `omc doctor conflicts` surfaces something that wasn't there before, report it and run `/oh-my-claudecode:omc-setup` as the doctor suggests — do NOT auto-fix config conflicts (they may need a judgment call). If the version didn't bump to `$latest`, the update half-applied — re-run `omc update --force`, or `omc update --clean` to purge stale plugin cache, then re-check.
+
+**Why ask, don't auto-run:** `omc update` rewrites the canonical `CLAUDE.md` and re-syncs the plugin while *this* session has them loaded. A mid-session plugin/CLAUDE.md swap can desync the running session's tool registry and skill list. Treat it like the claude CLI upgrade in 4e: confirm, then ideally restart the session to pick up the new plugin cleanly. If `omc update` fails (network, npm), surface the error and continue to step 5 — a stale OMC is better than a half-applied one.
+
 ### 5. Run installer
 
 ```bash
@@ -195,6 +234,7 @@ For each new template:
 | "The other repo has uncommitted changes, I'll stash before adopting the template" | Never `git stash` someone else's tree. Stage only the file you're adding (step 9). |
 | "Skip the second install.sh run — first one passed" | That's exactly how the mcp.json idempotency bug went undetected for a day. Step 6 is non-negotiable. |
 | "I'll auto-upgrade the claude CLI silently" | Non-idempotent. Plugin metadata or APIs can break across major versions and brick the current session. Step 4e requires user confirmation, same as commit/push. |
+| "OMC drift detected, I'll just run `omc update`" | Non-idempotent — it rewrites CLAUDE.md and re-syncs the plugin mid-session. Step 4f requires user confirmation, same as 4e. Detect-then-ask, never auto-apply. |
 
 ## Outputs the user expects after a run
 
@@ -205,6 +245,7 @@ A short summary table:
 | Incoming commits applied | `<sha range or "none">` |
 | Drift findings | `<list, or "none">` |
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
+| OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |
