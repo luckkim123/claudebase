@@ -26,4 +26,4 @@
 
 ---
 
-**Last Updated**:
+**Last Updated**: YYYY-MM-DD

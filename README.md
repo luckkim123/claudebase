@@ -232,3 +232,5 @@ mv ~/.claude/.backup-YYYYMMDD-HHMMSS/settings.json ~/.claude/
 ---
 
 **License**: Personal — feel free to fork, but secrets and machine-specific paths are mine.
+
+**Last Updated**: 2026-05-24
