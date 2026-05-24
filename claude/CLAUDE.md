@@ -98,13 +98,13 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 ## OMC (oh-my-claudecode) Orchestration
 
-`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: hybrid auto-route** — when the user does NOT name a tool/skill, Claude **silently selects** the right entry point via the decision tree below and announces it in one line, then proceeds. Exception: irreversible / outward-facing / large-scale work gets a 1-second confirm before starting (see tree step 4).
+`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: hybrid auto-route** — when the user does NOT name a tool/skill, Claude selects the right entry point via the decision tree below. For multi-step work it **announces the routing verdict in one line before starting** (even when the verdict is "handle directly"); trivial single-step work proceeds silently. Exception: irreversible / outward-facing / large-scale work gets a 1-second confirm before starting (see tree step 4).
 
 ### Auto-routing decision tree (apply when user names no tool)
 
-When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. Announce the chosen entry in one line ("→ X로 갑니다") and start; only step 4 cases pause for confirmation.
+When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. For any multi-step request (3+ actions or multiple files), announce the chosen entry in one line ("→ X로 갑니다") and start; trivial single-step work skips the announcement. Only step 4 cases pause for confirmation.
 
-**Step 1 — Trivial?** Typo, one-liner, single-file obvious fix, or a pure question → just do it / answer directly. No routing, no skill ceremony. *(Conceptual "how do I…" questions about the tooling itself = answer, don't invoke.)*
+**Step 1 — Trivial?** Typo, one-liner, single-file obvious fix, or a pure question → just do it / answer directly. No routing, no skill ceremony. *(Conceptual "how do I…" questions about the tooling itself = answer, don't invoke.)* **But a task spanning 3+ actions or multiple files is NOT trivial even when each step is simple** (multi-file cleanup, refactor, analysis sweep) — it MUST announce its routing verdict in one line before starting, *including* a "handle directly" verdict. The announcement is what makes the routing decision auditable; skipping it on "it's just ops" is the exact gap this rule closes.
 
 **Step 2 — What's ambiguous: the *how* or the *what/why*?**
 - **what/why is unsettled** (direction not chosen, 2-3 design choices, "어떤 방향이 나을까") → diverge FIRST: `superpowers:brainstorming` (decision-heavy, interactive) or `oh-my-claudecode:deep-interview` (Socratic, ambiguity-gated). Then re-enter the tree with the clarified spec.
