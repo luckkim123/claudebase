@@ -33,18 +33,36 @@ To get future updates: `git pull`. No re-install needed (unless you added new se
 
 | Path in repo | Symlink target | Purpose |
 |---|---|---|
+| `agents/` | `~/.claude/agents/<name>.md` | User-scope subagents (currently paper-write reviewer + fixer agents) |
 | `claude/settings.json` | `~/.claude/settings.json` | User-level Claude Code settings (hooks, plugins, thinking, permissions) |
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Universal behavioral rules (Karpathy 4 principles + operational limits + workflow) applied across all projects |
 | `claude/mcp.template.json` | rendered into `~/.claude/mcp.json` | MCP server config — `${VAR}` placeholders filled from `secrets.env` |
+| `docs/` | not installed | Repo documentation (ppt-skills usage guide + design specs) |
 | `shell/tmux.conf` | `~/.tmux.conf` | tmux config (Unix only) |
 | `skills/<name>/` | `~/.claude/skills/<name>/` | User-scope Claude Code skills. Each subdirectory symlinked individually so other ad-hoc skills under `~/.claude/skills/` are left untouched. |
-| `skills/ppt-academic/` | `~/.claude/skills/ppt-academic/` | Academic presentation generator — wraps the `axlabs-mckinsey-pptx` plugin with Korean academic narrative arcs (defense / paper / lab seminar) and a 3-gate workflow. |
-| `skills/ppt-lecture/` | `~/.claude/skills/ppt-lecture/` | Lecture/teaching slide generator — single-file HTML with light/dark/paper themes, html2canvas PNG export, 8 layouts, 2-gate workflow. |
 | `platform/macos/` | (varies) | macOS-only extras (Homebrew formulae + casks + pip; `font-pretendard` and `python-pptx` for PPT skills) |
 | `platform/linux/` | (varies) | Linux-only extras |
 | `platform/windows/` | (varies) | Windows-only extras (winget + pip; `sunbk201.Pretendard` and `python-pptx` for PPT skills) |
 | `templates/` | not installed | Boilerplate for new project `.claude/` and `settings.local.json` |
 | `secrets/secrets.env` | (read by installer) | **Gitignored.** Real API keys |
+
+## Skills
+
+User-invocable via `/<skill-name>` or auto-triggered by phrases in their frontmatter.
+
+| Skill | Purpose | Triggers (Korean / English) |
+|:------|:--------|:----------------------------|
+| `docx-toolkit` | Create/edit .docx files (⚠ Phase 0 stub, disabled) | "워드", "보고서 작성" / "docx" |
+| `gen-image` | Generate one image with Google nano banana (Gemini 2.5 Flash Image) | "그려줘", "이미지 만들어", "아이콘 생성" / "draw", "create image", "generate" |
+| `omc-teams-ops` | omc-teams launch / 디버깅 매뉴얼 (sentinel, pane-label, monitor) | "omc team", "tmux pane 분리", "sentinel" |
+| `paper-write` | End-to-end LaTeX paper writing with venue YAMLs and 6 sub-agents (slash-only) | `/paper-write` |
+| `ppt-academic` | Academic presentation .pptx via mckinsey-pptx plugin — 4 narrative arcs, 3-gate workflow | "디펜스", "학회 발표", "졸업 발표" / "thesis defense", "conference" |
+| `ppt-analyze` | Extract design-system spec (style_spec.yaml + layout_catalog + narrative_outline + asset_manifest) from an existing .pptx | "ppt 분석", "발표자료 양식 추출", "디펜스 PPT 양식" / "ppt analyze", "design extraction" |
+| `ppt-edit` | Edit existing .pptx with 3-gate safety workflow (dry-run → integrity → full PNG review) | "ppt 수정", "발표자료 수정", "폰트 일괄 변경" / "ppt edit", "slide patch" |
+| `ppt-lecture` | Teaching slides via single-file HTML with light/dark/paper themes and html2canvas PNG export | "강의 자료", "강의 슬라이드", "세미나 자료" / "lecture slides", "tutorial slides" |
+| `sync-claude-settings` | Sync this repo across machines (pull, drift-check, install, verify) | "claude-settings 동기화", "settings sync" / "settings sync", "plugin drift" |
+
+---
 
 ### What is NOT here
 
