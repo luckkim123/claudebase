@@ -140,12 +140,21 @@ if [[ -f "$TEMPLATE" ]]; then
   else
     content="$(cat "$TEMPLATE")"
     if [[ -f "$SECRETS_FILE" ]]; then
-      set -a; source "$SECRETS_FILE"; set +a
+      # M3: parse secrets.env as literal strings — do NOT use `set -a; source`
+      # which would shell-expand values like `SK=sk-foo$abc` into wrong strings.
+      # Values are read verbatim; surrounding quotes (single or double) are stripped
+      # but no parameter expansion or command substitution is performed.
       resolved=0
-      while IFS='=' read -r key _; do
-        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+      while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^[[:space:]]*$  ]] && continue   # blank
+        [[ "$line" =~ ^[[:space:]]*#  ]] && continue   # comment
+        key="${line%%=*}"
+        value="${line#*=}"
         key="${key// /}"
-        value="${!key:-}"
+        [[ -z "$key" ]] && continue
+        # Strip surrounding double or single quotes (but NOT shell-expand $vars)
+        value="${value%\"}"; value="${value#\"}"
+        value="${value%\'}"; value="${value#\'}"
         if [[ "$content" == *"\${${key}}"* ]]; then
           content="${content//\$\{${key}\}/${value}}"
           resolved=$((resolved + 1))
@@ -176,7 +185,7 @@ if [[ -d "$REPO_DIR/skills" ]]; then
   run mkdir -p "$CLAUDE_HOME/skills"
   for skill_dir in "$REPO_DIR/skills"/*/; do
     [[ -d "$skill_dir" ]] || continue
-    skill_name="$(basename "$skill_dir")"
+    skill_name="${skill_dir%/}"; skill_name="${skill_name##*/}"
     link_or_copy "${skill_dir%/}" "$CLAUDE_HOME/skills/$skill_name"
   done
 fi
@@ -187,7 +196,7 @@ if [[ -d "$REPO_DIR/agents" ]]; then
   run mkdir -p "$CLAUDE_HOME/agents"
   for agent_file in "$REPO_DIR/agents"/*.md; do
     [[ -f "$agent_file" ]] || continue
-    agent_name="$(basename "$agent_file")"
+    agent_name="${agent_file##*/}"
     link_or_copy "$agent_file" "$CLAUDE_HOME/agents/$agent_name"
   done
 fi
@@ -206,10 +215,22 @@ fi
 HOOK_FRAGMENT="$REPO_DIR/claude/hooks/omc-reference-loader.json"
 HOOK_MERGER="$REPO_DIR/claude/hooks/merge-project-hook.py"
 HOOK_MARKER="OMC_REFERENCE_AUTO_LOAD"
-PROJECT_TARGETS=(
-  "$HOME/Desktop/workspace"
-  "$HOME/ksm_Obsidian"
-)
+# M4: PROJECT_TARGETS read from ~/.claude/settings.local.json (gitignored) so
+# machine-specific paths are not baked into the shared repo. The key is
+# "projectTargets": ["~/Desktop/workspace", "~/ksm_Obsidian"]. Tilde is
+# expanded to $HOME. Falls back to the previous hardcoded list on first run
+# (before settings.local.json exists) for backward compatibility.
+PROJECT_TARGETS=()
+if [ -f "$CLAUDE_HOME/settings.local.json" ]; then
+  while IFS= read -r p; do
+    expanded="${p/#\~/$HOME}"
+    [ -d "$expanded" ] && PROJECT_TARGETS+=("$expanded")
+  done < <(python3 -c "import json,sys; d=json.load(open('$CLAUDE_HOME/settings.local.json')); print('\n'.join(d.get('projectTargets',[])))" 2>/dev/null || true)
+fi
+# Fallback to previous defaults if settings.local.json missing or has no projectTargets.
+if [ ${#PROJECT_TARGETS[@]} -eq 0 ]; then
+  PROJECT_TARGETS=("$HOME/Desktop/workspace" "$HOME/ksm_Obsidian")
+fi
 if [[ -f "$HOOK_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
   for project_root in "${PROJECT_TARGETS[@]}"; do
     [[ -d "$project_root" ]] || { debug "skip project hook: $project_root not present"; continue; }
@@ -247,18 +268,67 @@ sync_plugins() {
     return
   fi
 
-  local enabled
-  enabled="$(CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
-import json, os
+  # Single python pass — emit one line per plugin: name TAB scope TAB enabled TAB is_installed
+  # Collapses 4 separate heredocs (H2/M2/OPT1) into one invocation; reads both
+  # settings.json (enabledPlugins) and installed_plugins.json in one pass.
+  # Output format (tab-separated per line):
+  #   <plugin_name> \t <installed_scope|none> \t enabled   (for enabled plugins)
+  #   <plugin_name> \t <installed_scope>       \t installed (for user-scope installed-only)
+  local py_output
+  py_output="$(CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
+import json, os, sys, traceback
+
+claude_home = os.environ["CLAUDE_HOME"]
+
+# Parse settings.json
 try:
-    d = json.load(open(os.path.join(os.environ["CLAUDE_HOME"], "settings.json")))
-    for k, v in d.get("enabledPlugins", {}).items():
-        if v:
-            print(k)
+    d = json.load(open(os.path.join(claude_home, "settings.json")))
+    enabled_map = {k: v for k, v in d.get("enabledPlugins", {}).items() if v}
+except Exception as e:
+    import traceback
+    print(f"[install] WARNING: settings.json parse failed: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    enabled_map = {}
+
+# Parse installed_plugins.json
+try:
+    ip = os.path.join(claude_home, "plugins", "installed_plugins.json")
+    installed = json.load(open(ip)) if os.path.exists(ip) else {}
+    installed_plugins = installed.get("plugins", {})
+except Exception:
+    installed_plugins = {}
+
+# Emit enabled plugins with their installed scope
+for plugin_name in enabled_map:
+    entries = installed_plugins.get(plugin_name, [])
+    scope = entries[0].get("scope", "none") if entries else "none"
+    print(f"{plugin_name}\t{scope}\tenabled")
+
+# Parse settings.local.json for drift detection
+try:
+    lp = os.path.join(claude_home, "settings.local.json")
+    if os.path.exists(lp):
+        dl = json.load(open(lp))
+        for k, v in dl.get("enabledPlugins", {}).items():
+            if v and k not in enabled_map:
+                entries = installed_plugins.get(k, [])
+                scope = entries[0].get("scope", "none") if entries else "none"
+                print(f"{k}\t{scope}\tlocal")
 except Exception:
     pass
+
+# Emit user-scope installed plugins not in enabled (for drift detection)
+for name, entries in installed_plugins.items():
+    for e in entries:
+        if e.get("scope") == "user":
+            print(f"{name}\tuser\tinstalled")
+            break
 PY
 )" || true
+
+  # Extract just enabled plugin names for the marketplace checks and main loop
+  local enabled
+  enabled="$(printf '%s\n' "$py_output" | awk -F'\t' '$3=="enabled" {print $1}')"
 
   if [[ -z "$enabled" ]]; then
     debug "no enabledPlugins to sync"
@@ -270,11 +340,12 @@ PY
   # Previous per-marketplace grep patterns were inconsistent (^name vs name vs
   # \bname\b), causing the axlabs branch to re-add on every run because the
   # leading "  ❯ " prefix never matched `^axlabs`.
+  # OPT6: cache once so we don't re-invoke claude for each marketplace check.
+  local MARKETPLACES
+  MARKETPLACES="$(claude plugin marketplace list 2>/dev/null | awk '/❯/ {print $2}')" || MARKETPLACES=""
   marketplace_exists() {
     local name="$1"
-    claude plugin marketplace list 2>/dev/null \
-      | awk '/❯/ {print $2}' \
-      | grep -qx "$name"
+    echo "$MARKETPLACES" | grep -qx "$name"
   }
 
   # Ensure canonical marketplace exists if any plugin references it
@@ -319,16 +390,11 @@ PY
   local plugin current ok=0 fixed=0 failed=0
   while IFS= read -r plugin || [[ -n "$plugin" ]]; do
     [[ -z "$plugin" ]] && continue
-    current="$(PLUGIN="$plugin" CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
-import json, os
-try:
-    d = json.load(open(os.path.join(os.environ["CLAUDE_HOME"], "plugins", "installed_plugins.json")))
-    es = d.get("plugins", {}).get(os.environ["PLUGIN"], [])
-    print(es[0].get("scope", "") if es else "none")
-except Exception:
-    print("none")
-PY
-)"
+    # Look up installed scope from py_output (tab-separated: name\tscope\ttype).
+    # Use grep+awk instead of associative array for bash 3 compatibility.
+    current="$(printf '%s\n' "$py_output" \
+      | awk -F'\t' -v p="$plugin" '$1==p && $3=="enabled" {print $2; exit}')"
+    [[ -z "$current" ]] && current="none"
     if [[ "$current" == "user" ]]; then
       debug "plugin OK (user): $plugin"
       ok=$((ok+1))
@@ -357,39 +423,16 @@ PY
   # those plugins on machine B during the next sync, surprising the user.
   # The warn-only default invites the user to either register as per-machine
   # in settings.local.json or re-run install.sh --prune-plugins to remove.
+
+  # Use py_output for both enabled_local and installed_user (already computed above).
   local enabled_local
-  enabled_local="$(CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
-import json, os
-p = os.path.join(os.environ["CLAUDE_HOME"], "settings.local.json")
-if os.path.exists(p):
-    try:
-        d = json.load(open(p))
-        for k, v in d.get("enabledPlugins", {}).items():
-            if v:
-                print(k)
-    except Exception:
-        pass
-PY
-)" || true
+  enabled_local="$(printf '%s\n' "$py_output" | awk -F'\t' '$3=="local" {print $1}')"
 
   local expected
   expected="$(printf '%s\n%s\n' "$enabled" "$enabled_local" | sort -u | sed '/^$/d')"
 
   local installed_user
-  installed_user="$(CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
-import json, os
-p = os.path.join(os.environ["CLAUDE_HOME"], "plugins", "installed_plugins.json")
-try:
-    d = json.load(open(p))
-    for name, entries in d.get("plugins", {}).items():
-        for e in entries:
-            if e.get("scope") == "user":
-                print(name)
-                break
-except Exception:
-    pass
-PY
-)"
+  installed_user="$(printf '%s\n' "$py_output" | awk -F'\t' '$2=="user" && $3=="installed" {print $1}')"
 
   local drift removed=0 kept=0
   drift="$(comm -23 <(printf '%s\n' "$installed_user" | sort -u | sed '/^$/d') \
@@ -439,8 +482,10 @@ fi
 #    into the repo when it auto-formats or persists new settings. Surface this
 #    so the user can decide to commit, discard, or update the canonical file.
 if command -v git >/dev/null 2>&1; then
-  if [[ -n "$(git -C "$REPO_DIR" status --porcelain claude/settings.json 2>/dev/null)" ]]; then
-    log "drift: claude/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff claude/settings.json"
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    if [[ -n "$(git -C "$REPO_DIR" status --porcelain claude/settings.json 2>/dev/null)" ]]; then
+      log "drift: claude/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff claude/settings.json"
+    fi
   fi
 fi
 
