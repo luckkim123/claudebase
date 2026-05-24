@@ -71,7 +71,6 @@ apply_labels() {
     fi
     wp="${kv%%=*}"
     label="${kv#*=}"
-    pane_id="${wp%.*}:${wp##*.}"   # 1.0 → 1:0 ... but tmux uses 0:1.0
     target="0:${wp}"               # assume session 0
     # Sanity check pane exists
     if ! tmux list-panes -t "$target" -F "#{pane_index}" >/dev/null 2>&1; then

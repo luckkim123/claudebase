@@ -31,3 +31,6 @@ desktop.ini
 **/.venv/
 **/__pycache__/
 *.pyc
+
+# OMC runtime state (reviews, handoffs, sessions, project memory)
+.omc/

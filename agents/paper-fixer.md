@@ -68,7 +68,7 @@ For each finding (in priority_queue order):
 
 After all attempts, run:
 ```bash
-.claude/skills/paper-write/scripts/compile.sh <target_file> <compile_engine>
+~/.claude/skills/paper-write/scripts/compile.sh <target_file> <compile_engine>
 ```
 
 Capture exit code.

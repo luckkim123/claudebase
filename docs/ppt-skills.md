@@ -1,7 +1,7 @@
 # PPT Skills — 사용 가이드
 
-claude-settings의 두 PPT 생성 스킬 (`ppt-academic`, `ppt-lecture`)에 대한
-사용 가이드.
+claude-settings의 네 PPT 스킬 (`ppt-academic`, `ppt-lecture`, `ppt-edit`,
+`ppt-analyze`)에 대한 사용 가이드.
 
 ---
 
@@ -40,16 +40,16 @@ claude-settings의 두 PPT 생성 스킬 (`ppt-academic`, `ppt-lecture`)에 대�
 
 ---
 
-## 두 스킬의 분리
+## 네 스킬의 분리
 
-| | `ppt-academic` | `ppt-lecture` |
-|:---|:---|:---|
-| **용도** | 학술 발표 | 강의/교육 자료 |
-| **출력** | .pptx (편집 가능) | HTML + PNG (캡처) |
-| **베이스** | mckinsey-pptx 플러그인 | 직접 작성 (template.html) |
-| **게이트** | 3개 (구조 → 콘텐츠 → 템플릿) | 2개 (기획서 → 미리보기) |
-| **테마** | KO_THEME (한국어) / DEFAULT | light / dark / paper |
-| **트리거** | "디펜스", "학회 발표" | "강의 자료", "튜토리얼" |
+| | `ppt-academic` | `ppt-lecture` | `ppt-edit` | `ppt-analyze` |
+|:---|:---|:---|:---|:---|
+| **사용 시점** | 새 학술 .pptx 생성 | 새 강의/교육 자료 생성 | 기존 .pptx 수정 | 기존 .pptx에서 spec 추출 |
+| **입력** | 주제/시간/발표 유형 | 주제/테마/vault 노트 | 기존 .pptx + 수정 요청 | 기존 .pptx |
+| **산출물** | .pptx (편집 가능) | HTML + PNG (캡처) | .edited.pptx (원본 보존) | style_spec.yaml + layout_catalog.md + narrative_outline.md + asset_manifest.yaml |
+| **핵심 게이트** | 3개 (구조 → 콘텐츠 → 템플릿) | 2개 (기획서 → 미리보기) | 3개 (plan dry-run → 무결성 V2 → 전수 PNG V1) | 3개 (범위 확정 → 추출 → round-trip 검증) |
+| **베이스** | mckinsey-pptx 플러그인 | 직접 작성 (template.html) | python-pptx + soffice | python-pptx + PIL |
+| **트리거** | "디펜스", "학회 발표" | "강의 자료", "튜토리얼" | "ppt 수정", "발표자료 수정" | "ppt 분석", "양식 추출" |
 
 ---
 
@@ -292,6 +292,130 @@ claude
 
 ---
 
+## ppt-edit 사용
+
+### 언제 사용
+
+- 이미 만들어진 .pptx의 텍스트 한 줄 교체 (L1)
+- 슬라이드 추가 / 삭제 / 순서 변경 (L2)
+- 폰트 / 컬러 / 여백을 deck 전체에 일괄 적용 (L3)
+- 디펜스 발표자료의 패치 사이클 (vN → vN+1)
+- 새 deck 생성이 아닌 "이 PPT의 X를 Y로 바꿔줘" 형태의 요청
+
+레이아웃 구조 자체를 재설계(L4)하거나 새 deck를 처음부터 만들 때는
+`ppt-academic`을 사용. 기존 .pptx에서 스타일 spec만 추출할 때는
+`ppt-analyze`를 사용.
+
+### 기본 호출
+
+```
+260617_Defense_Seungmin_Kim_v20.pptx에서 슬라이드 1 영문 제목 추가해줘
+```
+
+```
+내 디펜스 PPT 폰트를 전체적으로 Pretendard로 통일해줘
+```
+
+### Workflow (3-게이트)
+
+1. **Gate 0** — 의존성 체크 (`python-pptx`, `soffice`, `pdftoppm`). 미설치 시 작업 거부.
+2. **Gate 1 (Dry-run)** — 원본 텍스트/스타일 인용 출력 (V3 Provenance Lock) + 변경 plan 제시. 사용자 OK 전 적용 없음.
+3. **Gate 2 (적용 + 무결성)** — 새 파일에 패치 적용 → `verify_pptx.py` 5개 항목 자동 실행. 1개라도 FAIL이면 중단.
+4. **Gate 3 (전수 PNG 정독)** — deck 전체 슬라이드 PNG 렌더 + Read 도구로 정독. 변경 대상이 아닌 슬라이드도 모두 확인.
+
+### 핵심 안전 규칙 (V1~V6)
+
+| 규칙 | 내용 |
+|:---|:---|
+| **V1 전수 PNG 정독** | 변경된 슬라이드만 보는 것 금지. deck 전체 PNG 확인 필수. |
+| **V2 다층 무결성 게이트** | `verify_pptx.py` 5/5 PASS 필수 (zip CRC, python-pptx open, soffice PDF, OOXML 직접 검사, orphan master). |
+| **V3 Provenance Lock** | 원본 텍스트 인용 확인 후 변경. 미확인 상태에서 신규 문구 작성 금지. |
+| **V4 콘텐츠 신규 작성 금지** | 사용자가 명시하지 않으면 LLM이 새 문구 생성 안 함. |
+| **V5 출력 분리 + Dry-run** | 원본 in-place 수정 금지. 기본은 항상 dry-run plan 먼저. |
+| **V6 카테고리 전수 점검** | 한 슬라이드 결함 지적 시 같은 카테고리 전체 슬라이드 일괄 점검. |
+
+### 출력 파일
+
+```
+output/<slug>/
+├── <deck>.edited.pptx    # 수정본 (원본 보존)
+├── verify_report.json    # V2 무결성 검증 결과
+└── regression_check.md   # V1 전수 정독 보고
+```
+
+---
+
+## ppt-analyze 사용
+
+### 언제 사용
+
+- 기존 .pptx에서 design system(폰트/컬러/여백/레이아웃 패턴) 추출
+- "이 양식 그대로 새 deck 만들어줘"의 사전 준비 단계
+- 디펜스 deck의 design tokens 정리
+- 라이선스/누락 자산 점검 (asset_manifest)
+- 자연스러운 파이프라인: `ppt-analyze` → spec 추출 → `ppt-academic`으로 새 deck 생성
+
+기존 .pptx 파일을 직접 수정할 때는 `ppt-edit`를 사용.
+analyze는 read-only — 원본 파일을 절대 수정하지 않는다.
+
+### 기본 호출
+
+```
+박건우_선배_발표.pptx에서 design system 추출해줘
+```
+
+```
+이 PPT 양식 그대로 내 디펜스 deck 만들고 싶어, 먼저 분석해줘
+```
+
+### Workflow (3-게이트)
+
+1. **Gate 0** — 의존성 체크 (`python-pptx`, `pyyaml`, `Pillow`, `soffice`, `pdftoppm`).
+2. **Gate 1 (추출 범위 확정)** — 기본 모드(G4 hybrid) vs `--detail full` 선택. 사용자 확정.
+3. **Gate 2 (추출 + 산출물 생성)** — 무결성 사전 점검(A5) → `extract_spec.py` 실행 → 4종(또는 5종) 파일 생성.
+4. **Gate 3 (Round-trip 검증)** — 추출한 spec으로 대표 슬라이드 1장 재생성 → 원본 PNG와 비교 → 픽셀 유사도 ≥ 85% 확인.
+
+### 4종 산출물
+
+| 파일 | 형식 | 내용 |
+|:---|:---|:---|
+| `style_spec.yaml` | YAML | deck-level design tokens (typography / palette / spacing) + layout별 spec |
+| `layout_catalog.md` | Markdown | 슬라이드별 layout 패턴 분류 + 빈도 + 예시 슬라이드 번호 |
+| `narrative_outline.md` | Markdown | 슬라이드 제목 + bullet 트리 (텍스트 흐름) |
+| `asset_manifest.yaml` | YAML | 사용된 이미지 / 폰트 목록 |
+
+`--detail full` 옵션 추가 시 5번째 파일 `slides_full_dump.yaml` 생성 (슬라이드 1장당 모든 shape의 위치/크기/폰트/컬러 완전 dump).
+
+### 출력 파일
+
+```
+output/<deck-slug>/
+├── style_spec.yaml
+├── layout_catalog.md
+├── narrative_outline.md
+├── asset_manifest.yaml
+├── slides_full_dump.yaml   # --detail full 옵션 시만
+└── roundtrip/
+    ├── original_slide1.png
+    ├── regenerated_slide1.png
+    ├── diff_slide1.png
+    └── roundtrip_report.md
+```
+
+### 산출물 활용
+
+추출한 spec을 downstream에서 사용:
+
+```
+output/박건우_v18/style_spec.yaml의 design tokens 적용해서 내 디펜스 deck 만들어줘
+```
+
+```
+내 deck를 output/박건우_v18/style_spec.yaml의 폰트/팔레트로 통일해줘
+```
+
+---
+
 ## 관련 파일
 
 - `skills/ppt-academic/SKILL.md` — 학술 스킬 진입점
@@ -303,12 +427,18 @@ claude
 - `skills/ppt-lecture/assets/template.html` — 시드 HTML
 - `skills/ppt-lecture/references/` — 5개 참조 (layouts, themes, components,
   checklist, lecture-tone)
+- `skills/ppt-edit/SKILL.md` — 수정 스킬 진입점 (V1~V6 Hard Rules, 3-게이트)
+- `skills/ppt-edit/scripts/verify_pptx.py` — 무결성 검증 헬퍼 (V2, self-contained)
+- `skills/ppt-analyze/SKILL.md` — 분석 스킬 진입점 (A1~A5 Hard Rules, 3-게이트)
+- `skills/ppt-analyze/scripts/extract_spec.py` — 추출 헬퍼
+- `skills/ppt-analyze/scripts/roundtrip_check.py` — round-trip 검증 헬퍼
 - `platform/macos/install.sh` — Mac 의존성 자동 설치
 - `platform/windows/install.ps1` — Win 의존성 자동 설치
-- `docs/plans/2026-05-10-ppt-skills-design.md` (vault) — 설계 문서
+- `docs/plans/2026-05-10-ppt-skills-design.md` (vault) — ppt-academic/lecture 설계 문서
+- `docs/plans/2026-05-11-ppt-edit-analyze-design.md` (vault) — ppt-edit/analyze 설계 문서
 
 ---
 
-**Last Updated**: 2026-05-10
+**Last Updated**: 2026-05-24
 **Designed By**: 김승민 + Claude Opus 4.7 (1M context)
 **License**: 본인 환경 전용

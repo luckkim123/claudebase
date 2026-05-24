@@ -39,7 +39,7 @@ You are a deterministic LaTeX linter. You compile, parse `.log`, and surface iss
 
 1. Run compile via `scripts/compile.sh`:
    ```bash
-   .claude/skills/paper-write/scripts/compile.sh <target_file> <compile_engine>
+   ~/.claude/skills/paper-write/scripts/compile.sh <target_file> <compile_engine>
    ```
 2. Read the `.log` file (path: `<dir>/<base>.log`)
 3. Apply rule checks below
