@@ -1,0 +1,14 @@
+{
+  "_comment": "using-omc routing-rule auto-loader. Merged into USER-scope ~/.claude/settings.json by install.sh (unlike the project-scoped omc-reference loader). Marker 'USING_OMC_AUTO_LOAD' lets install.sh detect existing installs for idempotent updates.",
+  "SessionStart": [
+    {
+      "matcher": "startup|resume|clear|compact",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
+        }
+      ]
+    }
+  ]
+}
