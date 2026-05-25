@@ -111,6 +111,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# ROUTING_VERDICT_CHECKPOINT\npython3 ~/claude-settings/claude/hooks/routing-verdict-reminder.py"
+          }
+        ]
+      }
     ]
   }
 }
