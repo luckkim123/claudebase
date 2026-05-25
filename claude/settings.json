@@ -99,5 +99,18 @@
         "sessionSummary"
       ]
     }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
+          }
+        ]
+      }
+    ]
   }
 }
