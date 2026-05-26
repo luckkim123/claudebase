@@ -32,7 +32,7 @@ counterparts are lighter loops.
 
 | Task phase | superpowers | OMC | Pick by |
 |:--|:--|:--|:--|
-| Direction unclear | `brainstorming` | `deep-interview` | Exploring/choosing a direction (diverge) → brainstorming · Direction known, requirements vague before an autonomous run (converge) → deep-interview |
+| Direction unclear | `brainstorming` | `deep-interview` | "compare approaches / explore options / which design" (diverge) → brainstorming · "I don't know what I want / interrogate my assumptions / pin it down / make sure you understand" (converge) → deep-interview. The "don't even know what I want, ask me everything" signal is deep-interview, NOT brainstorming — do not default to brainstorming here |
 | Planning | `writing-plans` | `plan`, `ralplan` | Concrete bite-sized TDD task plan for an implementer → writing-plans · Lighter strategic scoping → plan · High-stakes, multi-perspective consensus → ralplan |
 | Impl distribution | `subagent-driven-development`, `dispatching-parallel-agents` | `team`, `ultrawork`, `autopilot` | Have a plan, want per-task spec/quality review → subagent-driven · Independent bugs, no shared state → dispatching-parallel-agents · Workers must coordinate on shared tasks → team · Pure throughput, you manage completion → ultrawork · Hands-off idea→code → autopilot |
 | Loop until done | `test-driven-development` | `ralph`, `ultraqa` | Writing code, discipline matters → TDD (also the unit discipline inside ralph) · "Keep going until verified complete" → ralph · "Do tests/build/lint pass?" → ultraqa |
@@ -62,10 +62,9 @@ competition with OMC throughput skills; they apply *inside* OMC loops too.
 
 ## §D Domain skills
 
-Personal/domain skills (ppt-*, train-analyze, paper-write, gen-image,
-writer-memory, ...) are surfaced with their own triggers by the harness'
-available-skills list. Reach for them by keyword; run `/skill` to enumerate. Do
-not re-list them here.
+Personal/domain skills (ppt-*, train-analyze, paper-write, writer-memory, ...)
+are surfaced by the harness' available-skills list — reach by keyword, `/skill`
+to enumerate. Not re-listed here.
 
 ## When to still handle directly
 
