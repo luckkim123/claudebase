@@ -5,62 +5,83 @@ description: Use at the start of every multi-step request to fairly judge the ex
 
 # Skill Routing Brain
 
-superpowers and OMC are **peers**. This skill is the fair judge that decides, for
-a given task, which lane fits — without defaulting to superpowers because the
-system prompt shouts louder, nor to "handle directly" because choosing feels hard.
+superpowers and OMC are **peers**. This skill is the fair judge that picks the
+lane fitting the task — never defaulting to superpowers because the system prompt
+shouts louder, nor to "handle directly" because choosing feels hard.
 
-## The Process (THIS is what's mandatory — not any specific skill)
+## The Process (THIS is mandatory — not any specific skill)
 
-For ANY request spanning 3+ actions or multiple files, BEFORE acting:
+For ANY request of 3+ actions or multiple files, BEFORE acting:
 
-1. **Classify the task.** Is the direction unclear? Is it discipline-governed
-   (wrong = expensive; needs review/TDD gates) or throughput-governed (many
-   independent units, parallelizable)?
-2. **Consult the fair-judge table (§A)** for overlapping decision points, and the
-   **trigger index (§B/C)** for single-purpose skills.
-3. **Announce the verdict in ONE line:** "→ <skill or 'handle directly'>: <reason>".
+1. **Match the request to a signal below.** Read the signals, not skill names —
+   find the line whose signal describes THIS request. The (SP)/(OMC) label is just
+   which plugin owns it; it is NOT a priority order. Do not prefer SP over OMC, or
+   vice versa — the signal decides.
+2. If two signals seem to fit, pick the **more specific** one (e.g. "keep going
+   until verified" beats generic "parallel work").
+3. **Announce the verdict in ONE line:** "-> <skill or 'handle directly'>: <reason>".
 
 Trivial single-step work (typo, one-liner, single obvious edit, pure question)
 proceeds silently. The mandatory act is the *judgment*, not invoking a skill.
 
-## §A Fair-Judge Table (superpowers ↔ OMC, body-derived criteria)
+Labels: OMC exec skills nest (`ultrawork` < `ralph` < `autopilot`). SP TDD /
+systematic-debugging / verification are RIGID Iron Laws — they fire on their
+signal even inside an OMC loop.
 
-Two facts the table relies on: OMC execution skills **nest** (`ultrawork ⊂ ralph ⊂
-autopilot` — each adds persistence/pipeline on the last), and superpowers
-verification/debugging/TDD skills are **RIGID Iron Laws** while their OMC
-counterparts are lighter loops.
+## §A Signals -> Skill (the signal is exclusive; read it, not the name)
 
-| Task phase | superpowers | OMC | Pick by |
-|:--|:--|:--|:--|
-| Direction unclear | `brainstorming` | `deep-interview` | "compare approaches / explore options / which design" (diverge) → brainstorming · "I don't know what I want / interrogate my assumptions / pin it down / make sure you understand" (converge) → deep-interview. The "don't even know what I want, ask me everything" signal is deep-interview, NOT brainstorming — do not default to brainstorming here |
-| Planning | `writing-plans` | `plan`, `ralplan` | Concrete bite-sized TDD task plan for an implementer → writing-plans · Lighter strategic scoping → plan · High-stakes, multi-perspective consensus → ralplan |
-| Impl distribution | `subagent-driven-development`, `dispatching-parallel-agents` | `team`, `ultrawork`, `autopilot` | Have a plan, want per-task spec/quality review → subagent-driven · Independent bugs, no shared state → dispatching-parallel-agents · Workers must coordinate on shared tasks → team · Pure throughput, you manage completion → ultrawork · Hands-off idea→code → autopilot |
-| Loop until done | `test-driven-development` | `ralph`, `ultraqa` | Writing code, discipline matters → TDD (also the unit discipline inside ralph) · "Keep going until verified complete" → ralph · "Do tests/build/lint pass?" → ultraqa |
-| Verify / review | `verification-before-completion`, `requesting-code-review` | `verify`, `visual-verdict` | About to claim done → verification (RIGID, always) · Reviewer subagent on a diff → requesting-code-review · UI vs reference image → visual-verdict |
-| Diagnose cause | `systematic-debugging` | `trace`, `deep-dive` | About to fix, must not guess → systematic-debugging (RIGID) · Explain an ambiguous result, not fixing → trace · Investigate then crystallize the fix → deep-dive |
-| Worktree isolation | `using-git-worktrees` | `project-session-manager` | Just need isolation → using-git-worktrees · Managed worktree+tmux sessions tied to issues/PRs → psm |
+**Figuring out WHAT to build / which direction**
+- "compare a few approaches / explore options / which design is better" -> `brainstorming` (SP) — diverge
+- "I have a target but interrogate my hidden assumptions / pin down the spec / make sure you understand / don't assume" -> `deep-interview` (OMC) — converge on a known target
 
-**Fairness rule:** the criteria above decide. RIGID superpowers gates (TDD,
-systematic-debugging, verification) still fire on their trigger — they are not in
-competition with OMC throughput skills; they apply *inside* OMC loops too.
+**Turning a settled direction into a plan**
+- "write a concrete step-by-step TDD plan an implementer can follow" -> `writing-plans` (SP)
+- "scope/strategize this, lighter than a full TDD breakdown" -> `plan` (OMC)
+- "high-stakes — I want a plan vetted from multiple perspectives (consensus)" -> `ralplan` (OMC)
 
-## §B/C Trigger Index (single-purpose — reach by signal)
+**Distributing implementation work**
+- "have a plan, want each task spec+quality reviewed as it lands" -> `subagent-driven-development` (SP)
+- "several independent bugs/domains, no shared state, fix in parallel" -> `dispatching-parallel-agents` (SP)
+- "workers must coordinate/message on a shared task list" -> `team` (OMC)
+- "many independent edits, pure throughput, no verification loop" -> `ultrawork` (OMC)
+- "from a 2-3 line idea, run the whole lifecycle hands-off" -> `autopilot` (OMC)
 
-- authoring/editing a skill → `writing-skills` (SP, RIGID)
-- execute a written plan in a fresh session → `executing-plans` (SP)
-- after tests pass, merge/PR/cleanup → `finishing-a-development-branch` (SP)
-- multi-model opinion → `ask` (one model) · `ccg` (claude+codex+gemini synthesis)
-- parallel research / external docs → `sciomc` · `external-context`
-- cross-session knowledge → `wiki` (KB) · `remember` (sort into memory surfaces)
-- extract a reusable skill from this session → `skillify`
-- generate hierarchical AGENTS.md → `deepinit`
-- durable multi-goal / evaluator loop → `ultragoal` · `autoresearch`
-- version release → `release`
-- clean AI slop (NOT new features) → `ai-slop-cleaner`
-- install / repair / diagnose OMC, MCP, HUD, notifications → `setup` (router)
-- exit an active OMC mode → `cancel`
+**Looping until done**
+- "writing a feature/bugfix where correctness matters" -> `test-driven-development` (SP, RIGID; also the unit discipline inside ralph)
+- "keep going on its own until the work is verified complete, persist across retries" -> `ralph` (OMC)
+- "the only question left is whether tests/build/lint pass" -> `ultraqa` (OMC)
 
-## §D Domain skills
+**Verifying / reviewing**
+- "about to claim something is done/fixed/passing" -> `verification-before-completion` (SP, RIGID — always)
+- "send a reviewer over this diff" -> `requesting-code-review` (SP)
+- "is this UI screenshot close enough to the reference" -> `visual-verdict` (OMC)
+
+**Finding out WHY something happened**
+- "about to fix a bug — find the root cause first, don't guess" -> `systematic-debugging` (SP, RIGID)
+- "explain why this result/behavior happened, I'm not fixing it yet" -> `trace` (OMC)
+- "investigate the cause AND then crystallize what to do about it" -> `deep-dive` (OMC)
+
+**Isolated workspace**
+- "just need an isolated branch/workspace for this work" -> `using-git-worktrees` (SP)
+- "manage worktree+tmux sessions tied to issues/PRs (create/list/attach/cleanup)" -> `project-session-manager` (OMC)
+
+## §B Single-purpose signals (reach by signal; SP / OMC label only)
+
+- authoring/editing a skill -> `writing-skills` (SP, RIGID)
+- execute an existing written plan in a fresh session -> `executing-plans` (SP)
+- tests pass, now merge/PR/cleanup the branch -> `finishing-a-development-branch` (SP)
+- another model's opinion -> `ask` (one) / `ccg` (3-model synthesis) (OMC)
+- parallel external research / docs -> `sciomc` / `external-context` (OMC)
+- save cross-session knowledge -> `wiki` (KB) / `remember` (sort) (OMC)
+- turn this session's workflow into a skill -> `skillify` (OMC)
+- hierarchical AGENTS.md docs -> `deepinit` (OMC)
+- durable multi-goal / bounded evaluator loop -> `ultragoal` / `autoresearch` (OMC)
+- cut a version release -> `release` (OMC)
+- clean AI slop (NOT new features) -> `ai-slop-cleaner` (OMC)
+- install/repair/diagnose OMC, MCP, HUD, notifications -> `setup` (router) (OMC)
+- stop an active OMC mode -> `cancel` (OMC)
+
+## §C Domain skills
 
 Personal/domain skills (ppt-*, train-analyze, paper-write, writer-memory, ...)
 are surfaced by the harness' available-skills list — reach by keyword, `/skill`

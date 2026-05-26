@@ -5,6 +5,41 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# ROUTING_VERDICT_CHECKPOINT\npython3 ~/claude-settings/claude/hooks/routing-verdict-reminder.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# SURROGATE_AUTO_REPAIR\npython3 ~/claude-settings/claude/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Repairing lone UTF-16 surrogates in transcript"
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
@@ -100,27 +135,5 @@
       ]
     }
   },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# ROUTING_VERDICT_CHECKPOINT\npython3 ~/claude-settings/claude/hooks/routing-verdict-reminder.py"
-          }
-        ]
-      }
-    ]
-  }
+  "remoteControlAtStartup": false
 }
