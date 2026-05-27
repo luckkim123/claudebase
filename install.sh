@@ -409,6 +409,25 @@ PY
     fi
   fi
 
+  # heroacademia marketplace (luckkim123/oh-my-heroacademia — personal meta-harness;
+  # publishes own-code plugins like oh-my-docs). Plugin entries use commit-SHA
+  # versioning (no version field), so `marketplace update heroacademia` picks up
+  # pushes without manual bumps. Git source clones over SSH — needs a GitHub SSH key
+  # on this machine (or `gh auth setup-git`); not configured here to avoid touching
+  # the user's global git config.
+  # OS gate: OMD is document work (pptx/docx/xlsx/hwpx) that targets macOS; Linux is
+  # not a document-authoring environment here, so skip it. Windows is handled by
+  # install.ps1, not this script ($PLATFORM is only ever macos/linux here).
+  if echo "$enabled" | grep -q "@heroacademia"; then
+    if [[ "$PLATFORM" != "macos" ]]; then
+      log "skipping heroacademia (OMD): document work targets macOS; PLATFORM=$PLATFORM"
+    elif ! marketplace_exists "heroacademia"; then
+      log "adding marketplace: luckkim123/oh-my-heroacademia (heroacademia)"
+      run claude plugin marketplace add https://github.com/luckkim123/oh-my-heroacademia.git >/dev/null 2>&1 \
+        || log "  WARNING: failed to add heroacademia marketplace; check network/SSH key"
+    fi
+  fi
+
   local plugin current ok=0 fixed=0 failed=0
   while IFS= read -r plugin || [[ -n "$plugin" ]]; do
     [[ -z "$plugin" ]] && continue
