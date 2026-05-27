@@ -6,6 +6,27 @@
     "defaultMode": "auto"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# ROUTING_VERDICT_CHECKPOINT\npython3 ~/claude-settings/claude/hooks/routing-verdict-reminder.py"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -39,7 +60,6 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
-    "oh-my-heroacademia@heroacademia": true,
     "oh-my-docs@heroacademia": true
   },
   "extraKnownMarketplaces": {
