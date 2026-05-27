@@ -11,6 +11,11 @@ shouts louder, nor to "handle directly" because choosing feels hard.
 
 ## The Process (THIS is mandatory — not any specific skill)
 
+This judgment is not only for the user's prompt. Just as `using-superpowers`
+makes you scan the skill list **before** acting, scan THIS table FIRST whenever
+you reach for a skill mid-task — pick the SP/OMC skill the signal points to, and
+fall to another skill only if none fits.
+
 For ANY request of 3+ actions or multiple files, BEFORE acting:
 
 1. **Match the request to a signal below.** Read the signals, not skill names —
@@ -31,8 +36,9 @@ signal even inside an OMC loop.
 ## §A Signals -> Skill (the signal is exclusive; read it, not the name)
 
 **Figuring out WHAT to build / which direction**
-- "compare a few approaches / explore options / which design is better" -> `brainstorming` (SP) — diverge
-- "I have a target but interrogate my hidden assumptions / pin down the spec / make sure you understand / don't assume" -> `deep-interview` (OMC) — converge on a known target
+- "compare a few approaches / explore options / which design is better — NO direction chosen yet" -> `brainstorming` (SP) — diverge
+- "I have a target but interrogate my hidden assumptions / pin down the spec / clarify requirements / make sure you understand / don't assume" -> `deep-interview` (OMC) — converge on a known target
+- **Tie-break**: if both seem to fit, lean `deep-interview`. Reserve `brainstorming` for when you genuinely have NO target yet. This is a gentle preference, not a hard bias — a real blank-slate "which direction?" still goes to `brainstorming`.
 
 **Turning a settled direction into a plan**
 - "write a concrete step-by-step TDD plan an implementer can follow" -> `writing-plans` (SP)
