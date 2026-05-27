@@ -552,19 +552,50 @@ if [[ ! -e "$LOCAL_FILE" ]]; then
   log "hint: no $LOCAL_FILE — see templates/settings.local.example.json for per-machine plugin overrides"
 fi
 
-# 8. oh-my-claudecode HUD setup hint
-#    OMC's HUD statusline is installed lazily on first /oh-my-claudecode:hud or
-#    /omc-setup invocation. Auto-running it here would require a live Claude Code
-#    session, so we only print the next step instead of automating it.
-if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
-  if [[ ! -f "$CLAUDE_HOME/hud/omc-hud.mjs" ]]; then
-    log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install"
-  else
-    # Re-apply local HUD customization (line1: cyan dir:/branch:, lowercase
-    # model:). `hud setup` regenerates the wrapper and drops it; this is
-    # idempotent and safe to run every install.
-    bash "$REPO_DIR/claude/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
+# 8. oh-my-claudecode HUD setup
+#    The HUD wrapper is just two file copies + chmod (see the `hud` skill's
+#    setup steps), so we generate it directly from the plugin's canonical
+#    template instead of waiting for a live `/oh-my-claudecode:hud setup`.
+#    Idempotent: regenerated every install, then re-customized below.
+install_omc_hud() {
+  local omc_root="$CLAUDE_HOME/plugins/cache/omc/oh-my-claudecode"
+  # Pick the highest installed version dir that actually ships the template.
+  local tmpl="" cfgdir=""
+  if [[ -d "$omc_root" ]]; then
+    local ver
+    for ver in $(ls -1 "$omc_root" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | sort -rV); do
+      if [[ -f "$omc_root/$ver/scripts/lib/hud-wrapper-template.txt" ]]; then
+        tmpl="$omc_root/$ver/scripts/lib/hud-wrapper-template.txt"
+        cfgdir="$omc_root/$ver/scripts/lib/config-dir.mjs"
+        break
+      fi
+    done
   fi
+
+  if [[ -z "$tmpl" ]]; then
+    log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install (template not found in plugin cache)"
+    return
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    log "would install HUD wrapper from $tmpl"
+    return
+  fi
+
+  mkdir -p "$CLAUDE_HOME/hud/lib"
+  cp "$tmpl" "$CLAUDE_HOME/hud/omc-hud.mjs"
+  cp "$cfgdir" "$CLAUDE_HOME/hud/lib/config-dir.mjs"
+  chmod 755 "$CLAUDE_HOME/hud/omc-hud.mjs"
+  # Drop any legacy script left by older OMC versions.
+  [[ -f "$CLAUDE_HOME/hud/omc-hud.js" ]] && rm -f "$CLAUDE_HOME/hud/omc-hud.js"
+  log "installed HUD wrapper -> $CLAUDE_HOME/hud/omc-hud.mjs"
+
+  # Re-apply local HUD customization (line1: cyan dir:/branch:, lowercase
+  # model:). The fresh copy above always drops it, so this re-injects it.
+  bash "$REPO_DIR/claude/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
+}
+if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
+  install_omc_hud
 fi
 
 # 9. settings.json drift check (warn-only)
