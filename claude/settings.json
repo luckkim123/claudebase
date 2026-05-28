@@ -6,6 +6,18 @@
     "defaultMode": "auto"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# ASKUSERQUESTION_GUARD\npython3 ~/claude-settings/claude/hooks/askuserquestion-guard.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -40,7 +52,8 @@
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
     "oh-my-heroacademia@heroacademia": true,
-    "oh-my-docs@heroacademia": true
+    "oh-my-docs@heroacademia": true,
+    "oh-my-scholar@heroacademia": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
