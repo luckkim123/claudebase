@@ -1,6 +1,17 @@
 ---
 name: sync-claude-settings
-description: Use when syncing the personal ~/claude-settings repo across machines — pulling new commits, investigating cross-machine plugin drift, re-running install.sh, or auditing whether the local machine matches the repo's intended state. Triggers on phrases like "claude-settings 동기화", "settings sync", "plugin drift", "install.sh 다시", "settings.local.json", or after returning to a machine that's been offline. Walks the fetch → diff → drift-check → install → verify → bug-triage cycle. Asks before any non-idempotent action (commits, pushes, new-file writes, cross-repo template adoption).
+description: 'Use when syncing the personal claudebase (historically claude-settings) repo across machines — pulling new commits, investigating cross-machine plugin drift, re-running installer/install.sh, or auditing whether the local machine matches the repo''s intended state. Triggers on phrases like "claude-settings 동기화", "claudebase 동기화", "settings sync", "plugin drift", "install.sh 다시", "settings.local.json", or after returning to a machine that''s been offline. Walks the fetch → diff → drift-check → install → verify → bug-triage cycle. Asks before any non-idempotent action (commits, pushes, new-file writes, cross-repo template adoption).'
+triggers:
+  - "/sync-claude-settings"
+  - "sync-claude-settings"
+  - "claude-settings 동기화"
+  - "claudebase 동기화"
+  - "settings sync"
+  - "plugin drift"
+  - "install.sh 다시"
+  - "settings.local.json"
+  - "settings 머신 sync"
+  - "claudebase 머신"
 ---
 
 # sync-claude-settings
