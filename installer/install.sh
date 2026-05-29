@@ -42,78 +42,15 @@ render_mcp_json
 link_tmux_conf
 link_skills_and_agents
 
-# 5. platform-specific extra steps
-PLATFORM_INSTALLER="$REPO_DIR/platform/$PLATFORM/install.sh"
-if [[ -f "$PLATFORM_INSTALLER" ]]; then
-  log "running platform installer: $PLATFORM"
-  run bash "$PLATFORM_INSTALLER"
-fi
-
-# 5b. project-scope hook deployment — merge OMC reference auto-loader into
-#     each known project's .claude/settings.json. Idempotent: re-runs detect
-#     and replace the existing entry via marker string. Silently skips
-#     projects that don't exist on this machine.
-HOOK_FRAGMENT="$REPO_DIR/runtime/hooks/omc-reference-loader.json"
-HOOK_MERGER="$REPO_DIR/runtime/hooks/merge-project-hook.py"
-HOOK_MARKER="OMC_REFERENCE_AUTO_LOAD"
-# M4: PROJECT_TARGETS read from ~/.claude/settings.local.json (gitignored) so
-# machine-specific paths are not baked into the shared repo. The key is
-# "projectTargets": ["~/Desktop/workspace", "~/ksm_Obsidian"]. Tilde is
-# expanded to $HOME. Falls back to the previous hardcoded list on first run
-# (before settings.local.json exists) for backward compatibility.
-PROJECT_TARGETS=()
-if [ -f "$CLAUDE_HOME/settings.local.json" ]; then
-  while IFS= read -r p; do
-    expanded="${p/#\~/$HOME}"
-    [ -d "$expanded" ] && PROJECT_TARGETS+=("$expanded")
-  done < <(python3 -c "import json,sys; d=json.load(open('$CLAUDE_HOME/settings.local.json')); print('\n'.join(d.get('projectTargets',[])))" 2>/dev/null || true)
-fi
-# Fallback to previous defaults if settings.local.json missing or has no projectTargets.
-if [ ${#PROJECT_TARGETS[@]} -eq 0 ]; then
-  PROJECT_TARGETS=("$HOME/Desktop/workspace" "$HOME/ksm_Obsidian")
-fi
-if [[ -f "$HOOK_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
-  for project_root in "${PROJECT_TARGETS[@]}"; do
-    [[ -d "$project_root" ]] || { debug "skip project hook: $project_root not present"; continue; }
-    project_claude="$project_root/.claude"
-    run mkdir -p "$project_claude"
-    target_file="$project_claude/settings.json"
-    if [[ $DRY_RUN -eq 1 ]]; then
-      log "would merge OMC hook into: $target_file"
-    else
-      output=$(python3 "$HOOK_MERGER" "$HOOK_FRAGMENT" "$target_file" "$HOOK_MARKER" 2>&1)
-      rc=$?
-      case $rc in
-        0) log "project hook: $output" ;;
-        2) debug "skip project hook: parent missing for $target_file" ;;
-        *) log "WARNING: project hook merge failed (rc=$rc) for $target_file: $output" ;;
-      esac
-    fi
-  done
-else
-  debug "skip project hook deployment: fragment or merger missing"
-fi
-
-# 6. plugin sync — delegate to installer/scripts/plugin_sync.py.
-#    The Python module owns the decision logic (Action enum + Decision dataclass)
-#    and the marketplace/OS-gate metadata lookup. Bash here only forwards flags
-#    and prefixes each output line with the [install] tag. See plugin_sync.py
-#    docstring for the full contract. Tested under tests/installer/test_plugin_sync.py.
-sync_plugins() {
-  if ! command -v claude >/dev/null 2>&1; then
-    log "skip plugin sync: 'claude' not in PATH (install Claude Code, then re-run)"
-    return
-  fi
-  if ! command -v python3 >/dev/null 2>&1; then
-    log "skip plugin sync: 'python3' not available"
-    return
-  fi
-  local args=(--apply)
-  [[ $DRY_RUN -eq 1 ]] && args=(--dry-run)
-  [[ $PRUNE_PLUGINS -eq 1 ]] && args+=(--prune)
-  python3 "$REPO_DIR/installer/scripts/plugin_sync.py" "${args[@]}" 2>&1 \
-    | while IFS= read -r line; do log "$line"; done
-}
+# Stages 5 / 5b / 6 → lib/platform.sh, lib/project_hooks.sh, lib/plugins.sh (P3-T6/T7/T8).
+# shellcheck source=lib/platform.sh
+source "$REPO_DIR/installer/lib/platform.sh"
+# shellcheck source=lib/project_hooks.sh
+source "$REPO_DIR/installer/lib/project_hooks.sh"
+# shellcheck source=lib/plugins.sh
+source "$REPO_DIR/installer/lib/plugins.sh"
+run_platform_installer
+deploy_project_hooks
 sync_plugins
 
 # 6.5. OMC bash-failure freeze workaround
