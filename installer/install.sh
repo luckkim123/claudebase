@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COPY_MODE=0
 DRY_RUN=0
 VERBOSE=0
@@ -71,7 +71,6 @@ check_runtime_deps() {
   fi
 }
 check_runtime_deps
-BACKUP_DIR="$CLAUDE_HOME/.backup-$(date +%Y%m%d-%H%M%S)"
 
 log()   { printf '[install] %s\n' "$*"; }
 debug() { [[ $VERBOSE -eq 1 ]] && printf '[debug]   %s\n' "$*" || true; }
@@ -87,14 +86,13 @@ run() {
   fi
 }
 
-backup_if_needed() {
+remove_if_exists() {
+  # Clear a path so a fresh symlink (or rendered file) can be placed there.
+  # No backup is made — recovery is via git history. See repo CLAUDE.md
+  # ("Idempotency is non-negotiable" / "Don'ts: backups in install").
   local target="$1"
-  if [[ -L "$target" ]]; then
-    run rm "$target"
-  elif [[ -e "$target" ]]; then
-    run mkdir -p "$BACKUP_DIR"
-    run mv "$target" "$BACKUP_DIR/"
-    log "backed up: $target -> $BACKUP_DIR/"
+  if [[ -L "$target" ]] || [[ -e "$target" ]]; then
+    run rm -f "$target"
   fi
 }
 
@@ -111,7 +109,7 @@ link_or_copy() {
     debug "already linked: $dest -> $src (skip)"
     return
   fi
-  backup_if_needed "$dest"
+  remove_if_exists "$dest"
   if [[ $COPY_MODE -eq 1 ]]; then
     run cp -R "$src" "$dest"
     log "copied:  $dest"
@@ -125,15 +123,15 @@ link_or_copy() {
 [[ -d "$CLAUDE_HOME" ]] || run mkdir -p "$CLAUDE_HOME"
 
 # 2. user-level settings.json
-link_or_copy "$REPO_DIR/claude/settings.json" "$CLAUDE_HOME/settings.json"
+link_or_copy "$REPO_DIR/config/settings.json" "$CLAUDE_HOME/settings.json"
 
 # 2b. user-level CLAUDE.md — universal behavioral rules applied across all projects
-link_or_copy "$REPO_DIR/claude/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
+link_or_copy "$REPO_DIR/config/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present).
-#    Idempotent: skip backup + rewrite when rendered content matches the existing file.
+#    Idempotent: skip rewrite when rendered content matches the existing file.
 SECRETS_FILE="$REPO_DIR/secrets/secrets.env"
-TEMPLATE="$REPO_DIR/claude/mcp.template.json"
+TEMPLATE="$REPO_DIR/config/mcp.template.json"
 if [[ -f "$TEMPLATE" ]]; then
   if [[ $DRY_RUN -eq 1 ]]; then
     log "would render: $CLAUDE_HOME/mcp.json"
@@ -168,7 +166,7 @@ if [[ -f "$TEMPLATE" ]]; then
     if [[ -f "$CLAUDE_HOME/mcp.json" ]] && [[ "$content" == "$(cat "$CLAUDE_HOME/mcp.json")" ]]; then
       debug "mcp.json unchanged (skip)"
     else
-      backup_if_needed "$CLAUDE_HOME/mcp.json"
+      remove_if_exists "$CLAUDE_HOME/mcp.json"
       printf '%s\n' "$content" > "$CLAUDE_HOME/mcp.json"
       chmod 600 "$CLAUDE_HOME/mcp.json"
       log "rendered: $CLAUDE_HOME/mcp.json (perm 600)"
@@ -181,9 +179,9 @@ fi
 
 # 4b. user-scope skills — symlink each subdirectory individually so we don't
 #     clobber any other skills the user has under ~/.claude/skills/.
-if [[ -d "$REPO_DIR/skills" ]]; then
+if [[ -d "$REPO_DIR/runtime/skills" ]]; then
   run mkdir -p "$CLAUDE_HOME/skills"
-  for skill_dir in "$REPO_DIR/skills"/*/; do
+  for skill_dir in "$REPO_DIR/runtime/skills"/*/; do
     [[ -d "$skill_dir" ]] || continue
     skill_name="${skill_dir%/}"; skill_name="${skill_name##*/}"
     link_or_copy "${skill_dir%/}" "$CLAUDE_HOME/skills/$skill_name"
@@ -192,9 +190,9 @@ fi
 
 # 4c. user-scope agents — symlink each .md individually so we don't clobber
 #     any other agents the user has under ~/.claude/agents/.
-if [[ -d "$REPO_DIR/agents" ]]; then
+if [[ -d "$REPO_DIR/runtime/agents" ]]; then
   run mkdir -p "$CLAUDE_HOME/agents"
-  for agent_file in "$REPO_DIR/agents"/*.md; do
+  for agent_file in "$REPO_DIR/runtime/agents"/*.md; do
     [[ -f "$agent_file" ]] || continue
     agent_name="${agent_file##*/}"
     link_or_copy "$agent_file" "$CLAUDE_HOME/agents/$agent_name"
@@ -212,8 +210,8 @@ fi
 #     each known project's .claude/settings.json. Idempotent: re-runs detect
 #     and replace the existing entry via marker string. Silently skips
 #     projects that don't exist on this machine.
-HOOK_FRAGMENT="$REPO_DIR/claude/hooks/omc-reference-loader.json"
-HOOK_MERGER="$REPO_DIR/claude/hooks/merge-project-hook.py"
+HOOK_FRAGMENT="$REPO_DIR/runtime/hooks/omc-reference-loader.json"
+HOOK_MERGER="$REPO_DIR/runtime/hooks/merge-project-hook.py"
 HOOK_MARKER="OMC_REFERENCE_AUTO_LOAD"
 # M4: PROJECT_TARGETS read from ~/.claude/settings.local.json (gitignored) so
 # machine-specific paths are not baked into the shared repo. The key is
@@ -251,28 +249,6 @@ if [[ -f "$HOOK_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
   done
 else
   debug "skip project hook deployment: fragment or merger missing"
-fi
-
-# 5c. user-scope using-omc routing loader — merge into ~/.claude/settings.json so
-#     the OMC routing rule is resident in every session (not just project targets,
-#     unlike the project-scoped omc-reference catalog loader above). Idempotent via
-#     marker USING_OMC_AUTO_LOAD. Reuses the same target-agnostic HOOK_MERGER.
-USING_OMC_FRAGMENT="$REPO_DIR/claude/hooks/using-omc-loader.json"
-USING_OMC_MARKER="USING_OMC_AUTO_LOAD"
-if [[ -f "$USING_OMC_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
-  if [[ $DRY_RUN -eq 1 ]]; then
-    log "would merge using-omc loader into: $CLAUDE_HOME/settings.json"
-  else
-    output=$(python3 "$HOOK_MERGER" "$USING_OMC_FRAGMENT" "$CLAUDE_HOME/settings.json" "$USING_OMC_MARKER" 2>&1)
-    rc=$?
-    case $rc in
-      0) log "using-omc hook: $output" ;;
-      2) debug "skip using-omc hook: $CLAUDE_HOME/settings.json parent missing" ;;
-      *) log "WARNING: using-omc hook merge failed (rc=$rc): $output" ;;
-    esac
-  fi
-else
-  debug "skip using-omc hook: fragment or merger missing"
 fi
 
 # 6. plugin sync — ensure every enabledPlugin in settings.json is installed at
@@ -592,7 +568,7 @@ install_omc_hud() {
 
   # Re-apply local HUD customization (line1: cyan dir:/branch:, lowercase
   # model:). The fresh copy above always drops it, so this re-injects it.
-  bash "$REPO_DIR/claude/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
+  bash "$REPO_DIR/installer/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
 }
 if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
   install_omc_hud
@@ -604,10 +580,10 @@ fi
 #    so the user can decide to commit, discard, or update the canonical file.
 if command -v git >/dev/null 2>&1; then
   if [[ -d "$REPO_DIR/.git" ]]; then
-    if [[ -n "$(git -C "$REPO_DIR" status --porcelain claude/settings.json 2>/dev/null)" ]]; then
-      log "drift: claude/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff claude/settings.json"
+    if [[ -n "$(git -C "$REPO_DIR" status --porcelain config/settings.json 2>/dev/null)" ]]; then
+      log "drift: config/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff config/settings.json"
     fi
   fi
 fi
 
-log "done. backup dir created only if a non-symlink file was overwritten."
+log "done."

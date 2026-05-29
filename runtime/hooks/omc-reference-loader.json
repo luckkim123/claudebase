@@ -6,7 +6,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "# OMC_REFERENCE_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/omc-reference-emit.py"
+          "command": "# OMC_REFERENCE_AUTO_LOAD\npython3 ~/claude-settings/runtime/hooks/omc-reference-emit.py"
         }
       ]
     }

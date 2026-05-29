@@ -1,4 +1,4 @@
-# claude-settings — repo-internal rules
+# claudebase — repo-internal rules
 
 This file is read by Claude Code when working *inside* this repo. Sets the rules of engagement for editing the config that drives Claude Code itself across all my machines.
 

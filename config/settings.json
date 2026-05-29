@@ -6,23 +6,14 @@
     "defaultMode": "auto"
   },
   "hooks": {
-    "SessionStart": [
+    "PreToolUse": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "AskUserQuestion",
         "hooks": [
           {
             "type": "command",
-            "command": "# USING_OMC_AUTO_LOAD\npython3 ~/claude-settings/claude/hooks/using-omc-emit.py"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# ROUTING_VERDICT_CHECKPOINT\npython3 ~/claude-settings/claude/hooks/routing-verdict-reminder.py"
+            "command": "# ASKUSERQUESTION_GUARD\npython3 ~/claude-settings/runtime/hooks/askuserquestion-guard.py",
+            "timeout": 5
           }
         ]
       }
@@ -32,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# SURROGATE_AUTO_REPAIR\npython3 ~/claude-settings/claude/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
+            "command": "# SURROGATE_AUTO_REPAIR\npython3 ~/claude-settings/runtime/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Repairing lone UTF-16 surrogates in transcript"
           }
@@ -42,7 +33,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud-cache.sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
+    "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
   },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
@@ -60,7 +51,9 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
-    "oh-my-docs@heroacademia": true
+    "oh-my-heroacademia@heroacademia": true,
+    "oh-my-docs@heroacademia": true,
+    "oh-my-scholar@heroacademia": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {

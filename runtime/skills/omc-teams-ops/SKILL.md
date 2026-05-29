@@ -65,7 +65,7 @@ tmux send-keys -t %3 "claude --dangerously-skip-permissions" && sleep 1 && tmux 
 # (4) 8-15 초 init 후 pane content 확인
 sleep 10 && tmux capture-pane -p -t %3
 # (5) Pane label 부여 (omc_pane_label.sh — 수동 worker 라도 라벨링)
-bash ~/claude-settings/claude/scripts/omc_pane_label.sh apply '0.0=[MAIN] ...' '0.1=[W1] ...' '0.2=[W2 manual] ...'
+bash ~/claude-settings/installer/scripts/omc_pane_label.sh apply '0.0=[MAIN] ...' '0.1=[W1] ...' '0.2=[W2 manual] ...'
 # (6) Task nudge: tmux send-keys -t %3 "<task text>" → sleep 2 → tmux send-keys -t %3 Enter
 ```
 
@@ -145,7 +145,7 @@ Worker launch 메시지에 **``Dispatch confirm 은 사용자 직접 입력 X �
 워커 상태를 발언/결정 근거로 쓰기 전:
 ```bash
 cd <working dir>
-bash ~/claude-settings/claude/scripts/omc_status.sh
+bash ~/claude-settings/installer/scripts/omc_status.sh
 ```
 한 화면에 모든 team task 상태 + tmux pane state 정리. ==이 명령 결과를 보고 발언==. ``W4 가 멈춰있는 거 같다'' 같은 직관 발언 금지 — `omc_status.sh` 결과로만 판단.
 
@@ -153,7 +153,7 @@ bash ~/claude-settings/claude/scripts/omc_status.sh
 
 `omc team api create-task` 직접 호출 금지. 대신:
 ```bash
-bash ~/claude-settings/claude/scripts/omc_create_task.sh <team_name> "<subject>" <description_file_or_->
+bash ~/claude-settings/installer/scripts/omc_create_task.sh <team_name> "<subject>" <description_file_or_->
 ```
 이 wrapper 가 — (1) JSON 안전 인코딩, (2) stderr 섞임 필터, (3) ok=false 응답 감지, (4) 중복 호출 방지 — 모두 처리. ==성공 시 task\_id stdout 출력, 실패 시 stderr + exit 1==.
 
@@ -161,11 +161,11 @@ bash ~/claude-settings/claude/scripts/omc_create_task.sh <team_name> "<subject>"
 
 Claude Code TUI 는 자체적으로 **pane\_title 을 현재 task description 으로 동적 갱신** 함. 메인이 `tmux select-pane -T '[W1] ...'` 로 수동 부여한 라벨은 **워커가 다음 작업 시작하는 순간 덮어써짐** — 사용자가 ``어느 pane 이 어느 워커지?'' 헷갈리게 됨.
 
-해결: tmux `pane-border-format` 에 **pane\_index 기준 hardcoded 라벨 + Claude 동적 title 병기** 형태로 박는다. 이 작업 자동화는 `~/claude-settings/claude/scripts/omc_pane_label.sh`:
+해결: tmux `pane-border-format` 에 **pane\_index 기준 hardcoded 라벨 + Claude 동적 title 병기** 형태로 박는다. 이 작업 자동화는 `~/claude-settings/installer/scripts/omc_pane_label.sh`:
 
 ```bash
 # 매 launch 직후 pane 식별 끝나면 호출
-bash ~/claude-settings/claude/scripts/omc_pane_label.sh apply \
+bash ~/claude-settings/installer/scripts/omc_pane_label.sh apply \
   '0=[MAIN] User chat' \
   '1=[W1] PPT Editor' \
   '2=[W2] Image' \
@@ -377,7 +377,7 @@ team launch 시점 cwd 에 따라 state 디렉토리 위치 결정:
 
 **2026-05-21 함정 — Idle worker 도 monitor 띄울 것**: Team launch / task complete 직후 worker 가 idle 진입한 시점에도 **pane-only monitor (sentinel + stale)** 띄워야 함. 이유: 사용자가 워커 pane 에 직접 입력하는 경우 (paste-bracketed mode 함정) / 워커가 자발적으로 ``exit'' 시도하는 경우 (worker self-shutdown 함정) 발생 → **메인이 monitor 없으면 stuck 상태 발견 못함**. Idle monitor 형식:
 ```bash
-MONITOR_NO_HEURISTIC=1 bash ~/claude-settings/claude/scripts/omc_monitor.sh \
+MONITOR_NO_HEURISTIC=1 bash ~/claude-settings/installer/scripts/omc_monitor.sh \
   - - <pane-id> 1500 <workdir> - 2>&1 &
 ```
 - team / task_id ``-'' = pane-only mode (omc API polling 스킵)
@@ -490,8 +490,8 @@ done
 
 위 monitor 를 `Bash run_in_background: true` 의 인라인 eval 로 띄우면 zsh `eval` 의 큰 코드 + python3 here-doc quoting 충돌로 **silent 죽음** 가능 (2026-05-19 라이온 prep 세션에서 task 6 monitor 가 polling 자체 안 함). 해결:
 
-1. **셸 스크립트 파일로 분리** — `~/claude-settings/claude/scripts/omc_monitor.sh` 가 영구 보존 위치 (claude-settings 에 커밋된 정본). 임시 디버깅용으로만 `/tmp/omc_monitor.sh` 사용
-2. Bash background 호출: `bash ~/claude-settings/claude/scripts/omc_monitor.sh <team> <id> <pane> [stale_sec] [cwd]`
+1. **셸 스크립트 파일로 분리** — `~/claude-settings/installer/scripts/omc_monitor.sh` 가 영구 보존 위치 (claude-settings 에 커밋된 정본). 임시 디버깅용으로만 `/tmp/omc_monitor.sh` 사용
+2. Bash background 호출: `bash ~/claude-settings/installer/scripts/omc_monitor.sh <team> <id> <pane> [stale_sec] [cwd]`
 3. 스크립트 내부에서 매 polling 결과를 `echo "[POLL ... status=... version=... stale=...]"` 로 **log** → 디버깅·진행 가시성 동시 확보
 
 스크립트 구조 (필수 요소):
@@ -524,16 +524,16 @@ v2 신규 alert 2종 + 1종 endpoint 보강:
 
 호출 형식 (pane-only 모드 추가: team_name/task_id 둘 다 ``-'' 로 두면 omc API polling 스킵, pane content 만 polling):
 ```bash
-bash ~/claude-settings/claude/scripts/omc_monitor.sh <team|-> <task_id|-> <pane> [stale_sec=300] [cwd=PWD] [deliverable_glob]
+bash ~/claude-settings/installer/scripts/omc_monitor.sh <team|-> <task_id|-> <pane> [stale_sec=300] [cwd=PWD] [deliverable_glob]
 ```
 
 **Endpoint 선택 룰**: G2/G3 multi-step SOP 가 있는 ppt-edit 같은 작업은 **최종 산출물 (report.md 등)** 을 endpoint 로 지정 — verify_report.json 이나 edited.pptx 같은 중간 파일은 false-DONE 위험. 최종 deliverable 이 **마지막 step 에서만 작성**되는 파일이어야 함.
 
 ## Related
 - omc-reference skill — OMC agent catalog / tools / pipeline
-- ~/claude-settings/claude/scripts/omc_monitor.sh — v3.x 정본
-- ~/claude-settings/claude/scripts/omc_pane_label.sh
-- ~/claude-settings/claude/scripts/omc_status.sh
-- ~/claude-settings/claude/scripts/omc_create_task.sh
+- ~/claude-settings/installer/scripts/omc_monitor.sh — v3.x 정본
+- ~/claude-settings/installer/scripts/omc_pane_label.sh
+- ~/claude-settings/installer/scripts/omc_status.sh
+- ~/claude-settings/installer/scripts/omc_create_task.sh
 
 **Last Updated**: 2026-05-24
