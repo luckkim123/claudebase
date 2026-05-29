@@ -28,47 +28,10 @@ check_runtime_deps
 # shellcheck source=lib/log.sh
 source "$REPO_DIR/installer/lib/log.sh"
 
-remove_if_exists() {
-  # Clear a path so a fresh symlink (or rendered file) can be placed there.
-  # No backup is made — recovery is via git history. See repo CLAUDE.md
-  # ("Idempotency is non-negotiable" / "Don'ts: backups in install").
-  local target="$1"
-  if [[ -L "$target" ]] || [[ -e "$target" ]]; then
-    run rm -f "$target"
-  fi
-}
-
-# already_linked TARGET SRC — true if TARGET is a symlink resolving to SRC
-already_linked() {
-  local target="$1" src="$2"
-  [[ -L "$target" && "$(readlink "$target")" == "$src" ]]
-}
-
-link_or_copy() {
-  local src="$1" dest="$2"
-  [[ -e "$src" ]] || { log "skip (missing source): $src"; return; }
-  if [[ $COPY_MODE -eq 0 ]] && already_linked "$dest" "$src"; then
-    debug "already linked: $dest -> $src (skip)"
-    return
-  fi
-  remove_if_exists "$dest"
-  if [[ $COPY_MODE -eq 1 ]]; then
-    run cp -R "$src" "$dest"
-    log "copied:  $dest"
-  else
-    run ln -s "$src" "$dest"
-    log "linked:  $dest -> $src"
-  fi
-}
-
-# 1. ~/.claude/
-[[ -d "$CLAUDE_HOME" ]] || run mkdir -p "$CLAUDE_HOME"
-
-# 2. user-level settings.json
-link_or_copy "$REPO_DIR/config/settings.json" "$CLAUDE_HOME/settings.json"
-
-# 2b. user-level CLAUDE.md — universal behavioral rules applied across all projects
-link_or_copy "$REPO_DIR/config/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
+# Linking primitives + stages 1+2+2b extracted to lib/link.sh (P3-T3).
+# shellcheck source=lib/link.sh
+source "$REPO_DIR/installer/lib/link.sh"
+link_settings_and_md
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present).
 #    Idempotent: skip rewrite when rendered content matches the existing file.
@@ -116,30 +79,9 @@ if [[ -f "$TEMPLATE" ]]; then
   fi
 fi
 
-# 4. shell config (Unix only)
-[[ -f "$REPO_DIR/shell/tmux.conf" ]] && link_or_copy "$REPO_DIR/shell/tmux.conf" "$HOME/.tmux.conf"
-
-# 4b. user-scope skills — symlink each subdirectory individually so we don't
-#     clobber any other skills the user has under ~/.claude/skills/.
-if [[ -d "$REPO_DIR/runtime/skills" ]]; then
-  run mkdir -p "$CLAUDE_HOME/skills"
-  for skill_dir in "$REPO_DIR/runtime/skills"/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name="${skill_dir%/}"; skill_name="${skill_name##*/}"
-    link_or_copy "${skill_dir%/}" "$CLAUDE_HOME/skills/$skill_name"
-  done
-fi
-
-# 4c. user-scope agents — symlink each .md individually so we don't clobber
-#     any other agents the user has under ~/.claude/agents/.
-if [[ -d "$REPO_DIR/runtime/agents" ]]; then
-  run mkdir -p "$CLAUDE_HOME/agents"
-  for agent_file in "$REPO_DIR/runtime/agents"/*.md; do
-    [[ -f "$agent_file" ]] || continue
-    agent_name="${agent_file##*/}"
-    link_or_copy "$agent_file" "$CLAUDE_HOME/agents/$agent_name"
-  done
-fi
+# Stages 4 + 4b + 4c handled by lib/link.sh helpers.
+link_tmux_conf
+link_skills_and_agents
 
 # 5. platform-specific extra steps
 PLATFORM_INSTALLER="$REPO_DIR/platform/$PLATFORM/install.sh"
