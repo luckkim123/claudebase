@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COPY_MODE=0
 DRY_RUN=0
 VERBOSE=0
@@ -123,15 +123,15 @@ link_or_copy() {
 [[ -d "$CLAUDE_HOME" ]] || run mkdir -p "$CLAUDE_HOME"
 
 # 2. user-level settings.json
-link_or_copy "$REPO_DIR/claude/settings.json" "$CLAUDE_HOME/settings.json"
+link_or_copy "$REPO_DIR/config/settings.json" "$CLAUDE_HOME/settings.json"
 
 # 2b. user-level CLAUDE.md — universal behavioral rules applied across all projects
-link_or_copy "$REPO_DIR/claude/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
+link_or_copy "$REPO_DIR/config/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present).
 #    Idempotent: skip rewrite when rendered content matches the existing file.
 SECRETS_FILE="$REPO_DIR/secrets/secrets.env"
-TEMPLATE="$REPO_DIR/claude/mcp.template.json"
+TEMPLATE="$REPO_DIR/config/mcp.template.json"
 if [[ -f "$TEMPLATE" ]]; then
   if [[ $DRY_RUN -eq 1 ]]; then
     log "would render: $CLAUDE_HOME/mcp.json"
@@ -179,9 +179,9 @@ fi
 
 # 4b. user-scope skills — symlink each subdirectory individually so we don't
 #     clobber any other skills the user has under ~/.claude/skills/.
-if [[ -d "$REPO_DIR/skills" ]]; then
+if [[ -d "$REPO_DIR/runtime/skills" ]]; then
   run mkdir -p "$CLAUDE_HOME/skills"
-  for skill_dir in "$REPO_DIR/skills"/*/; do
+  for skill_dir in "$REPO_DIR/runtime/skills"/*/; do
     [[ -d "$skill_dir" ]] || continue
     skill_name="${skill_dir%/}"; skill_name="${skill_name##*/}"
     link_or_copy "${skill_dir%/}" "$CLAUDE_HOME/skills/$skill_name"
@@ -190,9 +190,9 @@ fi
 
 # 4c. user-scope agents — symlink each .md individually so we don't clobber
 #     any other agents the user has under ~/.claude/agents/.
-if [[ -d "$REPO_DIR/agents" ]]; then
+if [[ -d "$REPO_DIR/runtime/agents" ]]; then
   run mkdir -p "$CLAUDE_HOME/agents"
-  for agent_file in "$REPO_DIR/agents"/*.md; do
+  for agent_file in "$REPO_DIR/runtime/agents"/*.md; do
     [[ -f "$agent_file" ]] || continue
     agent_name="${agent_file##*/}"
     link_or_copy "$agent_file" "$CLAUDE_HOME/agents/$agent_name"
@@ -210,8 +210,8 @@ fi
 #     each known project's .claude/settings.json. Idempotent: re-runs detect
 #     and replace the existing entry via marker string. Silently skips
 #     projects that don't exist on this machine.
-HOOK_FRAGMENT="$REPO_DIR/claude/hooks/omc-reference-loader.json"
-HOOK_MERGER="$REPO_DIR/claude/hooks/merge-project-hook.py"
+HOOK_FRAGMENT="$REPO_DIR/runtime/hooks/omc-reference-loader.json"
+HOOK_MERGER="$REPO_DIR/runtime/hooks/merge-project-hook.py"
 HOOK_MARKER="OMC_REFERENCE_AUTO_LOAD"
 # M4: PROJECT_TARGETS read from ~/.claude/settings.local.json (gitignored) so
 # machine-specific paths are not baked into the shared repo. The key is
@@ -568,7 +568,7 @@ install_omc_hud() {
 
   # Re-apply local HUD customization (line1: cyan dir:/branch:, lowercase
   # model:). The fresh copy above always drops it, so this re-injects it.
-  bash "$REPO_DIR/claude/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
+  bash "$REPO_DIR/installer/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
 }
 if python3 -c "import json; d=json.load(open('$CLAUDE_HOME/settings.json')); exit(0 if d.get('enabledPlugins', {}).get('oh-my-claudecode@omc') else 1)" 2>/dev/null; then
   install_omc_hud
@@ -580,8 +580,8 @@ fi
 #    so the user can decide to commit, discard, or update the canonical file.
 if command -v git >/dev/null 2>&1; then
   if [[ -d "$REPO_DIR/.git" ]]; then
-    if [[ -n "$(git -C "$REPO_DIR" status --porcelain claude/settings.json 2>/dev/null)" ]]; then
-      log "drift: claude/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff claude/settings.json"
+    if [[ -n "$(git -C "$REPO_DIR" status --porcelain config/settings.json 2>/dev/null)" ]]; then
+      log "drift: config/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff config/settings.json"
     fi
   fi
 fi

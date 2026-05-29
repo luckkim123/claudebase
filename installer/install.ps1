@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoDir = $PSScriptRoot
+$RepoDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ClaudeHome = Join-Path $env:USERPROFILE ".claude"
 
 function Log([string]$msg)   { Write-Host "[install] $msg" }
@@ -98,15 +98,15 @@ function Link-OrCopy([string]$src, [string]$dest) {
 if (-not (Test-Path $ClaudeHome)) { Run { New-Item -ItemType Directory -Path $ClaudeHome -Force | Out-Null } }
 
 # 2. settings.json
-Link-OrCopy "$RepoDir/claude/settings.json" "$ClaudeHome/settings.json"
+Link-OrCopy "$RepoDir/config/settings.json" "$ClaudeHome/settings.json"
 
 # 2b. user-level CLAUDE.md — universal behavioral rules applied across all projects
-Link-OrCopy "$RepoDir/claude/CLAUDE.md" "$ClaudeHome/CLAUDE.md"
+Link-OrCopy "$RepoDir/config/CLAUDE.md" "$ClaudeHome/CLAUDE.md"
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present, else copy as-is).
 #    Idempotent: skip rewrite when rendered content matches the existing file.
 $SecretsFile = "$RepoDir/secrets/secrets.env"
-$Template = "$RepoDir/claude/mcp.template.json"
+$Template = "$RepoDir/config/mcp.template.json"
 if (Test-Path $Template) {
     if ($DryRun) {
         Log "would render: $ClaudeHome/mcp.json"
@@ -145,7 +145,7 @@ if (Test-Path $Template) {
 
 # 4. user-scope skills — symlink each subdirectory individually so we don't
 #    clobber any other skills the user has under ~/.claude/skills/.
-$SkillsRoot = "$RepoDir/skills"
+$SkillsRoot = "$RepoDir/runtime/skills"
 if (Test-Path -LiteralPath $SkillsRoot) {
     $SkillsDest = Join-Path $ClaudeHome "skills"
     if (-not (Test-Path -LiteralPath $SkillsDest)) {
@@ -229,9 +229,9 @@ if ($Enabled -match 'oh-my-claudecode@omc') {
 #    Claude Code CLI writes straight back into the symlinked repo file when
 #    it auto-formats or persists new settings.
 if (Get-Command git -ErrorAction SilentlyContinue) {
-    $drift = git -C $RepoDir status --porcelain claude/settings.json 2>$null
+    $drift = git -C $RepoDir status --porcelain config/settings.json 2>$null
     if ($drift) {
-        Log "drift: claude/settings.json modified by Claude CLI - review with: git -C $RepoDir diff claude/settings.json"
+        Log "drift: config/settings.json modified by Claude CLI - review with: git -C $RepoDir diff config/settings.json"
     }
 }
 
