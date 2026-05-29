@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
-"""Plugin sync orchestration for claudebase installer.
+"""Plugin sync planner + applier, extracted from install.sh.
 
-Replaces install.sh:259-478 `sync_plugins()` (220 LOC of bash + embedded
-Python heredoc) with a single Python module that is unit-testable and
-operates on two SSOTs:
+Two-phase design separates *what to do* from *doing it*:
 
-- `config/settings.json` — `enabledPlugins` and `extraKnownMarketplaces`
-  (the Claude Code-canonical view of what should be installed)
-- `installer/marketplace-metadata.json` — installer-only fields (`os`
-  gates, `post_install` hook names) that Claude Code's schema does not
-  formally support
+  plan(claude_home, metadata_path, platform, prune=False) -> list[Decision]
+      Pure read of settings.json + installed_plugins.json + metadata.
+      No side effects. Easy to unit-test.
 
-The module exports a pure decision layer (`decide_plugin`,
-`marketplace_allowed_on`, `find_drift`, `plan_actions`) and a thin
-side-effect layer (`apply`, `run_post_install`). Tests drive the decision
-layer; the side-effect layer wraps `claude plugin install/uninstall`.
+  apply(decisions) -> int                       (CLI-only)
+      Invokes `claude plugin install/uninstall` and runs post-install hooks.
 
-Idempotency contract: re-running with no changes produces zero install
-actions and zero stdout `installing:` lines (consumed by smoke test).
+The CLI (`__main__`) is install.sh's only entry: it loads inputs, plans,
+prints a tab-separated report, and applies unless --dry-run.
+
+Inputs:
+  $HOME/.claude/settings.json
+    enabledPlugins, extraKnownMarketplaces, settings.local.json optional
+  $HOME/.claude/plugins/installed_plugins.json
+  installer/marketplace-metadata.json
+    os and post_install keys per marketplace name
+
+Outputs (on stdout, one decision per line, tab-separated):
+  <action>\\t<plugin>\\t<current_scope>\\t<reason>
+
+Exit code:
+  0 always (warnings are surfaced via WARNING: lines; install.sh keeps going)
 """
 from __future__ import annotations
 
@@ -25,349 +32,279 @@ import argparse
 import json
 import os
 import platform as _platform
-import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Callable, Iterable, Optional
 
 
-# ─── data model ──────────────────────────────────────────────────────────────
-
+# ---------- types ----------
 
 class Action(Enum):
-    """What `plan_actions` decides should happen to one plugin/marketplace.
-
-    OK         — already at user scope; no-op
-    INSTALL    — enabled but not installed at any scope
-    REINSTALL  — installed at wrong scope (project/local); uninstall + reinstall at user
-    DRIFT      — installed at user scope but not in any enabledPlugins
-    SKIP_OS    — marketplace gated to OSes not matching this host
-    """
-
-    OK = "ok"
-    INSTALL = "install"
-    REINSTALL = "reinstall"
-    DRIFT = "drift"
-    SKIP_OS = "skip_os"
+    SKIP_OK = "skip-ok"                # already user-scope and enabled
+    INSTALL = "install"                # enabled but not installed
+    REINSTALL = "reinstall"            # installed at wrong scope (project/local/etc.)
+    SKIP_OS_GATE = "skip-os-gate"      # marketplace not allowed on this OS
+    DRIFT_KEPT = "drift-kept"          # installed at user scope but not in any enabled set
+    DRIFT_PRUNED = "drift-pruned"      # same, but --prune flag passed -> uninstall
 
 
 @dataclass
 class Decision:
-    plugin: str
     action: Action
-    current_scope: str = "none"
-    reason: str = ""
-    post_install: list[str] = field(default_factory=list)
+    plugin: str
+    current_scope: str
+    reason: str
 
 
-# ─── helpers ─────────────────────────────────────────────────────────────────
+# ---------- IO helpers ----------
+
+def _read_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _enabled_map(settings: dict) -> dict:
+    return {k: v for k, v in (settings.get("enabledPlugins") or {}).items() if v}
 
 
 def _marketplace_of(plugin: str) -> str:
-    """Plugin id format: `<name>@<marketplace>`. Returns marketplace, "" if unparseable."""
-    if "@" not in plugin:
-        return ""
-    return plugin.rsplit("@", 1)[1]
+    # Plugin names look like "name@marketplace" — empty marketplace if not found.
+    return plugin.rsplit("@", 1)[1] if "@" in plugin else ""
 
 
 def _current_scope(plugin: str, installed: dict) -> str:
-    entries = installed.get("plugins", {}).get(plugin, [])
-    if not entries:
-        return "none"
-    return entries[0].get("scope", "none")
+    entries = installed.get(plugin) or []
+    return entries[0].get("scope", "none") if entries else "none"
 
 
-def detect_platform() -> str:
-    sysname = _platform.system().lower()
-    if sysname == "darwin":
-        return "macos"
-    if sysname == "linux":
-        return "linux"
-    if sysname == "windows":
-        return "windows"
-    return sysname
+# ---------- policy ----------
+
+def _os_allowed(marketplace: str, platform: str, metadata: dict) -> bool:
+    cfg = metadata.get(marketplace) or {}
+    allow = cfg.get("os")
+    # Unknown marketplaces default to allow-all (don't gate what we don't know).
+    return allow is None or platform in allow
 
 
-# ─── pure decision layer ─────────────────────────────────────────────────────
-
-
-def marketplace_allowed_on(name: str, platform: str, metadata: dict) -> bool:
-    """True if marketplace is allowed on this OS. Missing metadata = permissive."""
-    entry = metadata.get(name)
-    if not entry:
-        return True
-    allowed = entry.get("os")
-    if not allowed:
-        return True
-    return platform in allowed
-
-
-def post_install_hooks_for(plugin: str, metadata: dict) -> list[str]:
-    mp = _marketplace_of(plugin)
-    return list(metadata.get(mp, {}).get("post_install", []))
-
-
-def decide_plugin(plugin: str, settings: dict, installed: dict) -> Decision:
-    """Decide what to do with one enabled plugin based on its current install scope."""
-    scope = _current_scope(plugin, installed)
-    if scope == "user":
-        return Decision(plugin=plugin, action=Action.OK, current_scope="user",
-                        reason="already at user scope")
-    if scope == "none":
-        return Decision(plugin=plugin, action=Action.INSTALL, current_scope="none",
-                        reason="not installed; install at user scope")
-    return Decision(plugin=plugin, action=Action.REINSTALL, current_scope=scope,
-                    reason=f"installed at {scope} scope; move to user")
-
-
-def find_drift(settings: dict, installed: dict, local_enabled: dict) -> list[Decision]:
-    """user-scope plugins not in any enabledPlugins map (common or local)."""
-    enabled_common = {k for k, v in settings.get("enabledPlugins", {}).items() if v}
-    enabled_local = {k for k, v in (local_enabled or {}).items() if v}
-    expected = enabled_common | enabled_local
-    drifts: list[Decision] = []
-    for name, entries in installed.get("plugins", {}).items():
-        for e in entries:
-            if e.get("scope") == "user" and name not in expected:
-                drifts.append(Decision(plugin=name, action=Action.DRIFT,
-                                       current_scope="user",
-                                       reason="installed at user scope but not enabled"))
-                break
-    return drifts
-
-
-def plan_actions(settings: dict, installed: dict, metadata: dict,
-                 platform: str, local_enabled: dict | None = None) -> list[Decision]:
-    """Full pass: one Decision per enabled plugin, plus drift decisions."""
-    out: list[Decision] = []
-    enabled = {k for k, v in settings.get("enabledPlugins", {}).items() if v}
-    for plugin in enabled:
-        mp = _marketplace_of(plugin)
-        if not marketplace_allowed_on(mp, platform, metadata):
-            out.append(Decision(plugin=plugin, action=Action.SKIP_OS,
-                                current_scope=_current_scope(plugin, installed),
-                                reason=f"marketplace {mp} not allowed on {platform}"))
+def marketplaces_to_register(claude_home: Path, metadata_path: Path,
+                             platform: str) -> set:
+    """Set of marketplaces referenced by enabled plugins, filtered by OS gate."""
+    settings = _read_json(claude_home / "settings.json")
+    metadata = _read_json(metadata_path)
+    needed = set()
+    for plugin in _enabled_map(settings):
+        mk = _marketplace_of(plugin)
+        if not mk:
             continue
-        d = decide_plugin(plugin, settings, installed)
-        d.post_install = post_install_hooks_for(plugin, metadata)
-        out.append(d)
-    out.extend(find_drift(settings, installed, local_enabled or {}))
-    return out
+        if _os_allowed(mk, platform, metadata):
+            needed.add(mk)
+    return needed
 
 
-# ─── side-effect layer (apply) ───────────────────────────────────────────────
+def post_install_for(plugin: str, metadata: dict) -> list:
+    mk = _marketplace_of(plugin)
+    return list((metadata.get(mk) or {}).get("post_install") or [])
 
 
-def _claude_available() -> bool:
-    return shutil.which("claude") is not None
+# ---------- planner ----------
+
+def plan(claude_home: Path, metadata_path: Path, platform: str,
+         prune: bool = False) -> list:
+    """Compute the ordered list of decisions for this machine."""
+    settings = _read_json(claude_home / "settings.json")
+    local = _read_json(claude_home / "settings.local.json")
+    installed = _read_json(claude_home / "plugins" / "installed_plugins.json").get("plugins") or {}
+    metadata = _read_json(metadata_path)
+
+    enabled = _enabled_map(settings)
+    enabled_local = _enabled_map(local)
+
+    decisions: list = []
+
+    # Enabled plugins (common + per-machine).
+    seen = set()
+    for plugin in list(enabled.keys()) + [k for k in enabled_local if k not in enabled]:
+        seen.add(plugin)
+        mk = _marketplace_of(plugin)
+        if not _os_allowed(mk, platform, metadata):
+            decisions.append(Decision(
+                action=Action.SKIP_OS_GATE, plugin=plugin, current_scope="-",
+                reason=f"marketplace '{mk}' not allowed on {platform}",
+            ))
+            continue
+        scope = _current_scope(plugin, installed)
+        if scope == "user":
+            decisions.append(Decision(Action.SKIP_OK, plugin, scope, "already user-scope"))
+        elif scope == "none":
+            decisions.append(Decision(Action.INSTALL, plugin, scope, "not installed"))
+        else:
+            decisions.append(Decision(Action.REINSTALL, plugin, scope,
+                                      f"installed at wrong scope ({scope})"))
+
+    # Drift detection: user-scope installs not in any enabled set.
+    for plugin, entries in installed.items():
+        if plugin in seen:
+            continue
+        if not any((e.get("scope") == "user") for e in entries):
+            continue
+        action = Action.DRIFT_PRUNED if prune else Action.DRIFT_KEPT
+        decisions.append(Decision(action, plugin, "user",
+                                  "not in enabledPlugins (any scope)"))
+
+    return decisions
 
 
-def install_omc_shell_cli() -> str:
-    """Post-install hook for OMC: ensure `omc` shell CLI is on PATH."""
-    if shutil.which("omc"):
-        return "omc shell CLI already present"
-    if not shutil.which("npm"):
-        return "WARNING: npm not found; cannot install oh-my-claude-sisyphus"
-    rc = subprocess.run(
-        ["npm", "i", "-g", "oh-my-claude-sisyphus@latest"],
-        capture_output=True,
-    ).returncode
-    return ("installed oh-my-claude-sisyphus" if rc == 0
-            else "WARNING: failed to install oh-my-claude-sisyphus")
+# ---------- applier (CLI side effects) ----------
+
+def _run(cmd: list, dry_run: bool) -> int:
+    if dry_run:
+        print(f"[dry-run] {' '.join(cmd)}")
+        return 0
+    return subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
 
 
-POST_INSTALL_REGISTRY = {
+def install_omc_shell_cli(dry_run: bool) -> str:
+    """Post-install hook: ensure `omc` shell CLI is on PATH."""
+    if subprocess.run(["which", "omc"], stdout=subprocess.DEVNULL).returncode == 0:
+        return "omc shell CLI: already present"
+    if subprocess.run(["which", "npm"], stdout=subprocess.DEVNULL).returncode != 0:
+        return "omc shell CLI: WARNING — npm not found; install manually"
+    rc = _run(["npm", "i", "-g", "oh-my-claude-sisyphus@latest"], dry_run)
+    return "omc shell CLI: installed" if rc == 0 else "omc shell CLI: WARNING — npm install failed"
+
+
+POST_INSTALL_REGISTRY: "dict[str, Callable[[bool], str]]" = {
     "install_omc_shell_cli": install_omc_shell_cli,
 }
 
 
-def run_post_install(name: str) -> str:
-    fn = POST_INSTALL_REGISTRY.get(name)
-    if fn is None:
-        return f"WARNING: unknown post_install hook: {name}"
-    return fn()
-
-
-def apply(decisions: list[Decision], dry_run: bool, prune: bool) -> list[str]:
-    """Execute decisions via `claude plugin`. Returns log lines."""
-    log: list[str] = []
-    counts = {a: 0 for a in Action}
+def apply(decisions: Iterable, metadata_path: Path, dry_run: bool) -> "tuple[int, int, int, int]":
+    """Execute decisions. Returns (ok, fixed, removed, failed) counters."""
+    metadata = _read_json(metadata_path)
+    ok = fixed = removed = failed = 0
     for d in decisions:
-        counts[d.action] += 1
-        if d.action is Action.OK:
-            continue
-        if d.action is Action.SKIP_OS:
-            log.append(f"skip (os gate): {d.plugin} — {d.reason}")
-            continue
-        if d.action is Action.DRIFT:
-            if not prune:
-                log.append(
-                    f"plugin drift (kept): {d.plugin} — register in settings.local.json "
-                    f"or re-run with --prune to remove"
-                )
-                continue
-            if dry_run:
-                log.append(f"would uninstall (drift): {d.plugin}")
-                continue
-            rc = subprocess.run(
-                ["claude", "plugin", "uninstall", "-s", "user", "-y", d.plugin],
-                capture_output=True,
-            ).returncode
-            log.append(f"plugin uninstalled (drift): {d.plugin}" if rc == 0
-                       else f"WARNING: failed to uninstall: {d.plugin}")
-            continue
-        # INSTALL or REINSTALL
-        if dry_run:
-            log.append(f"would {d.action.value} at user scope: {d.plugin} "
-                       f"(currently: {d.current_scope})")
-            continue
-        if d.action is Action.REINSTALL:
-            subprocess.run(
-                ["claude", "plugin", "uninstall", "-s", d.current_scope, "-y", d.plugin],
-                capture_output=True,
-            )
-        rc = subprocess.run(
-            ["claude", "plugin", "install", "-s", "user", d.plugin],
-            capture_output=True,
-        ).returncode
-        if rc != 0:
-            log.append(f"WARNING: failed to install: {d.plugin}")
-            continue
-        log.append(f"plugin {d.action.value} (user): {d.plugin}")
-        for hook in d.post_install:
-            log.append(run_post_install(hook))
-    log.append(
-        f"plugin sync: {counts[Action.OK]} already user-scope, "
-        f"{counts[Action.INSTALL] + counts[Action.REINSTALL]} fixed, "
-        f"{counts[Action.DRIFT] if prune else 0} removed, "
-        f"{counts[Action.DRIFT] if not prune else 0} drift-kept, "
-        f"{counts[Action.SKIP_OS]} os-skipped"
-    )
-    return log
-
-
-# ─── marketplace registration ────────────────────────────────────────────────
-
-
-def _existing_marketplaces() -> set[str]:
-    if not _claude_available():
-        return set()
-    out = subprocess.run(
-        ["claude", "plugin", "marketplace", "list"],
-        capture_output=True, text=True,
-    ).stdout
-    names = set()
-    for line in out.splitlines():
-        s = line.strip()
-        if s.startswith("❯ "):
-            names.add(s[2:].strip().split()[0])
-    return names
-
-
-def _marketplace_source_arg(name: str, settings: dict) -> str | None:
-    """Build the source arg for `claude plugin marketplace add`."""
-    cfg = settings.get("extraKnownMarketplaces", {}).get(name, {}).get("source", {})
-    if cfg.get("source") == "github":
-        return cfg.get("repo")
-    if cfg.get("source") == "git":
-        return cfg.get("url")
-    return None
-
-
-def ensure_marketplaces(settings: dict, metadata: dict, platform: str,
-                        dry_run: bool) -> list[str]:
-    """Add any marketplace referenced by enabled plugins that is missing on this host."""
-    log: list[str] = []
-    if not _claude_available():
-        return ["skip marketplace ensure: 'claude' not in PATH"]
-    needed = {
-        _marketplace_of(p) for p, v in settings.get("enabledPlugins", {}).items() if v
-    }
-    needed.discard("")
-    existing = _existing_marketplaces()
-    for name in sorted(needed):
-        if name in existing:
-            continue
-        if not marketplace_allowed_on(name, platform, metadata):
-            log.append(f"skip marketplace (os gate): {name} on {platform}")
-            continue
-        source = _marketplace_source_arg(name, settings)
-        if not source:
-            # claude-plugins-official is implicit / always-known; no source needed.
-            if name == "claude-plugins-official":
-                source = "anthropics/claude-plugins-official"
+        if d.action is Action.SKIP_OK:
+            ok += 1
+        elif d.action is Action.INSTALL:
+            rc = _run(["claude", "plugin", "install", "-s", "user", d.plugin], dry_run)
+            if rc == 0:
+                fixed += 1
+                _run_post_install(d.plugin, metadata, dry_run)
             else:
-                log.append(f"WARNING: no source for marketplace: {name}")
-                continue
-        if dry_run:
-            log.append(f"would add marketplace: {name} ({source})")
+                failed += 1
+        elif d.action is Action.REINSTALL:
+            _run(["claude", "plugin", "uninstall", "-s", d.current_scope, "-y", d.plugin], dry_run)
+            rc = _run(["claude", "plugin", "install", "-s", "user", d.plugin], dry_run)
+            if rc == 0:
+                fixed += 1
+                _run_post_install(d.plugin, metadata, dry_run)
+            else:
+                failed += 1
+        elif d.action is Action.SKIP_OS_GATE:
+            # Log via stdout in main; nothing to count here.
+            pass
+        elif d.action is Action.DRIFT_KEPT:
+            pass  # only printed
+        elif d.action is Action.DRIFT_PRUNED:
+            rc = _run(["claude", "plugin", "uninstall", "-s", "user", "-y", d.plugin], dry_run)
+            removed += 1 if rc == 0 else 0
+            if rc != 0:
+                failed += 1
+    return ok, fixed, removed, failed
+
+
+def _run_post_install(plugin: str, metadata: dict, dry_run: bool) -> None:
+    for name in post_install_for(plugin, metadata):
+        fn = POST_INSTALL_REGISTRY.get(name)
+        if fn is None:
+            print(f"[install] WARNING: post-install '{name}' not in registry")
             continue
-        rc = subprocess.run(
-            ["claude", "plugin", "marketplace", "add", source],
-            capture_output=True,
-        ).returncode
-        log.append(f"added marketplace: {name}" if rc == 0
-                   else f"WARNING: failed to add marketplace: {name}")
-    return log
+        print(f"[install] {fn(dry_run)}")
 
 
-# ─── I/O ─────────────────────────────────────────────────────────────────────
+# ---------- marketplace registration ----------
+
+def ensure_marketplaces(claude_home: Path, metadata_path: Path,
+                        platform: str, dry_run: bool) -> None:
+    settings = _read_json(claude_home / "settings.json")
+    extra = settings.get("extraKnownMarketplaces") or {}
+    needed = marketplaces_to_register(claude_home, metadata_path, platform)
+    if not needed:
+        return
+    # `claude plugin marketplace list` returns lines like "  ❯ <name>".
+    try:
+        out = subprocess.check_output(
+            ["claude", "plugin", "marketplace", "list"], stderr=subprocess.DEVNULL, text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        out = ""
+    present = {ln.split()[-1] for ln in out.splitlines() if "❯" in ln}
+    for name in sorted(needed - present):
+        cfg = (extra.get(name) or {}).get("source") or {}
+        target = cfg.get("repo") or cfg.get("url")
+        if not target:
+            print(f"[install] WARNING: marketplace '{name}' missing source/target in settings.json")
+            continue
+        print(f"[install] adding marketplace: {name} ({target})")
+        _run(["claude", "plugin", "marketplace", "add", target], dry_run)
 
 
-def _claude_home() -> Path:
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+# ---------- CLI ----------
+
+def _detect_platform() -> str:
+    s = _platform.system()
+    return {"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(s, s.lower())
 
 
-def load_inputs(repo_dir: Path | None = None) -> tuple[dict, dict, dict, dict]:
-    """Read (settings, installed, metadata, local_enabled). Missing files -> {}."""
-    repo = repo_dir or Path(__file__).resolve().parents[2]
-    home = _claude_home()
-    settings_path = home / "settings.json"
-    if not settings_path.exists():
-        settings_path = repo / "config" / "settings.json"
-    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    installed_path = home / "plugins" / "installed_plugins.json"
-    installed = json.loads(installed_path.read_text()) if installed_path.exists() else {}
-    metadata = json.loads((repo / "installer" / "marketplace-metadata.json").read_text())
-    local_path = home / "settings.local.json"
-    local_enabled = {}
-    if local_path.exists():
-        local_enabled = json.loads(local_path.read_text()).get("enabledPlugins", {})
-    return settings, installed, metadata, local_enabled
+def _emit_report(decisions: Iterable) -> None:
+    for d in decisions:
+        print(f"{d.action.value}\t{d.plugin}\t{d.current_scope}\t{d.reason}")
 
 
-# ─── CLI ─────────────────────────────────────────────────────────────────────
+def main(argv: Optional[list] = None) -> int:
+    p = argparse.ArgumentParser(description="Plugin sync planner+applier")
+    p.add_argument("--report", action="store_true", help="print decisions only")
+    p.add_argument("--apply", action="store_true", help="execute decisions")
+    p.add_argument("--prune", action="store_true", help="uninstall drift (else warn-only)")
+    p.add_argument("--dry-run", action="store_true", help="print intended actions, do not execute")
+    p.add_argument("--metadata", default=None, help="path to marketplace-metadata.json")
+    args = p.parse_args(argv)
 
+    claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
+    metadata_path = Path(args.metadata) if args.metadata else (
+        Path(__file__).resolve().parent.parent / "marketplace-metadata.json"
+    )
+    platform = _detect_platform()
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="claudebase plugin sync")
-    ap.add_argument("--apply", action="store_true", help="execute decisions")
-    ap.add_argument("--dry-run", action="store_true", help="print intended actions")
-    ap.add_argument("--prune", action="store_true", help="remove drift plugins")
-    ap.add_argument("--report", action="store_true",
-                    help="print one TAB-separated line per decision and exit")
-    args = ap.parse_args(argv)
-
-    settings, installed, metadata, local_enabled = load_inputs()
-    platform = detect_platform()
-
-    for line in ensure_marketplaces(settings, metadata, platform, args.dry_run):
-        print(line)
-
-    decisions = plan_actions(settings, installed, metadata, platform, local_enabled)
-
-    if args.report:
-        for d in decisions:
-            print(f"{d.plugin}\t{d.current_scope}\t{d.action.value}\t{d.reason}")
+    if not (claude_home / "settings.json").exists():
+        print("[install] skip plugin sync: settings.json not found")
         return 0
 
-    if not (args.apply or args.dry_run):
-        ap.error("specify --apply, --dry-run, or --report")
+    decisions = plan(claude_home, metadata_path, platform, prune=args.prune)
 
-    for line in apply(decisions, dry_run=args.dry_run, prune=args.prune):
-        print(line)
+    if args.report and not args.apply:
+        _emit_report(decisions)
+        return 0
+
+    ensure_marketplaces(claude_home, metadata_path, platform, dry_run=args.dry_run)
+    ok, fixed, removed, failed = apply(decisions, metadata_path, dry_run=args.dry_run)
+    kept = sum(1 for d in decisions if d.action is Action.DRIFT_KEPT)
+    for d in decisions:
+        if d.action is Action.DRIFT_KEPT:
+            print(f"plugin drift (kept): {d.plugin} — register in settings.local.json "
+                  "or re-run with --prune-plugins to remove")
+        elif d.action is Action.SKIP_OS_GATE:
+            print(f"skipping (os-gate): {d.plugin} — {d.reason}")
+        elif d.action in (Action.INSTALL, Action.REINSTALL):
+            print(f"plugin reinstalled (user): {d.plugin}")
+
+    print(f"plugin sync: {ok} already user-scope, {fixed} fixed, "
+          f"{removed} removed, {kept} drift-kept, {failed} failed")
     return 0
 
 
