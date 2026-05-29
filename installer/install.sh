@@ -72,19 +72,9 @@ check_runtime_deps() {
 }
 check_runtime_deps
 
-log()   { printf '[install] %s\n' "$*"; }
-debug() { [[ $VERBOSE -eq 1 ]] && printf '[debug]   %s\n' "$*" || true; }
-
-# run COMMAND ARG... — executes a command as an array (no eval, no shell metachar surprises)
-run() {
-  if [[ $DRY_RUN -eq 1 ]]; then
-    printf '[dry-run] '
-    printf '%q ' "$@"
-    printf '\n'
-  else
-    "$@"
-  fi
-}
+# log/debug/run extracted to installer/lib/log.sh (P3 modularization).
+# shellcheck source=lib/log.sh
+source "$REPO_DIR/installer/lib/log.sh"
 
 remove_if_exists() {
   # Clear a path so a fresh symlink (or rendered file) can be placed there.
