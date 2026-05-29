@@ -25,6 +25,13 @@ Analyze a project's codebase and generate a README.md that matches the quality s
 - User asks to rewrite or improve an existing README
 - User asks for a "professional" or "production-quality" README
 
+## When NOT to Use
+
+- Internal/private repos that won't be shared — the OSS-style hero block, badges, and "scanability over completeness" framing assume an external audience.
+- Single-script or one-file projects — a docstring or the top comment is the right scale; a multi-section README is overkill.
+- Project types with their own dedicated README skill (e.g. an `oh-my-claudecode` plugin README) — defer to the more specific skill if one applies.
+- When the user explicitly wants a tutorial, walkthrough, or design doc — this skill produces a reference-style README, not narrative documentation. Suggest a different artifact.
+
 ## Phase 1: Project Analysis
 
 Scan these files to understand the project. Use parallel tool calls for speed.

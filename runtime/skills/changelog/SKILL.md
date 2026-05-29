@@ -26,6 +26,14 @@ Record **decisions, experiments, and lessons** from the current conversation ses
 - User invokes `/changelog`
 - After a session with meaningful decisions or experiments that should be documented
 
+## When NOT to Use
+
+- Trivial single-line fixes — the git commit message already captures everything that matters.
+- Pure refactors with no decision content — no failed approaches, no alternatives weighed.
+- Routine dependency bumps or auto-format passes — those leave no lesson behind.
+
+The cost of this skill is a commit-noise tradeoff (every changelog update produces a commit alongside the session work). Skip it when there's no "why" worth preserving.
+
 ## Changelog Location
 
 Place `changelog.md` at the **git repository root** where changes occurred.
