@@ -33,51 +33,10 @@ source "$REPO_DIR/installer/lib/log.sh"
 source "$REPO_DIR/installer/lib/link.sh"
 link_settings_and_md
 
-# 3. mcp.json — render template (substitute ${VAR} from secrets.env if present).
-#    Idempotent: skip rewrite when rendered content matches the existing file.
-SECRETS_FILE="$REPO_DIR/secrets/secrets.env"
-TEMPLATE="$REPO_DIR/config/mcp.template.json"
-if [[ -f "$TEMPLATE" ]]; then
-  if [[ $DRY_RUN -eq 1 ]]; then
-    log "would render: $CLAUDE_HOME/mcp.json"
-  else
-    content="$(cat "$TEMPLATE")"
-    if [[ -f "$SECRETS_FILE" ]]; then
-      # M3: parse secrets.env as literal strings — do NOT use `set -a; source`
-      # which would shell-expand values like `SK=sk-foo$abc` into wrong strings.
-      # Values are read verbatim; surrounding quotes (single or double) are stripped
-      # but no parameter expansion or command substitution is performed.
-      resolved=0
-      while IFS= read -r line || [ -n "$line" ]; do
-        [[ "$line" =~ ^[[:space:]]*$  ]] && continue   # blank
-        [[ "$line" =~ ^[[:space:]]*#  ]] && continue   # comment
-        key="${line%%=*}"
-        value="${line#*=}"
-        key="${key// /}"
-        [[ -z "$key" ]] && continue
-        # Strip surrounding double or single quotes (but NOT shell-expand $vars)
-        value="${value%\"}"; value="${value#\"}"
-        value="${value%\'}"; value="${value#\'}"
-        if [[ "$content" == *"\${${key}}"* ]]; then
-          content="${content//\$\{${key}\}/${value}}"
-          resolved=$((resolved + 1))
-        fi
-      done < "$SECRETS_FILE"
-      debug "resolved $resolved \${VAR} placeholder(s) from secrets.env"
-    fi
-    if [[ "$content" == *'${'* ]]; then
-      log "WARNING: unresolved \${...} placeholders remain in mcp.json — check secrets/secrets.env"
-    fi
-    if [[ -f "$CLAUDE_HOME/mcp.json" ]] && [[ "$content" == "$(cat "$CLAUDE_HOME/mcp.json")" ]]; then
-      debug "mcp.json unchanged (skip)"
-    else
-      remove_if_exists "$CLAUDE_HOME/mcp.json"
-      printf '%s\n' "$content" > "$CLAUDE_HOME/mcp.json"
-      chmod 600 "$CLAUDE_HOME/mcp.json"
-      log "rendered: $CLAUDE_HOME/mcp.json (perm 600)"
-    fi
-  fi
-fi
+# Stage 3 (mcp.json render + secrets.env literal parser) → lib/secrets.sh (P3-T5).
+# shellcheck source=lib/secrets.sh
+source "$REPO_DIR/installer/lib/secrets.sh"
+render_mcp_json
 
 # Stages 4 + 4b + 4c handled by lib/link.sh helpers.
 link_tmux_conf
