@@ -71,7 +71,6 @@ check_runtime_deps() {
   fi
 }
 check_runtime_deps
-BACKUP_DIR="$CLAUDE_HOME/.backup-$(date +%Y%m%d-%H%M%S)"
 
 log()   { printf '[install] %s\n' "$*"; }
 debug() { [[ $VERBOSE -eq 1 ]] && printf '[debug]   %s\n' "$*" || true; }
@@ -87,14 +86,13 @@ run() {
   fi
 }
 
-backup_if_needed() {
+remove_if_exists() {
+  # Clear a path so a fresh symlink (or rendered file) can be placed there.
+  # No backup is made — recovery is via git history. See repo CLAUDE.md
+  # ("Idempotency is non-negotiable" / "Don'ts: backups in install").
   local target="$1"
-  if [[ -L "$target" ]]; then
-    run rm "$target"
-  elif [[ -e "$target" ]]; then
-    run mkdir -p "$BACKUP_DIR"
-    run mv "$target" "$BACKUP_DIR/"
-    log "backed up: $target -> $BACKUP_DIR/"
+  if [[ -L "$target" ]] || [[ -e "$target" ]]; then
+    run rm -f "$target"
   fi
 }
 
@@ -111,7 +109,7 @@ link_or_copy() {
     debug "already linked: $dest -> $src (skip)"
     return
   fi
-  backup_if_needed "$dest"
+  remove_if_exists "$dest"
   if [[ $COPY_MODE -eq 1 ]]; then
     run cp -R "$src" "$dest"
     log "copied:  $dest"
@@ -131,7 +129,7 @@ link_or_copy "$REPO_DIR/claude/settings.json" "$CLAUDE_HOME/settings.json"
 link_or_copy "$REPO_DIR/claude/CLAUDE.md" "$CLAUDE_HOME/CLAUDE.md"
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present).
-#    Idempotent: skip backup + rewrite when rendered content matches the existing file.
+#    Idempotent: skip rewrite when rendered content matches the existing file.
 SECRETS_FILE="$REPO_DIR/secrets/secrets.env"
 TEMPLATE="$REPO_DIR/claude/mcp.template.json"
 if [[ -f "$TEMPLATE" ]]; then
@@ -168,7 +166,7 @@ if [[ -f "$TEMPLATE" ]]; then
     if [[ -f "$CLAUDE_HOME/mcp.json" ]] && [[ "$content" == "$(cat "$CLAUDE_HOME/mcp.json")" ]]; then
       debug "mcp.json unchanged (skip)"
     else
-      backup_if_needed "$CLAUDE_HOME/mcp.json"
+      remove_if_exists "$CLAUDE_HOME/mcp.json"
       printf '%s\n' "$content" > "$CLAUDE_HOME/mcp.json"
       chmod 600 "$CLAUDE_HOME/mcp.json"
       log "rendered: $CLAUDE_HOME/mcp.json (perm 600)"
@@ -588,4 +586,4 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
-log "done. backup dir created only if a non-symlink file was overwritten."
+log "done."

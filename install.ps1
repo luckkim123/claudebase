@@ -16,7 +16,6 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoDir = $PSScriptRoot
 $ClaudeHome = Join-Path $env:USERPROFILE ".claude"
-$BackupDir = Join-Path $ClaudeHome (".backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 function Log([string]$msg)   { Write-Host "[install] $msg" }
 
@@ -62,16 +61,13 @@ function Already-Linked([string]$target, [string]$src) {
     return ($item.Target -eq $src) -or ($item.Target -contains $src)
 }
 
-function Backup-IfNeeded([string]$target) {
-    if (-not (Test-Path -LiteralPath $target)) { return }
-    $item = Get-Item -LiteralPath $target -Force
-    if ($item.LinkType) {
-        Run { Remove-Item -LiteralPath $target -Force }
-        return
+function Remove-IfExists([string]$target) {
+    # Clear a path so a fresh symlink (or rendered file) can replace it.
+    # No backup is made — recovery is via git history. See repo CLAUDE.md
+    # ("Idempotency is non-negotiable" / "Don'ts: backups in install").
+    if (Test-Path -LiteralPath $target) {
+        Run { Remove-Item -LiteralPath $target -Recurse -Force }
     }
-    Run { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
-    Run { Move-Item -LiteralPath $target -Destination "$BackupDir/" -Force }
-    Log "backed up: $target -> $BackupDir/"
 }
 
 function Link-OrCopy([string]$src, [string]$dest) {
@@ -80,7 +76,7 @@ function Link-OrCopy([string]$src, [string]$dest) {
         Debug "already linked: $dest -> $src (skip)"
         return
     }
-    Backup-IfNeeded $dest
+    Remove-IfExists $dest
     $useCopy = $Copy
     if (-not $useCopy) {
         try {
@@ -108,7 +104,7 @@ Link-OrCopy "$RepoDir/claude/settings.json" "$ClaudeHome/settings.json"
 Link-OrCopy "$RepoDir/claude/CLAUDE.md" "$ClaudeHome/CLAUDE.md"
 
 # 3. mcp.json — render template (substitute ${VAR} from secrets.env if present, else copy as-is).
-#    Idempotent: skip backup + rewrite when rendered content matches the existing file.
+#    Idempotent: skip rewrite when rendered content matches the existing file.
 $SecretsFile = "$RepoDir/secrets/secrets.env"
 $Template = "$RepoDir/claude/mcp.template.json"
 if (Test-Path $Template) {
@@ -140,7 +136,7 @@ if (Test-Path $Template) {
         if ($null -ne $existing -and $existing -eq $content) {
             Debug "mcp.json unchanged (skip)"
         } else {
-            Backup-IfNeeded "$ClaudeHome/mcp.json"
+            Remove-IfExists "$ClaudeHome/mcp.json"
             Set-Content -Path "$ClaudeHome/mcp.json" -Value $content -NoNewline
             Log "rendered: $ClaudeHome/mcp.json"
         }
@@ -239,4 +235,4 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     }
 }
 
-Log "done. backup dir created only if a non-symlink file was overwritten."
+Log "done."
