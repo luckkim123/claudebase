@@ -33,7 +33,7 @@ To get future updates: `git pull`. No re-install needed (unless you added new se
 
 | Path in repo | Symlink target | Purpose |
 |---|---|---|
-| `agents/` | `~/.claude/agents/<name>.md` | User-scope subagents (currently paper-write reviewer + fixer agents) |
+| `agents/` | `~/.claude/agents/<name>.md` | User-scope subagents. Currently empty — most agents come from plugins; this directory exists for ad-hoc per-user agents. |
 | `claude/settings.json` | `~/.claude/settings.json` | User-level Claude Code settings (hooks, plugins, thinking, permissions) |
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Universal behavioral rules (Karpathy 4 principles + operational limits + workflow) applied across all projects |
 | `claude/mcp.template.json` | rendered into `~/.claude/mcp.json` | MCP server config — `${VAR}` placeholders filled from `secrets.env` |
