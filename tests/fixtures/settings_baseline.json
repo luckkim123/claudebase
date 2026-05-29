@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "axlabs-mckinsey-pptx@axlabs": true,
+    "oh-my-claudecode@omc": true,
+    "oh-my-docs@heroacademia": true
+  },
+  "extraKnownMarketplaces": {
+    "axlabs":       { "source": { "source": "github", "repo": "seulee26/mckinsey-pptx" } },
+    "omc":          { "source": { "source": "github", "repo": "Yeachan-Heo/oh-my-claudecode" } },
+    "heroacademia": { "source": { "source": "git", "url": "https://github.com/luckkim123/oh-my-heroacademia.git" } }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "claude-plugins-official": { "os": ["macos", "linux", "windows"] },
+  "axlabs":                  { "os": ["macos", "linux", "windows"] },
+  "omc":                     { "os": ["macos", "linux", "windows"], "post_install": ["install_omc_shell_cli"] },
+  "heroacademia":            { "os": ["macos"] }
+}
