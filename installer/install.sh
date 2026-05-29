@@ -10,30 +10,14 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COPY_MODE=0
-DRY_RUN=0
-VERBOSE=0
-PRUNE_PLUGINS=0
 
-for arg in "$@"; do
-  case "$arg" in
-    --copy) COPY_MODE=1 ;;
-    --dry-run) DRY_RUN=1 ;;
-    --verbose) VERBOSE=1 ;;
-    --prune-plugins) PRUNE_PLUGINS=1 ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
-    *) echo "Unknown arg: $arg" >&2; exit 1 ;;
-  esac
-done
-
-OS="$(uname -s)"
-case "$OS" in
-  Darwin) PLATFORM="macos" ;;
-  Linux)  PLATFORM="linux" ;;
-  *) echo "Unsupported OS: $OS — use install.ps1 on Windows" >&2; exit 1 ;;
-esac
-
-CLAUDE_HOME="$HOME/.claude"
+# Arg parsing + platform detection extracted to installer/lib/args.sh (P3).
+# ARGS_USAGE_FILE lets --help still read this file's lines 2-7.
+ARGS_USAGE_FILE="${BASH_SOURCE[0]}"
+# shellcheck source=lib/args.sh
+source "$REPO_DIR/installer/lib/args.sh"
+parse_args "$@"
+detect_platform
 
 # Runtime dependency check — warn-only so install.sh remains idempotent.
 # Each block checks one optional dependency and emits a single WARNING line
