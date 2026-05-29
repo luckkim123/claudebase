@@ -22,13 +22,14 @@ jobs:
       - name: ruff check
         run: ruff check runtime/hooks/ installer/scripts/ tests/
       - name: shellcheck
-        # --severity=error: warning/info noise is tracked as P3 backlog
-        # (install.sh modularization will clean most of it). Errors fail CI.
+        # --severity=error: warning/info noise tracked as P3 backlog. Errors
+        # fail CI. Glob now includes installer/lib/*.sh after P3 modularization.
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
           shellcheck --severity=error \
             installer/install.sh \
+            installer/lib/*.sh \
             installer/scripts/*.sh \
             platform/linux/install.sh \
             platform/macos/install.sh \

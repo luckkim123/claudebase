@@ -66,16 +66,9 @@ fi
 
 maybe_install_omc_hud
 
-# 9. settings.json drift check (warn-only)
-#    settings.json is symlinked, so the Claude Code CLI writes straight back
-#    into the repo when it auto-formats or persists new settings. Surface this
-#    so the user can decide to commit, discard, or update the canonical file.
-if command -v git >/dev/null 2>&1; then
-  if [[ -d "$REPO_DIR/.git" ]]; then
-    if [[ -n "$(git -C "$REPO_DIR" status --porcelain config/settings.json 2>/dev/null)" ]]; then
-      log "drift: config/settings.json modified by Claude CLI — review with: git -C $REPO_DIR diff config/settings.json"
-    fi
-  fi
-fi
+# Stage 9 → lib/drift.sh (P3-T10).
+# shellcheck source=lib/drift.sh
+source "$REPO_DIR/installer/lib/drift.sh"
+check_settings_drift
 
 log "done."
