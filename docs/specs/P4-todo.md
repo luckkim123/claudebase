@@ -17,13 +17,12 @@ Do not introduce a `$CLAUDEBASE_DIR` placeholder in prose — readers prefer the
 
 ## `rules/` split investigation
 
-Decide whether to keep `config/CLAUDE.md` as a single ~290-LOC file or split into `config/CLAUDE.md` + `config/rules/*.md` with `@include` directives.
+**DECIDED 2026-05-29: do NOT split.** Full rationale + revisit conditions in
+[`2026-05-29-claude-md-rules-split-decision.md`](2026-05-29-claude-md-rules-split-decision.md).
 
-Considerations:
-- Current file is well-sectioned (Behavioral Principles, Operational Limits, Workflow, OMC Orchestration, Versioned Release Workflow, Environment Variables) — modularity already present at the section level.
-- Karpathy-style modularity argues for split when sections are loaded selectively. Claude Code loads CLAUDE.md whole — split has no token-saving benefit.
-- Split helps when *editing*: separate concerns map to separate PRs. Argues for split.
-- Decision deferred until P4 spec.
+TL;DR: Claude Code loads CLAUDE.md whole (zero token saving), 285 LOC is below
+the edit-locality threshold (~600 LOC), and each `@include` adds a fail-silent
+dependency — exactly the bug pattern P4 just removed (`@CLAUDE-omc.md`).
 
 ## P1 → P4 handoff verified
 
