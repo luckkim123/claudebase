@@ -51,9 +51,9 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
-    "oh-my-heroacademia@heroacademia": true,
     "oh-my-docs@heroacademia": true,
-    "oh-my-scholar@heroacademia": true
+    "oh-my-scholar@heroacademia": true,
+    "oh-my-heroacademia@heroacademia": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
