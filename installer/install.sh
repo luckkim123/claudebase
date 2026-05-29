@@ -251,11 +251,11 @@ else
   debug "skip project hook deployment: fragment or merger missing"
 fi
 
-# 6. plugin sync — ensure every enabledPlugin in settings.json is installed at
-#    user scope. Idempotent: plugins already at user scope are skipped; ones
-#    registered at project/local scope (or with stale "unknown" version) are
-#    uninstalled and reinstalled at user scope. Skips cleanly if `claude` or
-#    `python3` is unavailable (e.g. before Claude Code is installed).
+# 6. plugin sync — delegate to installer/scripts/plugin_sync.py.
+#    The Python module owns the decision logic (Action enum + Decision dataclass)
+#    and the marketplace/OS-gate metadata lookup. Bash here only forwards flags
+#    and prefixes each output line with the [install] tag. See plugin_sync.py
+#    docstring for the full contract. Tested under tests/installer/test_plugin_sync.py.
 sync_plugins() {
   if ! command -v claude >/dev/null 2>&1; then
     log "skip plugin sync: 'claude' not in PATH (install Claude Code, then re-run)"
@@ -265,216 +265,11 @@ sync_plugins() {
     log "skip plugin sync: 'python3' not available"
     return
   fi
-
-  # Single python pass — emit one line per plugin: name TAB scope TAB enabled TAB is_installed
-  # Collapses 4 separate heredocs (H2/M2/OPT1) into one invocation; reads both
-  # settings.json (enabledPlugins) and installed_plugins.json in one pass.
-  # Output format (tab-separated per line):
-  #   <plugin_name> \t <installed_scope|none> \t enabled   (for enabled plugins)
-  #   <plugin_name> \t <installed_scope>       \t installed (for user-scope installed-only)
-  local py_output
-  py_output="$(CLAUDE_HOME="$CLAUDE_HOME" python3 - <<'PY' 2>/dev/null
-import json, os, sys, traceback
-
-claude_home = os.environ["CLAUDE_HOME"]
-
-# Parse settings.json
-try:
-    d = json.load(open(os.path.join(claude_home, "settings.json")))
-    enabled_map = {k: v for k, v in d.get("enabledPlugins", {}).items() if v}
-except Exception as e:
-    import traceback
-    print(f"[install] WARNING: settings.json parse failed: {e}", file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
-    enabled_map = {}
-
-# Parse installed_plugins.json
-try:
-    ip = os.path.join(claude_home, "plugins", "installed_plugins.json")
-    installed = json.load(open(ip)) if os.path.exists(ip) else {}
-    installed_plugins = installed.get("plugins", {})
-except Exception:
-    installed_plugins = {}
-
-# Emit enabled plugins with their installed scope
-for plugin_name in enabled_map:
-    entries = installed_plugins.get(plugin_name, [])
-    scope = entries[0].get("scope", "none") if entries else "none"
-    print(f"{plugin_name}\t{scope}\tenabled")
-
-# Parse settings.local.json for drift detection
-try:
-    lp = os.path.join(claude_home, "settings.local.json")
-    if os.path.exists(lp):
-        dl = json.load(open(lp))
-        for k, v in dl.get("enabledPlugins", {}).items():
-            if v and k not in enabled_map:
-                entries = installed_plugins.get(k, [])
-                scope = entries[0].get("scope", "none") if entries else "none"
-                print(f"{k}\t{scope}\tlocal")
-except Exception:
-    pass
-
-# Emit user-scope installed plugins not in enabled (for drift detection)
-for name, entries in installed_plugins.items():
-    for e in entries:
-        if e.get("scope") == "user":
-            print(f"{name}\tuser\tinstalled")
-            break
-PY
-)" || true
-
-  # Extract just enabled plugin names for the marketplace checks and main loop
-  local enabled
-  enabled="$(printf '%s\n' "$py_output" | awk -F'\t' '$3=="enabled" {print $1}')"
-
-  if [[ -z "$enabled" ]]; then
-    debug "no enabledPlugins to sync"
-    return
-  fi
-
-  # Marketplace-exists check. `claude plugin marketplace list` prints entries
-  # as `  ❯ <name>` followed by `    Source: ...` — we extract just the names.
-  # Previous per-marketplace grep patterns were inconsistent (^name vs name vs
-  # \bname\b), causing the axlabs branch to re-add on every run because the
-  # leading "  ❯ " prefix never matched `^axlabs`.
-  # OPT6: cache once so we don't re-invoke claude for each marketplace check.
-  local MARKETPLACES
-  MARKETPLACES="$(claude plugin marketplace list 2>/dev/null | awk '/❯/ {print $2}')" || MARKETPLACES=""
-  marketplace_exists() {
-    local name="$1"
-    echo "$MARKETPLACES" | grep -qx "$name"
-  }
-
-  # Ensure canonical marketplace exists if any plugin references it
-  if echo "$enabled" | grep -q "@claude-plugins-official"; then
-    if ! marketplace_exists "claude-plugins-official"; then
-      log "adding marketplace: anthropics/claude-plugins-official"
-      run claude plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 \
-        || log "  WARNING: failed to add marketplace; check network"
-    fi
-  fi
-
-  # AX Labs marketplace (mckinsey-pptx for ppt-academic skill)
-  if echo "$enabled" | grep -q "@axlabs"; then
-    if ! marketplace_exists "axlabs"; then
-      log "adding marketplace: seulee26/mckinsey-pptx (axlabs)"
-      run claude plugin marketplace add seulee26/mckinsey-pptx >/dev/null 2>&1 \
-        || log "  WARNING: failed to add axlabs marketplace; check network"
-    fi
-  fi
-
-  # OMC marketplace (Yeachan-Heo/oh-my-claudecode — multi-agent orchestration)
-  if echo "$enabled" | grep -q "@omc"; then
-    if ! marketplace_exists "omc"; then
-      log "adding marketplace: Yeachan-Heo/oh-my-claudecode (omc)"
-      run claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
-        || log "  WARNING: failed to add omc marketplace; check network"
-    fi
-
-    # OMC shell CLI (oh-my-claude-sisyphus) — required for `omc team` / tmux pane workers.
-    # Plugin alone only provides slash commands; the shell `omc` binary is a separate npm package.
-    if ! command -v omc >/dev/null 2>&1; then
-      if command -v npm >/dev/null 2>&1; then
-        log "installing omc shell CLI: npm i -g oh-my-claude-sisyphus@latest"
-        run npm i -g oh-my-claude-sisyphus@latest >/dev/null 2>&1 \
-          || log "  WARNING: failed to install oh-my-claude-sisyphus; run manually"
-      else
-        log "  WARNING: npm not found; skipping omc shell CLI install"
-      fi
-    fi
-  fi
-
-  # heroacademia marketplace (luckkim123/oh-my-heroacademia — personal meta-harness;
-  # publishes own-code plugins like oh-my-docs). Plugin entries use commit-SHA
-  # versioning (no version field), so `marketplace update heroacademia` picks up
-  # pushes without manual bumps. Git source clones over SSH — needs a GitHub SSH key
-  # on this machine (or `gh auth setup-git`); not configured here to avoid touching
-  # the user's global git config.
-  # OS gate: OMD is document work (pptx/docx/xlsx/hwpx) that targets macOS; Linux is
-  # not a document-authoring environment here, so skip it. Windows is handled by
-  # install.ps1, not this script ($PLATFORM is only ever macos/linux here).
-  if echo "$enabled" | grep -q "@heroacademia"; then
-    if [[ "$PLATFORM" != "macos" ]]; then
-      log "skipping heroacademia (OMD): document work targets macOS; PLATFORM=$PLATFORM"
-    elif ! marketplace_exists "heroacademia"; then
-      log "adding marketplace: luckkim123/oh-my-heroacademia (heroacademia)"
-      run claude plugin marketplace add https://github.com/luckkim123/oh-my-heroacademia.git >/dev/null 2>&1 \
-        || log "  WARNING: failed to add heroacademia marketplace; check network/SSH key"
-    fi
-  fi
-
-  local plugin current ok=0 fixed=0 failed=0
-  while IFS= read -r plugin || [[ -n "$plugin" ]]; do
-    [[ -z "$plugin" ]] && continue
-    # Look up installed scope from py_output (tab-separated: name\tscope\ttype).
-    # Use grep+awk instead of associative array for bash 3 compatibility.
-    current="$(printf '%s\n' "$py_output" \
-      | awk -F'\t' -v p="$plugin" '$1==p && $3=="enabled" {print $2; exit}')"
-    [[ -z "$current" ]] && current="none"
-    if [[ "$current" == "user" ]]; then
-      debug "plugin OK (user): $plugin"
-      ok=$((ok+1))
-      continue
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-      log "would re-register at user scope: $plugin (currently: $current)"
-      continue
-    fi
-    if [[ "$current" != "none" && "$current" != "user" ]]; then
-      claude plugin uninstall -s "$current" -y "$plugin" >/dev/null 2>&1 || true
-    fi
-    if claude plugin install -s user "$plugin" >/dev/null 2>&1; then
-      log "plugin reinstalled (user): $plugin"
-      fixed=$((fixed+1))
-    else
-      log "  WARNING: failed to install: $plugin"
-      failed=$((failed+1))
-    fi
-  done <<< "$enabled"
-
-  # Reverse drift: detect user-scope plugins not in enabledPlugins of either
-  # settings.json (common) or settings.local.json (per-machine). Default action
-  # is WARN ONLY — uninstall requires explicit --prune-plugins. Rationale:
-  # trimming the common pool on machine A would otherwise silently uninstall
-  # those plugins on machine B during the next sync, surprising the user.
-  # The warn-only default invites the user to either register as per-machine
-  # in settings.local.json or re-run install.sh --prune-plugins to remove.
-
-  # Use py_output for both enabled_local and installed_user (already computed above).
-  local enabled_local
-  enabled_local="$(printf '%s\n' "$py_output" | awk -F'\t' '$3=="local" {print $1}')"
-
-  local expected
-  expected="$(printf '%s\n%s\n' "$enabled" "$enabled_local" | sort -u | sed '/^$/d')"
-
-  local installed_user
-  installed_user="$(printf '%s\n' "$py_output" | awk -F'\t' '$2=="user" && $3=="installed" {print $1}')"
-
-  local drift removed=0 kept=0
-  drift="$(comm -23 <(printf '%s\n' "$installed_user" | sort -u | sed '/^$/d') \
-                    <(printf '%s\n' "$expected"       | sort -u | sed '/^$/d'))"
-
-  while IFS= read -r plugin || [[ -n "$plugin" ]]; do
-    [[ -z "$plugin" ]] && continue
-    if [[ $PRUNE_PLUGINS -eq 0 ]]; then
-      log "plugin drift (kept): $plugin — register in settings.local.json or re-run with --prune-plugins to remove"
-      kept=$((kept+1))
-      continue
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-      log "would uninstall (not in any enabledPlugins): $plugin"
-      continue
-    fi
-    if claude plugin uninstall -s user -y "$plugin" >/dev/null 2>&1; then
-      log "plugin uninstalled (drift): $plugin"
-      removed=$((removed+1))
-    else
-      log "  WARNING: failed to uninstall: $plugin"
-    fi
-  done <<< "$drift"
-
-  log "plugin sync: $ok already user-scope, $fixed fixed, $removed removed, $kept drift-kept, $failed failed"
+  local args=(--apply)
+  [[ $DRY_RUN -eq 1 ]] && args=(--dry-run)
+  [[ $PRUNE_PLUGINS -eq 1 ]] && args+=(--prune)
+  python3 "$REPO_DIR/installer/scripts/plugin_sync.py" "${args[@]}" 2>&1 \
+    | while IFS= read -r line; do log "$line"; done
 }
 sync_plugins
 
