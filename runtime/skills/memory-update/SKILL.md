@@ -1,6 +1,6 @@
 ---
 name: memory-update
-description: 'Use when the user invokes /memory-update or asks to compact, organize, or clean up auto-memory files (한국어 - "메모리 정리", "MEMORY 압축", "메모리 정리해줘" / English - "compact memory", "organize MEMORY.md", "clean up memory"). Operates on ~/.claude/projects/<project>/memory/. Reads the user-scope CLAUDE.md "auto memory" section as the schema SSOT — does not duplicate it. Triggered only for compaction; auto memory updates happen automatically every conversation without this skill.'
+description: 'Use when the user invokes /memory-update or asks to compact, organize, or clean up auto-memory files (한국어 - "메모리 정리", "MEMORY 압축", "메모리 정리해줘" / English - "compact memory", "organize MEMORY.md", "clean up memory"). Operates on ~/.claude/projects/<project>/memory/. Defers to the Claude Code core system prompt''s "auto memory" section as the schema SSOT — does not duplicate it. Triggered only for compaction; auto memory updates happen automatically every conversation without this skill.'
 triggers:
   - "/memory-update"
   - "memory-update"
