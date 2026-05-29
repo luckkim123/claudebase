@@ -107,7 +107,7 @@ Run when the default flow fails. Walks each layer top-to-bottom, surfacing what 
 
 1. **selectedType** — `python3 -c 'import json,pathlib; print(json.loads((pathlib.Path.home()/".gemini/settings.json").read_text())["security"]["auth"]["selectedType"])'`. Acceptable: `oauth-personal` or `gemini-api-key`. Report which one is active so the user knows.
 2. **Key validity (text model)** — direct curl to `gemini-2.5-flash`. If this fails with `401`/`PERMISSION_DENIED`: the key itself is invalid. If `429`/`RESOURCE_EXHAUSTED`: paid tier billing may not be active. If `503`/`500`: Google-side transient, retry the whole flow in 60s.
-3. **Key validity (image model)** — direct curl to `gemini-2.5-flash-image`. If text works but image fails: image-generation backend issue, not auth. The poll loop in `~/claude-settings/claude/scripts/` can wait for recovery.
+3. **Key validity (image model)** — direct curl to `gemini-2.5-flash-image`. If text works but image fails: image-generation backend issue, not auth. The poll loop in `~/claude-settings/installer/scripts/` can wait for recovery.
 4. **MCP tool reachability** — call gemini with the verified flags and an explicit `generate_image` prompt. If MCP returns "reported an error" but the file is still saved: report both the error text and the file path; the CLI mis-reports MCP partial success as full failure.
 5. **Plan Mode detection** — if stdout contains `[LocalAgentExecutor] Blocked call` or `Plan Mode`: the `--approval-mode yolo` flag was missing from the invocation.
 

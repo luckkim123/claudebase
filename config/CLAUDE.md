@@ -231,7 +231,7 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 - 자동 trigger: `omc team`, `tmux pane 분리`, `sentinel`, `워커 launch` 키워드에서 LLM 이 invoke
 - 명시 호출: `/omc-teams-ops` (skill 명)
-- 정본 위치: `~/claude-settings/skills/omc-teams-ops/SKILL.md`
+- 정본 위치: `~/claude-settings/runtime/skills/omc-teams-ops/SKILL.md`
 
 본 CLAUDE.md 에는 ==운영 시점에 다른 룰과 충돌하는 1-line== 만 유지:
 - ==같은 leader session 안에 team 추가 불가== — 처음부터 N-worker team 으로 launch. 자세한 우회 → omc-teams-ops skill.
@@ -239,7 +239,7 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 ### Coexistence rules
 
 - **HUD statusline**: OMC owns it. Configuration lives in `omcHud` block of `~/.claude/settings.json`. To switch presets in-session: `/oh-my-claudecode:hud minimal|focused|full`.
-- **Do not** propose OMC's `team` or `autopilot` for tasks inside this `claude-settings` repo itself — meta-changes to the settings that orchestrate OMC should stay surgical and reviewed line-by-line.
+- **Do not** propose OMC's `team` or `autopilot` for tasks inside this `claudebase` repo itself — meta-changes to the settings that orchestrate OMC should stay surgical and reviewed line-by-line.
 - **Subagent dispatch precedence**: `superpowers:subagent-driven-development` is preferred when a written plan already exists (it enforces reviewer agents per task). OMC `/team` is preferred when no plan exists and the user wants the team to scope-then-execute.
 
 ---

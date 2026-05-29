@@ -34,12 +34,12 @@ For each new commit (`git show --stat <sha>`), classify which subsystem it touch
 
 | Path touched | Implication |
 |---|---|
-| `install.sh` / `install.ps1` | Re-run `./install.sh --verbose` after pull (step 5). Both files should change together — flag if only one did. |
-| `claude/settings.json` | `enabledPlugins` may have shifted. Step 4b/4c will catch it. |
-| `claude/mcp.template.json` | New `${VAR}` may need adding to `secrets.env`. Step 4d will catch unresolved placeholders. |
+| `installer/install.sh` / `installer/install.ps1` | Re-run `installer/install.sh --verbose` after pull (step 5). Both files should change together — flag if only one did. |
+| `config/settings.json` | `enabledPlugins` may have shifted. Step 4b/4c will catch it. |
+| `config/mcp.template.json` | New `${VAR}` may need adding to `secrets.env`. Step 4d will catch unresolved placeholders. |
 | `templates/*` | Template only — not auto-applied. Holds for step 9 (adoption decision). |
 | `shell/tmux.conf` | Reload step needed: `tmux source-file ~/.tmux.conf` after install. |
-| `skills/*` | New skill added — re-running install.sh symlinks it. Mention to user so they re-launch the session to pick it up. |
+| `runtime/skills/*` | New skill added — re-running installer/install.sh symlinks it. Mention to user so they re-launch the session to pick it up. |
 
 ### 3. Pull
 
@@ -63,7 +63,7 @@ Both should resolve into `~/claude-settings/`. If not symlinked or broken, step 
 **4b. Plugins forward (common pool installed?)**
 
 ```bash
-jq -r '.enabledPlugins | keys[]' ~/claude-settings/claude/settings.json | sort > /tmp/enabled.txt
+jq -r '.enabledPlugins | keys[]' ~/claude-settings/config/settings.json | sort > /tmp/enabled.txt
 jq -r '.plugins | keys[]' ~/.claude/plugins/installed_plugins.json | sort > /tmp/installed.txt
 comm -23 /tmp/enabled.txt /tmp/installed.txt
 ```
@@ -87,7 +87,7 @@ Each entry = a plugin user-installed on this machine but not in the common pool.
 
 ```bash
 # Real placeholders only — excludes `"$comment"` JSON keys
-tpl_vars=$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' ~/claude-settings/claude/mcp.template.json | sort -u)
+tpl_vars=$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' ~/claude-settings/config/mcp.template.json | sort -u)
 if [ -z "$tpl_vars" ]; then
   echo "(4d) no \${VAR} placeholders in template — check vacuous, skipping"
 else
@@ -170,7 +170,7 @@ Note: `omc doctor conflicts` may report pre-existing warnings unrelated to the u
 ### 5. Run installer
 
 ```bash
-cd ~/claude-settings && ./install.sh --verbose
+cd ~/claude-settings && installer/install.sh --verbose
 ```
 
 Idempotent — safe to run unconditionally. Capture full output for step 6.
