@@ -253,28 +253,6 @@ else
   debug "skip project hook deployment: fragment or merger missing"
 fi
 
-# 5c. user-scope using-omc routing loader — merge into ~/.claude/settings.json so
-#     the OMC routing rule is resident in every session (not just project targets,
-#     unlike the project-scoped omc-reference catalog loader above). Idempotent via
-#     marker USING_OMC_AUTO_LOAD. Reuses the same target-agnostic HOOK_MERGER.
-USING_OMC_FRAGMENT="$REPO_DIR/claude/hooks/using-omc-loader.json"
-USING_OMC_MARKER="USING_OMC_AUTO_LOAD"
-if [[ -f "$USING_OMC_FRAGMENT" && -f "$HOOK_MERGER" ]]; then
-  if [[ $DRY_RUN -eq 1 ]]; then
-    log "would merge using-omc loader into: $CLAUDE_HOME/settings.json"
-  else
-    output=$(python3 "$HOOK_MERGER" "$USING_OMC_FRAGMENT" "$CLAUDE_HOME/settings.json" "$USING_OMC_MARKER" 2>&1)
-    rc=$?
-    case $rc in
-      0) log "using-omc hook: $output" ;;
-      2) debug "skip using-omc hook: $CLAUDE_HOME/settings.json parent missing" ;;
-      *) log "WARNING: using-omc hook merge failed (rc=$rc): $output" ;;
-    esac
-  fi
-else
-  debug "skip using-omc hook: fragment or merger missing"
-fi
-
 # 6. plugin sync — ensure every enabledPlugin in settings.json is installed at
 #    user scope. Idempotent: plugins already at user scope are skipped; ones
 #    registered at project/local scope (or with stale "unknown" version) are
