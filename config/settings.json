@@ -32,6 +32,12 @@
             "command": "# MALFORMED_TOOLCALL_GUARD\npython3 ~/claudebase/runtime/hooks/detect_malformed_toolcall.py 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Checking for leaked tool-call markup"
+          },
+          {
+            "type": "command",
+            "command": "# ASKUSERQUESTION_RETRY_GUARD\npython3 ~/claudebase/runtime/hooks/askuserquestion_retry.py 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Recovering empty AskUserQuestion calls"
           }
         ]
       }
