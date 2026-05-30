@@ -12,6 +12,6 @@
     "post_install": ["install_omc_shell_cli"]
   },
   "heroacademia": {
-    "os": ["macos"]
+    "os": ["macos", "linux", "windows"]
   }
 }
