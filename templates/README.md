@@ -22,6 +22,6 @@ cat ~/claudebase/templates/project-gitignore >> .gitignore
 
 ## 원칙
 
-- **범용 설정**(plugins, alwaysThinking 등)은 `~/.claude/settings.json` (= `claude-settings` repo)에 있음. 여기는 **이 프로젝트에만** 의미 있는 것만.
+- **범용 설정**(plugins, alwaysThinking 등)은 `~/.claude/settings.json` (= `claudebase` repo)에 있음. 여기는 **이 프로젝트에만** 의미 있는 것만.
 - `.claude/settings.local.json`은 절대 commit 금지 (gitignore 처리됨).
 - `CLAUDE.md`는 Critical Rules 위주로 짧게 — 디테일은 `.claude/rules/<topic>.md`로 분산.

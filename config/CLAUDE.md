@@ -283,4 +283,4 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 ---
 
 **Last Updated**: 2026-05-29
-**Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claude-settings/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
+**Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.

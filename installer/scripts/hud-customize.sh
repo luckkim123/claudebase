@@ -94,7 +94,7 @@ read -r -d '' TRANSFORM <<'EOF' || true
 // "dir:" prefix, cyan unification, lowercase model, or effort segment is exposed
 // via the omcHud config. We therefore rewrite the plugin's stdout here. Re-running
 // /oh-my-claudecode:hud setup regenerates this file and DROPS both blocks;
-// claude-settings install.sh re-applies them via installer/scripts/hud-customize.sh.
+// claudebase install.sh re-applies them via installer/scripts/hud-customize.sh.
 const CYAN = "\x1b[36m";
 const RESET = "\x1b[0m";
 

@@ -7,7 +7,7 @@ Fix a setting on one machine, push, then `git pull` on every other machine to ge
 ## Quick start
 
 ```bash
-# Clone (anywhere; ~/claudebase or ~/claude-settings both fine)
+# Clone to ~/claudebase (the canonical path; hooks/skills reference it)
 git clone https://github.com/luckkim123/claudebase.git ~/claudebase
 cd ~/claudebase
 

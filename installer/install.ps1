@@ -1,4 +1,4 @@
-# claude-settings installer (Windows / PowerShell 7+)
+# claudebase installer (Windows / PowerShell 7+)
 # Usage: pwsh ./install.ps1 [-Copy] [-DryRun] [-Verbose]
 #   -Copy     Force copy mode (default tries symlink, falls back to copy)
 #   -DryRun   Show actions without executing
