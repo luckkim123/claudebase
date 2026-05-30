@@ -5,8 +5,11 @@
 $ErrorActionPreference = "Continue"
 
 # winget package IDs
+# GitHub.cli (gh): the household's sole GitHub interface (clone/push/auth) —
+# claudebase relies on it instead of any github plugin (see config/settings.json).
 $RequiredWinget = @(
     @{ Id = "sunbk201.Pretendard"; Name = "Pretendard font" }
+    @{ Id = "GitHub.cli"; Name = "GitHub CLI (gh)" }
 )
 # pip packages (import_name -> package_name)
 $RequiredPip = @(

@@ -44,3 +44,13 @@ else
   printf '[platform/linux] WARNING: cannot run sudo non-interactively\n'
   printf '[platform/linux]   install manually: sudo apt-get install -y %s\n' "${missing[*]}"
 fi
+
+# gh: the GitHub CLI is the household's sole GitHub interface (clone/push/auth) —
+# claudebase relies on it instead of any github plugin. Handled separately from
+# REQUIRED_PKGS because gh is NOT in the default Debian/Ubuntu apt repo; it needs
+# GitHub's own apt source, so `apt-get install gh` would fail. Detect-and-hint only
+# (never auto-add a third-party apt source — that is a user trust decision).
+if ! command -v gh >/dev/null 2>&1; then
+  printf '[platform/linux] HINT: gh (GitHub CLI) missing — claudebase uses it for all GitHub ops.\n'
+  printf '[platform/linux]       install: https://github.com/cli/cli/blob/trunk/docs/install_linux.md\n'
+fi
