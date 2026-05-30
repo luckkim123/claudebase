@@ -1,13 +1,33 @@
 ---
 name: sync-claude-settings
-description: Use when syncing the personal ~/claude-settings repo across machines — pulling new commits, investigating cross-machine plugin drift, re-running install.sh, or auditing whether the local machine matches the repo's intended state. Triggers on phrases like "claude-settings 동기화", "settings sync", "plugin drift", "install.sh 다시", "settings.local.json", or after returning to a machine that's been offline. Walks the fetch → diff → drift-check → install → verify → bug-triage cycle. Asks before any non-idempotent action (commits, pushes, new-file writes, cross-repo template adoption).
+description: 'Use when syncing the personal claudebase (historically claude-settings) repo across machines — pulling new commits, investigating cross-machine plugin drift, re-running installer/install.sh, or auditing whether the local machine matches the repo''s intended state. Triggers on phrases like "claude-settings 동기화", "claudebase 동기화", "settings sync", "plugin drift", "install.sh 다시", "settings.local.json", or after returning to a machine that''s been offline. Walks the fetch → diff → drift-check → install → verify → bug-triage cycle. Asks before any non-idempotent action (commits, pushes, new-file writes, cross-repo template adoption).'
+triggers:
+  - "/sync-claude-settings"
+  - "sync-claude-settings"
+  - "claude-settings 동기화"
+  - "claudebase 동기화"
+  - "settings sync"
+  - "plugin drift"
+  - "install.sh 다시"
+  - "settings.local.json"
+  - "settings 머신 sync"
+  - "claudebase 머신"
 ---
 
 # sync-claude-settings
 
-Walks the analysis-and-apply loop for the personal `~/claude-settings` repo across machines. Built from the cycle that revealed the `mcp.json` idempotency bug and the 6-plugin drift on the obsidian-vault Mac (2026-05-02).
+Walks the analysis-and-apply loop for the personal `claudebase` repo (historically `claude-settings` — see note below) across machines. Built from the cycle that revealed the `mcp.json` idempotency bug and the 6-plugin drift on the obsidian-vault Mac (2026-05-02).
 
 This skill is **rigid** — follow the procedure in order. The procedure exists because I previously skipped step 6 (post-install verification) and missed an idempotency regression for a full day.
+
+**Repo / local clone naming**: The GitHub repo was renamed `claude-settings` → `claudebase` on 2026-05-29 (S5 standardize cycle). The body below still says `~/claude-settings/` everywhere because that is the default local clone path on the machines where this skill was authored — GitHub auto-redirects the old URL, so a pre-rename clone keeps working without `git remote set-url`. If your local clone lives at a different path (`~/claudebase/`, `~/work/claudebase/`, etc.), substitute it everywhere the body says `~/claude-settings/`; nothing else changes. Resolve the path once at the start of a run so the rest of the procedure stays consistent:
+
+```bash
+CLAUDEBASE_ROOT="${CLAUDEBASE_ROOT:-$HOME/claude-settings}"   # override if cloned elsewhere
+[ -d "$CLAUDEBASE_ROOT/.git" ] || { echo "no claudebase repo at $CLAUDEBASE_ROOT"; exit 1; }
+```
+
+Everywhere the procedure says `cd ~/claude-settings && ...`, read that as `cd "$CLAUDEBASE_ROOT" && ...`.
 
 ## Pre-flight (abort if any fails)
 

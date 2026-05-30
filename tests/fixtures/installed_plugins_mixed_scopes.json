@@ -1,0 +1,14 @@
+{
+  "plugins": {
+    "superpowers@claude-plugins-official": [
+      { "scope": "user" }
+    ],
+    "axlabs-mckinsey-pptx@axlabs": [
+      { "scope": "project" }
+    ],
+    "oh-my-claudecode@omc": [],
+    "stray-plugin@somewhere": [
+      { "scope": "user" }
+    ]
+  }
+}

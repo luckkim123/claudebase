@@ -11,6 +11,13 @@ Exit codes:
     0 = success (merged, replaced, or already up-to-date)
     1 = error (target missing, malformed JSON, fragment invalid)
     2 = target directory doesn't exist (caller should skip silently)
+
+Known limitation (M7, filed 2026-05-29): one fragment file = one marker = one
+event. If multiple distinct hooks ever need to land in the same project at
+once, extend the fragment schema to a list of (marker, event, command) tuples
+and lift the duplicate-marker check below from "raise" to "iterate". Not done
+now because the only current consumer is OMC_REFERENCE_AUTO_LOAD; building
+a more general merger before a second consumer exists would be speculative.
 """
 
 import json

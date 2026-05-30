@@ -29,6 +29,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# SURROGATE_AUTO_REPAIR_ON_START\npython3 ~/claudebase/runtime/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Pre-flight surrogate repair on session start"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -51,9 +63,9 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
-    "oh-my-heroacademia@heroacademia": true,
     "oh-my-docs@heroacademia": true,
     "oh-my-scholar@heroacademia": true,
+    "oh-my-heroacademia@heroacademia": true,
     "oh-my-experiments@omx": true
   },
   "extraKnownMarketplaces": {
@@ -82,6 +94,7 @@
       }
     }
   },
+  "language": "한국",
   "alwaysThinkingEnabled": false,
   "skipDangerousModePermissionPrompt": true,
   "remoteControlAtStartup": false,
@@ -142,5 +155,6 @@
         "sessionSummary"
       ]
     }
-  }
+  },
+  "effortLevel": "xhigh"
 }
