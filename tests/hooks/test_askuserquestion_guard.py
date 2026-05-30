@@ -61,7 +61,17 @@ def test_valid_questions_pass(capsys, monkeypatch):
         {
             "tool_name": "AskUserQuestion",
             "tool_input": {
-                "questions": [{"question": "Q?", "header": "H", "options": [], "multiSelect": False}]
+                "questions": [
+                    {
+                        "question": "Q?",
+                        "header": "H",
+                        "options": [
+                            {"label": "A", "description": "first"},
+                            {"label": "B", "description": "second"},
+                        ],
+                        "multiSelect": False,
+                    }
+                ]
             },
         },
         capsys,
@@ -136,3 +146,80 @@ def test_bmp_korean_passes(capsys, monkeypatch):
     )
     assert rc == 0
     assert out == ""
+
+
+# --- 2026-05-31 surrogate self-heal -----------------------------------------
+# The guard, on surrogate detection, ALSO scrubs the transcript in place so the
+# poisoned tool_use block (already recorded before PreToolUse ran) cannot
+# deadlock the next request's serialization. These tests use the same
+# monkeypatch/_run harness as the rest of the file (no subprocess).
+
+
+def _poisoned_payload(transcript_path):
+    p = {
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+            "questions": [
+                {
+                    "question": "ok?",
+                    "header": "h",
+                    "options": [
+                        {"label": "a", "description": "fine"},
+                        {"label": "b", "description": "bad \ud83a here"},
+                    ],
+                    "multiSelect": False,
+                }
+            ]
+        },
+    }
+    if transcript_path is not None:
+        p["transcript_path"] = transcript_path
+    return p
+
+
+def test_surrogate_heals_transcript_in_place(tmp_path, capsys, monkeypatch):
+    """On surrogate detection the guard both denies AND scrubs the transcript
+    file, so a lone surrogate already recorded there is gone afterwards."""
+    # A transcript line whose recorded assistant tool_use carries a lone
+    # surrogate (escaped as \uXXXX so the file on disk is valid JSON text).
+    poisoned_line = json.dumps(
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "name": "AskUserQuestion",
+             "input": {"questions": [{"options": [{"description": "x \ud83a y"}]}]}}
+        ]}},
+        ensure_ascii=True,
+    )
+    tp = tmp_path / "session.jsonl"
+    tp.write_text(poisoned_line + "\n", encoding="utf-8")
+
+    # sanity: the file genuinely cannot be strict-UTF-8 encoded as-is
+    obj = json.loads(tp.read_text(encoding="utf-8"))
+    try:
+        json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        assert False, "fixture should contain a lone surrogate"
+    except UnicodeEncodeError:
+        pass
+
+    rc, out = _run(_poisoned_payload(str(tp)), capsys, monkeypatch)
+    assert rc == 0
+    decision = json.loads(out)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "lone UTF-16 surrogate" in decision["permissionDecisionReason"]
+
+    # After the heal, the transcript must be strict-UTF-8 encodable.
+    healed = json.loads(tp.read_text(encoding="utf-8"))
+    json.dumps(healed, ensure_ascii=False).encode("utf-8")  # must not raise
+
+
+def test_surrogate_deny_without_transcript_path(capsys, monkeypatch):
+    """No transcript_path -> still denies, heal is a no-op (never raises)."""
+    rc, out = _run(_poisoned_payload(None), capsys, monkeypatch)
+    assert rc == 0
+    assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_surrogate_heal_missing_file_is_noop(capsys, monkeypatch):
+    """Nonexistent transcript_path -> deny, heal no-ops, no crash."""
+    rc, out = _run(_poisoned_payload("/nonexistent/path/session.jsonl"), capsys, monkeypatch)
+    assert rc == 0
+    assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"

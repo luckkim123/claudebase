@@ -44,11 +44,31 @@ Hook event: PreToolUse (matcher = "AskUserQuestion")
 Stdin schema: documented at https://code.claude.com/docs/en/hooks
   - tool_name: str
   - tool_input: dict  (the model's intended arguments)
+  - transcript_path: str  (path to the session JSONL — used by the surrogate
+    self-heal below)
 Exit 0 with JSON on stdout = standard decision channel.
+
+★★★ 2026-05-31 — lone-surrogate self-heal (why deny ALONE is not enough):
+  A recurrence proved that denying a surrogate-bearing call does NOT stop the
+  session from deadlocking. Sequence observed (transcript 9d4b2a74):
+    1. The model emits AskUserQuestion whose options[*].description carries a
+       lone UTF-16 surrogate. The assistant message — INCLUDING that poisoned
+       tool_use block — is already recorded to the transcript before PreToolUse
+       runs (PreToolUse gates execution, not recording).
+    2. This hook denies with SURROGATE_REASON. Execution is blocked.
+    3. But the harness re-serializes the WHOLE transcript for the next request,
+       and the still-present poisoned block triggers an Anthropic API 400
+       "no low surrogate in string" — the next turn cannot even start. Frozen.
+  So there is a window: "poisoned block recorded" -> "next Stop-hook scrub".
+  The deny does not close it. We close it HERE: on surrogate detection we also
+  scrub the transcript in place immediately (reusing fix_surrogate's verified
+  scrub), so the very next serialization is clean. Stop/SessionStart repair
+  remain as the outer safety net; this is the inner, same-turn one.
 
 Idempotent marker in the settings command field: ASKUSERQUESTION_GUARD
 """
 import json
+import os
 import sys
 
 
@@ -120,6 +140,30 @@ def _has_lone_surrogate(value) -> bool:
     return False
 
 
+def _heal_transcript(transcript_path) -> None:
+    """Best-effort: scrub lone surrogates from the transcript file NOW, so the
+    poisoned tool_use block (already recorded before this PreToolUse hook ran)
+    cannot deadlock the next request's serialization. Reuses the verified scrub
+    in the sibling fix_surrogate.py. Never raises — a heal failure must not
+    change the deny decision the caller is about to return.
+    """
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return
+    if not os.path.exists(transcript_path):
+        return
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        # Runtime sibling import (same hooks/ dir). Static analyzers can't resolve
+        # it because the path is only added at call time — that's expected; the
+        # resolved import is exercised by test_surrogate_heals_transcript_in_place.
+        import fix_surrogate  # type: ignore[import-not-found]  # noqa: E402
+
+        fix_surrogate.process_file(transcript_path, fix=True, backup=True)
+    except Exception:
+        # Outer Stop/SessionStart surrogate repair remains the safety net.
+        pass
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -159,6 +203,10 @@ def main() -> int:
                 return _deny(PARTIAL_REASON)
 
     if _has_lone_surrogate(tool_input):
+        # Deny is not enough on its own: the poisoned tool_use block is already
+        # in the transcript. Scrub it in place NOW to close the deadlock window
+        # before the next request serializes the conversation.
+        _heal_transcript(payload.get("transcript_path"))
         return _deny(SURROGATE_REASON)
 
     # Valid-looking call: let normal permission flow handle it. We deliberately
