@@ -404,6 +404,18 @@ PY
     fi
   fi
 
+  # OMX marketplace (luckkim123/oh-my-experiments — experiment-analysis & design
+  # harness). Cross-platform pure-Python (no OS gate, unlike heroacademia/OMD).
+  # No version pin: marketplace tracks latest, intentional with OMC/SP. Pulls in
+  # the omx CLI (omx-core) which the plugin shells to; no separate npm package.
+  if echo "$enabled" | grep -q "@omx"; then
+    if ! marketplace_exists "omx"; then
+      log "adding marketplace: luckkim123/oh-my-experiments (omx)"
+      run claude plugin marketplace add luckkim123/oh-my-experiments >/dev/null 2>&1 \
+        || log "  WARNING: failed to add omx marketplace; check network"
+    fi
+  fi
+
   local plugin current ok=0 fixed=0 failed=0
   while IFS= read -r plugin || [[ -n "$plugin" ]]; do
     [[ -z "$plugin" ]] && continue

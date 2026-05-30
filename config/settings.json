@@ -53,7 +53,8 @@
     "oh-my-claudecode@omc": true,
     "oh-my-heroacademia@heroacademia": true,
     "oh-my-docs@heroacademia": true,
-    "oh-my-scholar@heroacademia": true
+    "oh-my-scholar@heroacademia": true,
+    "oh-my-experiments@omx": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
@@ -72,6 +73,12 @@
       "source": {
         "source": "git",
         "url": "https://github.com/luckkim123/oh-my-heroacademia.git"
+      }
+    },
+    "omx": {
+      "source": {
+        "source": "github",
+        "repo": "luckkim123/oh-my-experiments"
       }
     }
   },
