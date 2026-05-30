@@ -81,3 +81,58 @@ def test_malformed_stdin_no_block(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
     mod = _load_module()
     assert mod.main() == 0
+
+
+def test_lone_surrogate_in_description_denied(capsys, monkeypatch):
+    # Reproduces transcript e8600e07 line 1405: lone U+D83A in
+    # questions[0].options[0].description deadlocks the next API request.
+    rc, out = _run(
+        {
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "question": "Q?",
+                        "header": "H",
+                        "options": [
+                            {"label": "L", "description": "더 \ud83a한 상태"},
+                            {"label": "L2", "description": "ok"},
+                        ],
+                        "multiSelect": False,
+                    }
+                ]
+            },
+        },
+        capsys,
+        monkeypatch,
+    )
+    assert rc == 0
+    decision = json.loads(out)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "lone UTF-16 surrogate" in decision["permissionDecisionReason"]
+
+
+def test_bmp_korean_passes(capsys, monkeypatch):
+    # Plain Korean (BMP) must not be flagged.
+    rc, out = _run(
+        {
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "question": "어떻게 진행할까요?",
+                        "header": "방향",
+                        "options": [
+                            {"label": "A", "description": "추천대로"},
+                            {"label": "B", "description": "다른 방향"},
+                        ],
+                        "multiSelect": False,
+                    }
+                ]
+            },
+        },
+        capsys,
+        monkeypatch,
+    )
+    assert rc == 0
+    assert out == ""
