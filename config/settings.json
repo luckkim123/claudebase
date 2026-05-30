@@ -26,6 +26,12 @@
             "command": "# SURROGATE_AUTO_REPAIR\npython3 ~/claudebase/runtime/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Repairing lone UTF-16 surrogates in transcript"
+          },
+          {
+            "type": "command",
+            "command": "# MALFORMED_TOOLCALL_GUARD\npython3 ~/claudebase/runtime/hooks/detect_malformed_toolcall.py 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking for leaked tool-call markup"
           }
         ]
       }
@@ -63,10 +69,11 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
+    "oh-my-experiments@omx": true,
     "oh-my-docs@heroacademia": true,
     "oh-my-scholar@heroacademia": true,
-    "oh-my-heroacademia@heroacademia": true,
-    "oh-my-experiments@omx": true
+    "oh-my-project@heroacademia": true,
+    "oh-my-heroacademia@heroacademia": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
@@ -96,7 +103,9 @@
   },
   "language": "한국",
   "alwaysThinkingEnabled": false,
+  "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
@@ -155,6 +164,5 @@
         "sessionSummary"
       ]
     }
-  },
-  "effortLevel": "xhigh"
+  }
 }
