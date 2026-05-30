@@ -24,7 +24,7 @@ Do **not** invoke for:
 ## Hard prerequisites (check first, fail loudly)
 
 1. **`gemini` CLI on PATH** — `command -v gemini` returns a path. If missing: `npm install -g @google/gemini-cli` and stop.
-2. **`NANOBANANA_API_KEY` exported** — `[[ -n "$NANOBANANA_API_KEY" ]]`. The key value lives in `~/claude-settings/secrets/secrets.env`; `~/.zshrc` sources that file. If missing: tell the user to source the file or open a new shell, do not write a key inline.
+2. **`NANOBANANA_API_KEY` exported** — `[[ -n "$NANOBANANA_API_KEY" ]]`. The key value lives in `~/claudebase/secrets/secrets.env`; `~/.zshrc` sources that file. If missing: tell the user to source the file or open a new shell, do not write a key inline.
 3. **`~/.gemini/extensions/nanobanana/` exists** — nano banana extension is installed. If missing: `gemini extensions install https://github.com/gemini-cli-extensions/nanobanana` and stop.
 
 If any check fails, surface it and stop. Do not paper over with fallbacks.
@@ -107,7 +107,7 @@ Run when the default flow fails. Walks each layer top-to-bottom, surfacing what 
 
 1. **selectedType** — `python3 -c 'import json,pathlib; print(json.loads((pathlib.Path.home()/".gemini/settings.json").read_text())["security"]["auth"]["selectedType"])'`. Acceptable: `oauth-personal` or `gemini-api-key`. Report which one is active so the user knows.
 2. **Key validity (text model)** — direct curl to `gemini-2.5-flash`. If this fails with `401`/`PERMISSION_DENIED`: the key itself is invalid. If `429`/`RESOURCE_EXHAUSTED`: paid tier billing may not be active. If `503`/`500`: Google-side transient, retry the whole flow in 60s.
-3. **Key validity (image model)** — direct curl to `gemini-2.5-flash-image`. If text works but image fails: image-generation backend issue, not auth. The poll loop in `~/claude-settings/installer/scripts/` can wait for recovery.
+3. **Key validity (image model)** — direct curl to `gemini-2.5-flash-image`. If text works but image fails: image-generation backend issue, not auth. The poll loop in `~/claudebase/installer/scripts/` can wait for recovery.
 4. **MCP tool reachability** — call gemini with the verified flags and an explicit `generate_image` prompt. If MCP returns "reported an error" but the file is still saved: report both the error text and the file path; the CLI mis-reports MCP partial success as full failure.
 5. **Plan Mode detection** — if stdout contains `[LocalAgentExecutor] Blocked call` or `Plan Mode`: the `--approval-mode yolo` flag was missing from the invocation.
 
@@ -131,7 +131,7 @@ After diagnostics print, attempt the generation once with whatever still works (
 ## What this skill never does
 
 - Never edit `~/.gemini/settings.json` without telling the user (the prior session toggled `selectedType` between two values trying to fix the wrong layer; both work, just with different failure modes).
-- Never put an API key into a task description, slash command, or commit. Keys live only in `~/claude-settings/secrets/secrets.env` (gitignored).
+- Never put an API key into a task description, slash command, or commit. Keys live only in `~/claudebase/secrets/secrets.env` (gitignored).
 - Never claim success on stdout alone. Always `test -f` the output path.
 - Never propose `omc team N:gemini` for one-shot image generation — the prompt-mode launch (`gemini -p`) is functionally identical to a direct CLI call but adds 30+ seconds of worker setup and a tmux pane. Use omc-teams only when the user explicitly asked for it or when generating in parallel with other work.
 

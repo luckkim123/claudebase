@@ -11,16 +11,16 @@ This skill is **rigid** — follow the procedure in order. The procedure exists 
 
 ## Pre-flight (abort if any fails)
 
-- `~/claude-settings/` is a git repo with `origin` set
+- `~/claudebase/` is a git repo with `origin` set
 - `claude` CLI on PATH (otherwise the plugin-sync sub-step skips with a warning, which is fine but flag it)
-- `~/claude-settings/` working tree is clean — if dirty, **stop and surface the dirty files to the user**. Do not pull, do not run install.sh on a dirty tree.
+- `~/claudebase/` working tree is clean — if dirty, **stop and surface the dirty files to the user**. Do not pull, do not run install.sh on a dirty tree.
 
 ## Procedure
 
 ### 1. Fetch incoming
 
 ```bash
-cd ~/claude-settings && git fetch && git status -sb
+cd ~/claudebase && git fetch && git status -sb
 ```
 
 - `0 ahead, 0 behind` → no incoming. Skip step 2 + 3, jump to step 4 (drift checks still run).
@@ -58,12 +58,12 @@ ls -la ~/.claude/settings.json ~/.tmux.conf 2>&1
 readlink ~/.claude/settings.json
 ```
 
-Both should resolve into `~/claude-settings/`. If not symlinked or broken, step 5 (install.sh) will repair.
+Both should resolve into `~/claudebase/`. If not symlinked or broken, step 5 (install.sh) will repair.
 
 **4b. Plugins forward (common pool installed?)**
 
 ```bash
-jq -r '.enabledPlugins | keys[]' ~/claude-settings/config/settings.json | sort > /tmp/enabled.txt
+jq -r '.enabledPlugins | keys[]' ~/claudebase/config/settings.json | sort > /tmp/enabled.txt
 jq -r '.plugins | keys[]' ~/.claude/plugins/installed_plugins.json | sort > /tmp/installed.txt
 comm -23 /tmp/enabled.txt /tmp/installed.txt
 ```
@@ -87,7 +87,7 @@ Each entry = a plugin user-installed on this machine but not in the common pool.
 
 ```bash
 # Real placeholders only — excludes `"$comment"` JSON keys
-tpl_vars=$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' ~/claude-settings/config/mcp.template.json | sort -u)
+tpl_vars=$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' ~/claudebase/config/mcp.template.json | sort -u)
 if [ -z "$tpl_vars" ]; then
   echo "(4d) no \${VAR} placeholders in template — check vacuous, skipping"
 else
@@ -170,7 +170,7 @@ Note: `omc doctor conflicts` may report pre-existing warnings unrelated to the u
 ### 5. Run installer
 
 ```bash
-cd ~/claude-settings && installer/install.sh --verbose
+cd ~/claudebase && installer/install.sh --verbose
 ```
 
 Idempotent — safe to run unconditionally. Capture full output for step 6.

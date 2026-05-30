@@ -231,7 +231,7 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 - 자동 trigger: `omc team`, `tmux pane 분리`, `sentinel`, `워커 launch` 키워드에서 LLM 이 invoke
 - 명시 호출: `/omc-teams-ops` (skill 명)
-- 정본 위치: `~/claude-settings/runtime/skills/omc-teams-ops/SKILL.md`
+- 정본 위치: `~/claudebase/runtime/skills/omc-teams-ops/SKILL.md`
 
 본 CLAUDE.md 에는 ==운영 시점에 다른 룰과 충돌하는 1-line== 만 유지:
 - ==같은 leader session 안에 team 추가 불가== — 처음부터 N-worker team 으로 launch. 자세한 우회 → omc-teams-ops skill.

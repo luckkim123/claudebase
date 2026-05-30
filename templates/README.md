@@ -6,9 +6,9 @@
 
 ```bash
 # 새 프로젝트 루트에서:
-cp ~/claude-settings/templates/project-settings.json .claude/settings.json
-cp ~/claude-settings/templates/project-CLAUDE.md CLAUDE.md
-cat ~/claude-settings/templates/project-gitignore >> .gitignore
+cp ~/claudebase/templates/project-settings.json .claude/settings.json
+cp ~/claudebase/templates/project-CLAUDE.md CLAUDE.md
+cat ~/claudebase/templates/project-gitignore >> .gitignore
 ```
 
 ## 파일
