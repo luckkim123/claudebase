@@ -1,6 +1,16 @@
 ---
 name: changelog
-description: Use when the user invokes /changelog to record session decisions, experiments, and lessons. Focuses on WHY and WHAT WE LEARNED (not code diffs -- those live in git). Then commits session-modified files plus the changelog update.
+description: 'Use when the user invokes /changelog or asks to record session decisions, experiments, and lessons to a repo''s changelog.md (한국어 - "체인지로그 정리", "이번 세션 기록", "decisions 기록해줘", "오늘 한 거 정리" / English - "update changelog", "record session decisions", "log this session"). Focuses on WHY and WHAT WE LEARNED — not code diffs, those live in git. Then commits session-modified files plus the changelog update. Skip for trivial single-line fixes; the value is in capturing failed experiments and rationale, not file-level deltas.'
+triggers:
+  - "/changelog"
+  - "changelog"
+  - "체인지로그"
+  - "세션 기록"
+  - "decisions 기록"
+  - "오늘 한 거 정리"
+  - "update changelog"
+  - "record session"
+  - "log this session"
 ---
 
 # Changelog Commit
@@ -15,6 +25,14 @@ Record **decisions, experiments, and lessons** from the current conversation ses
 
 - User invokes `/changelog`
 - After a session with meaningful decisions or experiments that should be documented
+
+## When NOT to Use
+
+- Trivial single-line fixes — the git commit message already captures everything that matters.
+- Pure refactors with no decision content — no failed approaches, no alternatives weighed.
+- Routine dependency bumps or auto-format passes — those leave no lesson behind.
+
+The cost of this skill is a commit-noise tradeoff (every changelog update produces a commit alongside the session work). Skip it when there's no "why" worth preserving.
 
 ## Changelog Location
 

@@ -1,0 +1,17 @@
+{
+  "_comment": "Marketplace metadata consumed by installer/scripts/plugin_sync.py. The canonical source for marketplace name+repo+url lives in config/settings.json under extraKnownMarketplaces (Claude Code SSOT). This file holds *installer-only* metadata that Claude Code's schema does not formally support: OS gates and post-install hook names. plugin_sync.py merges the two files at install time.",
+
+  "claude-plugins-official": {
+    "os": ["macos", "linux", "windows"]
+  },
+  "axlabs": {
+    "os": ["macos", "linux", "windows"]
+  },
+  "omc": {
+    "os": ["macos", "linux", "windows"],
+    "post_install": ["install_omc_shell_cli"]
+  },
+  "heroacademia": {
+    "os": ["macos"]
+  }
+}

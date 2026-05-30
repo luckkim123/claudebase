@@ -34,7 +34,7 @@ claudebase/
 │   ├── secrets.example.env   # tracked sample
 │   └── secrets.env           # **gitignored** — real API keys
 ├── templates/                # boilerplate for new project .claude/
-├── docs/                     # ARCHITECTURE, CHANGELOG, CONTRIBUTING, specs/
+├── docs/                     # ARCHITECTURE, CHANGELOG, CONTRIBUTING, specs/<topic>/{design,plan}.md
 ├── CLAUDE.md                 # repo-internal rules (not symlinked)
 ├── README.md
 └── LICENSE
@@ -45,6 +45,8 @@ The split is by **purpose**, not by tool:
 - `runtime/` — what Claude executes (skills, hooks).
 - `installer/` — what the user runs once per machine.
 - `docs/`, `platform/`, `shell/`, `secrets/`, `templates/` — orthogonal.
+
+Specs follow a per-topic folder convention: each non-trivial change is paired as `docs/specs/<YYYY-MM-DD-topic>/design.md` + `plan.md`. The design captures decisions and trade-offs; the plan captures task breakdown and verification. Single-file specs (design only, no execution plan needed) keep the folder shape too — the absence of `plan.md` is meaningful.
 
 ## Symlink model
 

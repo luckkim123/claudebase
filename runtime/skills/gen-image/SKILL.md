@@ -1,6 +1,19 @@
 ---
 name: gen-image
-description: Generate one image with Google nano banana (Gemini 2.5 Flash Image) and save the PNG to a target directory. Use when the user asks to draw, generate, create, or make an image (Korean "그려줘", "이미지 만들어", "아이콘 생성", "그림"; English "draw", "create image", "generate", "nano banana"). Default mode wraps gemini CLI with verified flags + file-system verification (never trust the CLI text alone). Has a `--diagnose` mode that walks every auth layer (selectedType / GEMINI_API_KEY / direct curl / MCP response) when something stops working. Built from the 2026-05-19 nano banana debugging session that uncovered the OAuth-vs-API-key trap.
+description: 'Generate one image with Google nano banana (Gemini 2.5 Flash Image) and save the PNG to a target directory. Use when the user asks to draw, generate, create, or make an image (Korean "그려줘", "이미지 만들어", "아이콘 생성", "그림"; English "draw", "create image", "generate", "nano banana"). Default mode wraps gemini CLI with verified flags + file-system verification (never trust the CLI text alone). Has a `--diagnose` mode that walks every auth layer (selectedType / GEMINI_API_KEY / direct curl / MCP response) when something stops working. Built from the 2026-05-19 nano banana debugging session that uncovered the OAuth-vs-API-key trap.'
+triggers:
+  - "/gen-image"
+  - "gen-image"
+  - "그려줘"
+  - "이미지 만들어"
+  - "아이콘 생성"
+  - "그림"
+  - "포스터"
+  - "썸네일"
+  - "draw"
+  - "create image"
+  - "generate image"
+  - "nano banana"
 ---
 
 # gen-image

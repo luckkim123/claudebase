@@ -46,6 +46,44 @@ REASON = (
     "branch decisions, not for every confirmation."
 )
 
+SURROGATE_REASON = (
+    "AskUserQuestion call contains a lone UTF-16 surrogate (U+D800-U+DFFF "
+    "without its pair). Writing this to the transcript would deadlock the "
+    "next API request with 'invalid high surrogate in string' (diagnosed "
+    "2026-05-29 from transcript e8600e07 line 1405 — a U+D83A leaked into "
+    "options[*].description and the Stop hook had to scrub it post-hoc).\n"
+    "Re-emit the call WITHOUT lone surrogates: rewrite the affected field "
+    "(usually question/description text) in BMP-only characters — plain "
+    "Korean/English is safe, but avoid 4-byte CJK extensions and emoji "
+    "prefixes that may have been truncated mid-pair during decoding."
+)
+
+
+def _deny(reason: str) -> int:
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+    )
+    return 0
+
+
+def _has_lone_surrogate(value) -> bool:
+    """Recursively check any string inside value for unpaired UTF-16 surrogates."""
+    if isinstance(value, str):
+        return any(0xD800 <= ord(ch) <= 0xDFFF for ch in value)
+    if isinstance(value, dict):
+        return any(_has_lone_surrogate(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_lone_surrogate(v) for v in value)
+    return False
+
 
 def main() -> int:
     try:
@@ -66,24 +104,15 @@ def main() -> int:
         or len(questions) == 0
     )
 
-    if not is_empty:
-        # Valid-looking call: let normal permission flow handle it.
-        # We deliberately do NOT validate per-question fields here; the
-        # harness's own validator already does that and its error messages
-        # are precise. We only catch the dominant {} failure mode.
-        return 0
+    if is_empty:
+        return _deny(REASON)
 
-    sys.stdout.write(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": REASON,
-                }
-            }
-        )
-    )
+    if _has_lone_surrogate(tool_input):
+        return _deny(SURROGATE_REASON)
+
+    # Valid-looking call: let normal permission flow handle it. We deliberately
+    # do NOT validate per-question fields here; the harness's own validator
+    # already does that and its error messages are precise.
     return 0
 
 

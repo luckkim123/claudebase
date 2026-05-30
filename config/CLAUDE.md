@@ -282,9 +282,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-05-24
-**Managed by**: [`claude-settings`](https://github.com/luckkim123/claude-settings) — edit at `~/claude-settings/claude/CLAUDE.md`, the symlink picks up changes automatically.
-
-<!-- OMC:IMPORT:START -->
-@CLAUDE-omc.md
-<!-- OMC:IMPORT:END -->
+**Last Updated**: 2026-05-29
+**Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claude-settings/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
