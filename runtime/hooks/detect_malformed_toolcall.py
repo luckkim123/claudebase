@@ -47,6 +47,8 @@ import os
 import re
 import sys
 
+_MISSING = object()
+
 # Build the markup tokens by concatenation so THIS file never contains a
 # literal closing invoke/parameter tag — otherwise the hook's own source,
 # if ever quoted back into a message, could read as a mode-A leak.
@@ -119,8 +121,18 @@ def _log(cwd: str, record: dict) -> None:
         pass
 
 
-def _block(reason: str) -> int:
-    sys.stdout.write(json.dumps({"decision": "block", "reason": reason}))
+def _block(reason: str, tail: str = "") -> int:
+    body: dict = {"decision": "block", "reason": reason}
+    # `additionalContext` is an official Stop-hook output field (docs:
+    # hooks.md#decision-control). Surface the exact leaked tail so the model
+    # sees *what* it dropped, not just that it dropped something — `reason`
+    # carries the instruction, `additionalContext` carries the evidence.
+    if tail:
+        body["hookSpecificOutput"] = {
+            "hookEventName": "Stop",
+            "additionalContext": "The leaked tail was:\n" + tail,
+        }
+    sys.stdout.write(json.dumps(body))
     return 0
 
 
@@ -142,7 +154,24 @@ def main() -> int:
         return 0  # clean turn, allow stop
 
     cwd = payload.get("cwd") or os.getcwd()
-    already_firing = payload.get("stop_hook_active") is True
+
+    # 3-state check for stop_hook_active:
+    #   stop_hook_active is present in runtime stdin but absent from the
+    #   official Stop-hook schema (verified 2026-05-31 against docs). If a
+    #   future Claude Code build removes or renames the field, the old
+    #   `.get(...) is True` pattern would silently treat every re-fire as a
+    #   first fire and block again -- causing an infinite loop that wedges the
+    #   session. Instead we distinguish three states:
+    #
+    #     present-and-true  -- this Stop is our own re-fire: skip blocking.
+    #     present-and-false -- genuine first leak: block once.
+    #     ABSENT            -- field was removed/renamed: fail-safe, allow stop.
+    #       Rationale: one unblocked leak visible to the user is a much lighter
+    #       failure than wedging the session in a block loop. This aligns with
+    #       the "never block on a hook bug" discipline of this module.
+    raw_active = payload.get("stop_hook_active", _MISSING)
+    field_present = raw_active is not _MISSING
+    already_firing = raw_active is True
 
     _log(
         cwd,
@@ -150,18 +179,19 @@ def main() -> int:
             "session_id": payload.get("session_id"),
             "signal": signal,
             "stop_hook_active": already_firing,
+            "loop_guard_field_present": field_present,
             "tail": last[-160:],
-            "blocked": not already_firing,
+            "blocked": field_present and not already_firing,
         },
     )
 
-    # Dedupe / loop guard: if this Stop is itself the re-fire after our own
-    # block, do NOT block again — log only and let the session stop. Caps the
-    # intervention at exactly one extra turn (verified via stop_hook_active).
-    if already_firing:
+    # Dedupe / loop guard: skip blocking if this is our own re-fire (already_firing)
+    # or if the guard field is absent (fail-safe to avoid an infinite block loop
+    # should the field be removed in a future Claude Code build).
+    if already_firing or not field_present:
         return 0
 
-    return _block(REASON)
+    return _block(REASON, tail=last[-200:])
 
 
 if __name__ == "__main__":

@@ -10,11 +10,35 @@ Five empty calls were observed in a single session even after the user-scope
 CLAUDE.md added a text-only "complete the payload before emitting" rule —
 proof that prose self-instruction is not load-bearing here.
 
-This hook intercepts the call BEFORE the harness's own validator, denies it
-with `permissionDecision: "deny"`, and returns a precise self-correction
-message via `permissionDecisionReason` (which Claude Code injects into the
-model's next request). The model then has to re-emit the call with the
-`questions` array actually populated.
+IMPORTANT — what this hook can and cannot catch (corrected 2026-05-31 after a
+recurrence: an empty AskUserQuestion still produced a raw `InputValidationError`,
+NOT this hook's friendly reason, proving the hook never ran for that call):
+
+  PreToolUse hooks do NOT run before the harness's required-field schema check
+  for *missing required fields*. When `questions` is absent entirely, the
+  harness rejects the call with InputValidationError BEFORE this hook's stdin is
+  populated — so the wholly-missing-`questions` case is structurally NOT
+  hook-blockable. (The original claim here, "intercepts BEFORE the harness's own
+  validator", was wrong; unit tests confirm the hook logic itself denies all
+  empty shapes correctly, but it is simply never reached for that shape.)
+
+  What this hook CAN still catch — cases where `tool_input` IS delivered to it:
+    - `questions` present but an empty list `[]`
+    - `questions` present but not a list (wrong type)
+    - per-question objects missing their own required fields (question / header
+      / options>=2) — a *partially* filled payload the harness may pass through
+      to the hook before its deeper validation
+    - lone UTF-16 surrogates anywhere in the input (deadlocks the next request)
+
+So this hook is a *second* line of defense for malformed-but-delivered payloads,
+not a guarantee against the bare missing-`questions` mistake. The load-bearing
+fix for the latter is behavioral (the CLAUDE.md "complete the payload before
+emitting" rule): fill the full `questions` array in the SAME message as the call,
+never call-then-populate.
+
+When it does run, it denies with `permissionDecision: "deny"` and returns a
+precise self-correction message via `permissionDecisionReason` (which Claude Code
+injects into the model's next request).
 
 Hook event: PreToolUse (matcher = "AskUserQuestion")
 Stdin schema: documented at https://code.claude.com/docs/en/hooks
@@ -44,6 +68,17 @@ REASON = (
     "the recommendation in prose and proceed. The user can interrupt if "
     "they disagree. Per ~/.claude/CLAUDE.md, AskUserQuestion is for genuine "
     "branch decisions, not for every confirmation."
+)
+
+PARTIAL_REASON = (
+    "AskUserQuestion call has a 'questions' array but at least one question is "
+    "incomplete. Every question object needs ALL of: 'question' (non-empty str), "
+    "'header' (str <=12 chars), 'options' (list of >=2 objects, each with 'label' "
+    "and 'description'), and 'multiSelect' (bool). The harness would reject the "
+    "incomplete one with InputValidationError.\n"
+    "Re-emit with each question fully populated — write the options as prose in "
+    "your reply body first so the tokens exist, then put the SAME content in the "
+    "call. Do not emit a question with fewer than 2 options."
 )
 
 SURROGATE_REASON = (
@@ -96,16 +131,32 @@ def main() -> int:
         return 0  # matcher should prevent this, but be defensive
 
     tool_input = payload.get("tool_input") or {}
-    questions = tool_input.get("questions")
-    is_empty = (
-        not isinstance(tool_input, dict)
-        or not tool_input
-        or not isinstance(questions, list)
-        or len(questions) == 0
-    )
-
-    if is_empty:
+    if not isinstance(tool_input, dict) or not tool_input:
         return _deny(REASON)
+
+    questions = tool_input.get("questions")
+    # Direct early-return (not via an `is_empty` bool) so the type checker can
+    # narrow `questions` to a non-empty list for the per-question loop below.
+    if not isinstance(questions, list) or len(questions) == 0:
+        return _deny(REASON)
+
+    # Partial-fill check: questions[] exists but a question object is missing its
+    # own required fields. This shape IS delivered to the hook (the top-level
+    # required key is present), so unlike the bare missing-`questions` case we
+    # can actually catch it here before the harness's deeper per-item validation.
+    for q in questions:
+        if not isinstance(q, dict):
+            return _deny(PARTIAL_REASON)
+        if not q.get("question") or not isinstance(q.get("question"), str):
+            return _deny(PARTIAL_REASON)
+        if not q.get("header") or not isinstance(q.get("header"), str):
+            return _deny(PARTIAL_REASON)
+        opts = q.get("options")
+        if not isinstance(opts, list) or len(opts) < 2:
+            return _deny(PARTIAL_REASON)
+        for o in opts:
+            if not isinstance(o, dict) or not o.get("label") or not o.get("description"):
+                return _deny(PARTIAL_REASON)
 
     if _has_lone_surrogate(tool_input):
         return _deny(SURROGATE_REASON)
