@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-settings installer (macOS / Linux)
+# claudebase installer (macOS / Linux)
 # Usage: ./install.sh [--copy] [--dry-run] [--verbose] [--prune-plugins]
 #   --copy            Copy files instead of symlinking (less convenient for sync)
 #   --dry-run         Show actions without executing

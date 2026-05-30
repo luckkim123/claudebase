@@ -20,14 +20,22 @@ Walks the analysis-and-apply loop for the personal `claudebase` repo (historical
 
 This skill is **rigid** — follow the procedure in order. The procedure exists because I previously skipped step 6 (post-install verification) and missed an idempotency regression for a full day.
 
-**Repo / local clone naming**: The GitHub repo was renamed `claude-settings` → `claudebase` on 2026-05-29 (S5 standardize cycle). The body below still says `~/claude-settings/` everywhere because that is the default local clone path on the machines where this skill was authored — GitHub auto-redirects the old URL, so a pre-rename clone keeps working without `git remote set-url`. If your local clone lives at a different path (`~/claudebase/`, `~/work/claudebase/`, etc.), substitute it everywhere the body says `~/claude-settings/`; nothing else changes. Resolve the path once at the start of a run so the rest of the procedure stays consistent:
+**Repo / local clone naming**: The GitHub repo was renamed `claude-settings` → `claudebase` on 2026-05-29, and the canonical local clone path is now `~/claudebase`. Hooks in `config/settings.json` reference `~/claudebase/runtime/hooks/...` by absolute path, so a clone that still lives at `~/claude-settings` will have **broken hooks** until renamed. The first sync step below detects and fixes this. Resolve the path once at the start of a run:
 
 ```bash
-CLAUDEBASE_ROOT="${CLAUDEBASE_ROOT:-$HOME/claude-settings}"   # override if cloned elsewhere
+CLAUDEBASE_ROOT="${CLAUDEBASE_ROOT:-$HOME/claudebase}"   # canonical; override only if cloned elsewhere
+# Forced unification: if the old ~/claude-settings clone is still around and ~/claudebase isn't, rename it.
+if [ ! -d "$CLAUDEBASE_ROOT/.git" ] && [ -d "$HOME/claude-settings/.git" ]; then
+  echo "renaming legacy clone: ~/claude-settings -> ~/claudebase"
+  mv "$HOME/claude-settings" "$HOME/claudebase"
+  git -C "$HOME/claudebase" worktree repair 2>/dev/null || true
+  CLAUDEBASE_ROOT="$HOME/claudebase"
+  "$CLAUDEBASE_ROOT/installer/install.sh"   # re-link symlinks + fix hook paths under the new path
+fi
 [ -d "$CLAUDEBASE_ROOT/.git" ] || { echo "no claudebase repo at $CLAUDEBASE_ROOT"; exit 1; }
 ```
 
-Everywhere the procedure says `cd ~/claude-settings && ...`, read that as `cd "$CLAUDEBASE_ROOT" && ...`.
+Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUDEBASE_ROOT" && ...`.
 
 ## Pre-flight (abort if any fails)
 
@@ -239,7 +247,7 @@ For each new template:
 - On yes:
   - `cp <template> <project>/.claude/rules/<name>.md`
   - **Stage ONLY the new file** — `git add <project>/.claude/rules/<name>.md`. Never `git add -A` in someone else's repo.
-  - Commit with `docs: adopt <name> rule from claude-settings template` body referencing the source SHA.
+  - Commit with `docs: adopt <name> rule from claudebase template` body referencing the source SHA.
   - Do NOT push — that repo's remote is separate (often org-owned) and outside this skill's authority.
 
 ## Red flags (STOP if you catch yourself thinking these)
