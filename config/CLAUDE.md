@@ -252,6 +252,14 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 ---
 
+## Superpowers Artifacts Path (`.sp/`)
+
+`superpowers:brainstorming`/`writing-plans` 가 만드는 design·plan 문서의 **기본 저장 경로는 프로젝트 루트의 `.sp/`** (`.sp/specs/<YYYY-MM-DD-topic>-design.md`, `.sp/plans/<YYYY-MM-DD-topic>.md`). superpowers 원본 기본값 `docs/plans/` 를 이 경로로 override 한다. `.omc`/`.omp` 와 같은 계열의 루트 dot-dir — 산출물을 소스 트리에서 분리.
+
+- **프로젝트별 override 우선**: 프로젝트가 자체 store 를 이미 쓰면 (예: `claudebase` 자신은 `docs/specs/<topic>/{design,plan}.md`, vault 는 `.sp/`) 그 프로젝트 규칙이 이 기본값을 이긴다. 이 절은 *프로젝트가 따로 안 정했을 때*의 기본값일 뿐 — 기존 관습을 덮어쓰지 말 것.
+- **claudebase repo 자신은 예외**: 이 repo 의 spec 은 `docs/specs/<YYYY-MM-DD-topic>/{design,plan}.md` per-topic 폴더 관습 유지 (`docs/ARCHITECTURE.md` SSOT). `.sp/` 로 바꾸지 않는다.
+- gitignore 정책은 프로젝트가 결정 — `.sp/` 를 커밋할지(설계 이력 보존) ignore 할지(scratch)는 프로젝트별.
+
 ## Versioned Release Workflow (preferred for non-trivial features)
 
 Versioned package 의 non-trivial 변경 (feature / redesign / breaking refactor) 은 ad-hoc commits 대신 numbered release cycle 로:
