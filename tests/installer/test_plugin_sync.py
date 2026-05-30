@@ -77,12 +77,19 @@ def test_decide_unknown_plugin_treated_as_not_installed(settings, installed):
 
 
 def test_marketplace_allowed_on_macos(metadata):
-    assert ps.marketplace_allowed_on("heroacademia", "macos", metadata) is True
+    """gated-example is macos-only per fixture metadata → allowed on macos."""
+    assert ps.marketplace_allowed_on("gated-example", "macos", metadata) is True
 
 
 def test_marketplace_blocked_on_linux_by_os_gate(metadata):
-    """heroacademia is macos-only per fixture metadata."""
-    assert ps.marketplace_allowed_on("heroacademia", "linux", metadata) is False
+    """gated-example is macos-only per fixture metadata → blocked on linux."""
+    assert ps.marketplace_allowed_on("gated-example", "linux", metadata) is False
+
+
+def test_heroacademia_allowed_on_all_platforms(metadata):
+    """heroacademia (OMD/oms/omp) is cross-platform — installable on every OS."""
+    for platform in ("macos", "linux", "windows"):
+        assert ps.marketplace_allowed_on("heroacademia", platform, metadata) is True
 
 
 def test_marketplace_missing_metadata_defaults_to_allowed(metadata):
@@ -127,8 +134,8 @@ def test_plan_actions_returns_decision_per_enabled(settings, installed, metadata
     assert plugins["oh-my-docs@heroacademia"] is Action.INSTALL
 
 
-def test_plan_actions_skips_os_gated_marketplace_on_linux(settings, installed, metadata):
-    """On linux, oh-my-docs@heroacademia must be SKIP_OS, not INSTALL."""
+def test_plan_actions_installs_heroacademia_on_linux(settings, installed, metadata):
+    """heroacademia (OMD/oms/omp) is cross-platform — must INSTALL on linux, not SKIP_OS."""
     decisions = ps.plan_actions(
         settings=settings,
         installed=installed,
@@ -138,8 +145,28 @@ def test_plan_actions_skips_os_gated_marketplace_on_linux(settings, installed, m
     )
     by_plugin = {d.plugin: d for d in decisions}
     d = by_plugin["oh-my-docs@heroacademia"]
+    assert d.action is Action.INSTALL
+
+
+def test_plan_actions_skips_os_gated_marketplace_on_linux(installed, metadata):
+    """A macos-only marketplace (gated-example) yields SKIP_OS on linux."""
+    gated_settings = {
+        "enabledPlugins": {"some-plugin@gated-example": True},
+        "extraKnownMarketplaces": {
+            "gated-example": {"source": {"source": "github", "repo": "example/gated"}}
+        },
+    }
+    decisions = ps.plan_actions(
+        settings=gated_settings,
+        installed=installed,
+        metadata=metadata,
+        platform="linux",
+        local_enabled={},
+    )
+    by_plugin = {d.plugin: d for d in decisions}
+    d = by_plugin["some-plugin@gated-example"]
     assert d.action is Action.SKIP_OS
-    assert "heroacademia" in d.reason.lower() or "linux" in d.reason.lower()
+    assert "gated-example" in d.reason.lower() or "linux" in d.reason.lower()
 
 
 # ─── post-install registry ──────────────────────────────────────────────────
