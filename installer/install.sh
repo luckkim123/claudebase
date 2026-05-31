@@ -53,10 +53,11 @@ run_platform_installer
 deploy_project_hooks
 sync_plugins
 
-# OMC freeze patch + HUD wrapper → lib/omc.sh (P3-T9).
+# OMC freeze patch + statedir-ascent patch + HUD wrapper → lib/omc.sh (P3-T9).
 # shellcheck source=lib/omc.sh
 source "$REPO_DIR/installer/lib/omc.sh"
 patch_omc_bash_freeze
+patch_omc_statedir
 
 # 7. local-overrides hint
 LOCAL_FILE="$CLAUDE_HOME/settings.local.json"

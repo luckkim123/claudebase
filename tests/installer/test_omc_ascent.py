@@ -49,6 +49,16 @@ def test_omcroot_takes_priority_when_deeper(tmp_path):
     assert ascend(inner, home=str(tmp_path.parent)) == str(inner)
 
 
+def test_finds_dotclaude_claude_md(tmp_path):
+    # Non-git workspaces keep their project CLAUDE.md under .claude/, not at the
+    # root. Missing this form made the patch a no-op on such trees (real defect).
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "CLAUDE.md").write_text("x")
+    sub = tmp_path / "a" / "b"
+    sub.mkdir(parents=True)
+    assert ascend(sub, home=str(tmp_path.parent)) == str(tmp_path)
+
+
 def test_returns_none_when_no_marker(tmp_path):
     sub = tmp_path / "a" / "b"
     sub.mkdir(parents=True)

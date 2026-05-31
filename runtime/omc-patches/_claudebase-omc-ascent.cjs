@@ -25,7 +25,13 @@ const { homedir } = require('os');
 // hit). .git is included defensively — getWorktreeRoot() normally catches git
 // repos before this helper runs, but if it didn't, a .git boundary is still a
 // better root than a markerless cwd.
-const MARKERS = ['.omcroot', '.git', 'CLAUDE.md'];
+//
+// CLAUDE.md is checked both at the dir root (./CLAUDE.md, e.g. a repo) AND at
+// .claude/CLAUDE.md (the project-scope location Claude Code also recognizes,
+// used by non-git workspaces). Missing the .claude/ form was a real defect:
+// it made the patch a no-op on workspaces that keep their project CLAUDE.md
+// under .claude/ rather than at the root.
+const MARKERS = ['.omcroot', '.git', 'CLAUDE.md', '.claude/CLAUDE.md'];
 
 function ascendToMarker(startDir) {
   if (!startDir) return null;

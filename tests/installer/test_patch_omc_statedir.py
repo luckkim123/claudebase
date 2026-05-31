@@ -96,6 +96,19 @@ def test_idempotent_second_run_skips(tmp_path):
     assert "already-patched=1" in (r2.stdout + r2.stderr)
 
 
+def test_helper_refreshed_even_when_already_patched(tmp_path):
+    # The helper must be re-copied on every run, not just on first patch — its
+    # logic can change between claudebase versions. Simulate a stale helper
+    # next to an already-patched module and assert the second run overwrites it.
+    cfg = make_mock_omc(tmp_path)
+    run_patch(cfg)  # first patch: copies helper, rewrites JS
+    helper = dist_of(cfg) / "_claudebase-omc-ascent.cjs"
+    helper.write_text("// STALE\n")  # corrupt the live helper
+    r2 = run_patch(cfg)  # second run: JS already patched (skipped), helper must refresh
+    assert "already-patched=1" in (r2.stdout + r2.stderr)
+    assert helper.read_text() == HELPER.read_text()  # refreshed to repo source
+
+
 def test_patched_file_is_valid_js(tmp_path):
     cfg = make_mock_omc(tmp_path)
     run_patch(cfg)

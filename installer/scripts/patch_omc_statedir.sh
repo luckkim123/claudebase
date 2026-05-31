@@ -54,6 +54,15 @@ while IFS= read -r wp; do
   [[ -f "$wp" ]] || continue
   dir="$(dirname "$wp")"
 
+  # Refresh the helper on EVERY run, independent of the JS-patch idempotency
+  # check below. The helper's logic can change between claudebase versions; if
+  # we only copied it when (re)writing the JS, an already-patched module would
+  # keep running a stale helper. Copying is cheap and safe (overwrite), so do
+  # it unconditionally — unless DRY_RUN.
+  if [[ "$DRY_RUN" != "1" ]]; then
+    cp "$HELPER_SRC" "$dir/_claudebase-omc-ascent.cjs"
+  fi
+
   if grep -q '_cbRequire' "$wp" 2>/dev/null; then
     skipped=$((skipped + 1))
     continue
@@ -66,9 +75,6 @@ while IFS= read -r wp; do
   fi
 
   cp "$wp" "$wp.bak"
-
-  # Always copy the helper alongside the module (require resolves './').
-  cp "$HELPER_SRC" "$dir/_claudebase-omc-ascent.cjs"
 
   # Point A: inject createRequire shim after the last top-level import line.
   # Point B: rewrite only the anchor whose NEXT line is the .omc return.
