@@ -258,7 +258,7 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 - **프로젝트별 override 우선**: 프로젝트가 자체 store 를 이미 쓰면 (예: `claudebase` 자신은 `docs/specs/<topic>/{design,plan}.md`, vault 는 `.sp/`) 그 프로젝트 규칙이 이 기본값을 이긴다. 이 절은 *프로젝트가 따로 안 정했을 때*의 기본값일 뿐 — 기존 관습을 덮어쓰지 말 것.
 - **claudebase repo 자신은 예외**: 이 repo 의 spec 은 `docs/specs/<YYYY-MM-DD-topic>/{design,plan}.md` per-topic 폴더 관습 유지 (`docs/ARCHITECTURE.md` SSOT). `.sp/` 로 바꾸지 않는다.
-- gitignore 정책은 프로젝트가 결정 — `.sp/` 를 커밋할지(설계 이력 보존) ignore 할지(scratch)는 프로젝트별.
+- **`.sp/` 는 scratch — gitignore 가 기본**: spec/plan 은 *작업을 위한 중간 산출물(비계)*이지 영속 보존 대상이 아니다. 일이 끝나면 결론은 코드·문서·CHANGELOG 에 반영되므로 비계 자체는 버려도 된다. 따라서 `.sp/` 는 각 repo `.gitignore` 에 추가하고 git 에 커밋하지 않는다(이미 tracked 면 `git rm --cached` 로 추적만 해제, 파일은 디스크에 남김). 설계 이력을 *의도적으로 영구 보존*하기로 한 repo(예: `claudebase` 자신은 `docs/specs/<topic>/` 를 `docs/ARCHITECTURE.md` SSOT 로 떠받침)만 예외로 커밋 — 이는 "scratch 가 아니라 영속 기록"이라는 별도 정책을 명시적으로 택한 경우다.
 
 ## Versioned Release Workflow (preferred for non-trivial features)
 
