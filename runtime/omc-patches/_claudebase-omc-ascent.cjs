@@ -20,34 +20,46 @@ const { existsSync } = require('fs');
 const { join, dirname } = require('path');
 const { homedir } = require('os');
 
-// Priority order: an explicit .omcroot beats an implicit project marker, and
-// a marker nearer to startDir beats a farther one (ascent stops at the first
-// hit). .git is included defensively — getWorktreeRoot() normally catches git
-// repos before this helper runs, but if it didn't, a .git boundary is still a
-// better root than a markerless cwd.
+// Two marker tiers with DIFFERENT precedence semantics:
 //
-// CLAUDE.md is checked both at the dir root (./CLAUDE.md, e.g. a repo) AND at
-// .claude/CLAUDE.md (the project-scope location Claude Code also recognizes,
-// used by non-git workspaces). Missing the .claude/ form was a real defect:
-// it made the patch a no-op on workspaces that keep their project CLAUDE.md
-// under .claude/ rather than at the root.
-const MARKERS = ['.omcroot', '.git', 'CLAUDE.md', '.claude/CLAUDE.md'];
+//   .omcroot (AUTHORITATIVE) — the user's explicit "this is the root" escape
+//     hatch. It wins regardless of depth: a full ascent pass looks for it
+//     first, so an outer .omcroot beats any nearer implicit marker (e.g. a
+//     nested .git checkout inside the workspace). This is what makes .omcroot
+//     a reliable override.
+//
+//   .git / CLAUDE.md / .claude/CLAUDE.md (IMPLICIT) — nearest-wins. The first
+//     ancestor (climbing up) that has any of these is the root. .git is
+//     defensive (getWorktreeRoot() normally catches git repos before this
+//     helper runs). CLAUDE.md is checked both at ./CLAUDE.md (repos) and at
+//     .claude/CLAUDE.md (the project-scope location non-git workspaces use —
+//     missing this form was a real defect that made the patch a no-op there).
+const AUTHORITATIVE_MARKER = '.omcroot';
+const IMPLICIT_MARKERS = ['.git', 'CLAUDE.md', '.claude/CLAUDE.md'];
+
+// Climb from startDir toward $HOME / filesystem root, calling hit(dir) at each
+// level. Returns the first dir for which hit() is truthy, or null.
+function climb(startDir, hit) {
+  const home = homedir();
+  let dir = startDir;
+  while (true) {
+    if (hit(dir)) return dir;
+    if (dir === home) return null; // never use $HOME itself as a project root
+    const parent = dirname(dir);
+    if (parent === dir) return null; // filesystem root (dirname fixed point)
+    dir = parent;
+  }
+}
 
 function ascendToMarker(startDir) {
   if (!startDir) return null;
-  const home = homedir();
-  let dir = startDir;
-  // Bound the climb: stop at $HOME (never use home itself as a project root)
-  // and at the filesystem root (dirname is a fixed point there).
-  while (true) {
-    for (const marker of MARKERS) {
-      if (existsSync(join(dir, marker))) return dir;
-    }
-    if (dir === home) return null;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
+  // Pass 1: authoritative .omcroot anywhere up the tree wins outright.
+  const explicit = climb(startDir, (dir) => existsSync(join(dir, AUTHORITATIVE_MARKER)));
+  if (explicit) return explicit;
+  // Pass 2: nearest dir bearing any implicit marker.
+  return climb(startDir, (dir) =>
+    IMPLICIT_MARKERS.some((m) => existsSync(join(dir, m)))
+  );
 }
 
 module.exports = { ascendToMarker };

@@ -4,9 +4,10 @@ The helper is JS (loaded by OMC's ESM worktree-paths.js via createRequire),
 so these tests drive it through `node -e` and assert the returned root.
 
 Contract (design 2026-05-31-omc-statedir-marker-ascent):
-  ascendToMarker(startDir) climbs parents looking for a project-boundary
-  marker (.omcroot > .git > CLAUDE.md), returns the first dir that has one,
-  stops at $HOME / filesystem root, returns null when none found.
+  ascendToMarker(startDir) resolves a project root in two tiers:
+    - .omcroot (authoritative): wins anywhere up the tree, regardless of depth.
+    - .git / CLAUDE.md / .claude/CLAUDE.md (implicit): nearest-dir wins.
+  Stops at $HOME / filesystem root, returns null when no marker found.
 """
 from __future__ import annotations
 
@@ -57,6 +58,28 @@ def test_finds_dotclaude_claude_md(tmp_path):
     sub = tmp_path / "a" / "b"
     sub.mkdir(parents=True)
     assert ascend(sub, home=str(tmp_path.parent)) == str(tmp_path)
+
+
+def test_outer_omcroot_beats_nearer_git(tmp_path):
+    # Authoritative .omcroot wins regardless of depth: an outer .omcroot must
+    # beat a nested .git checkout sitting between it and startDir. This is the
+    # whole point of .omcroot as a user override.
+    (tmp_path / ".omcroot").write_text("")
+    inner = tmp_path / "inner"
+    (inner / ".git").mkdir(parents=True)
+    sub = inner / "sub"
+    sub.mkdir()
+    assert ascend(sub, home=str(tmp_path.parent)) == str(tmp_path)
+
+
+def test_nearer_git_wins_among_implicit_markers(tmp_path):
+    # Among implicit markers only (no .omcroot anywhere), nearest dir wins.
+    (tmp_path / "CLAUDE.md").write_text("x")
+    inner = tmp_path / "inner"
+    (inner / ".git").mkdir(parents=True)
+    sub = inner / "sub"
+    sub.mkdir()
+    assert ascend(sub, home=str(tmp_path.parent)) == str(inner)
 
 
 def test_returns_none_when_no_marker(tmp_path):

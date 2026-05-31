@@ -43,6 +43,14 @@ if [[ ! -f "$HELPER_SRC" ]]; then
   echo "WARNING: omc statedir-ascent helper missing at $HELPER_SRC — skipping patch"
   exit 0
 fi
+# The patch validates each rewrite with `node --check`. Without node, every
+# rewrite would "fail" validation and restore from .bak — a perpetual WARNING
+# with no hint of the real cause. Skip explicitly instead. (OMC needs node at
+# runtime anyway, so this is unlikely in practice.)
+if ! command -v node >/dev/null 2>&1; then
+  echo "WARNING: node not found — skipping omc statedir-ascent patch"
+  exit 0
+fi
 
 ANCHOR='    const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
 REPLACEMENT="    const root = worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
