@@ -29,13 +29,29 @@ How the empty call is observed (verified from transcript 9d4b2a74):
   code.claude.com/docs/en/hooks) and scan the tail of the JSONL for that
   exact error.
 
+Escalation strategy (revised 2026-05-31 after transcript evidence):
+  A single retry was too weak. Real transcripts show the empty call recurring
+  many times in one session (d6d2baa3: 38 rejections; 9895ae10: 34) because
+  the old hook retried ONCE then let any further empty call pass. On a
+  large-context Opus 4.8 session this is a known model-side emission failure
+  (claude-code #64150) that one retry does not reliably escape. So we now
+  count how many empty rejections sit CONSECUTIVELY at the transcript tail and
+  escalate:
+    streak 1-2 -> REASON_RETRY  (retry, but enforce prose-first discipline)
+    streak 3+  -> REASON_ABANDON (stop calling the tool; state a prose
+                  recommendation and proceed — the user can still interrupt)
+  A successful retry breaks the streak (next Stop sees streak 0 -> allow), so
+  the retry stage self-terminates; the abandon stage is capped at one block
+  via `stop_hook_active` so a model that simply cannot emit the call never
+  wedges the session.
+
 GATE verification (reused from detect_malformed_toolcall.py, live v2.1.158):
   - `decision: "block"` + `reason` is fed back to the model next request
     (detect_malformed proved this works — its block reason changed model
     output). Official docs do not document the injection, but the sibling
     hook is live proof on this machine.
   - `stop_hook_active` is present at runtime (undocumented but used by
-    detect_malformed); gating on it caps the loop at exactly one extra turn.
+    detect_malformed); at the abandon stage it caps intervention at one turn.
 
 Discipline (mirrors detect_malformed_toolcall.py / askuserquestion-guard.py):
   - Never block on a hook bug: any exception / malformed stdin / unreadable
@@ -58,7 +74,9 @@ _ERR_TOOL = "AskUserQuestion"
 _ERR_MISSING = "questions"
 _ERR_PHRASE = "is missing"  # "The required parameter `questions` is missing"
 
-REASON = (
+# Streak 1-2: the call just failed (once or twice). Make it retry, but force
+# the prose-first discipline that prevents the empty payload in the first place.
+REASON_RETRY = (
     "Your last AskUserQuestion call was REJECTED by the harness: the "
     "`questions` array was missing (you emitted the call with an empty "
     "input). The turn was wasted. A PreToolUse hook cannot stop this — the "
@@ -74,6 +92,29 @@ REASON = (
     "3. If there is an obvious recommended choice, do NOT call "
     "AskUserQuestion at all — state the recommendation in prose and proceed; "
     "the user can interrupt. AskUserQuestion is for genuine branch decisions."
+)
+
+# Streak 3+: retrying has not worked. On a large-context Opus session the
+# empty-payload emission is a known model-side failure mode (claude-code
+# issue #64150) that repeated retries do NOT reliably escape — one observed
+# session looped 38 times. So STOP retrying the tool and route around it:
+# state the recommendation in prose and proceed. The user keeps a real choice
+# (they can interrupt) and the session is no longer wedged.
+REASON_ABANDON = (
+    "Your AskUserQuestion call has now failed with a missing `questions` "
+    "array THREE OR MORE TIMES IN A ROW. Retrying the tool is not working — "
+    "on a large-context session this is a known model-side emission failure "
+    "(claude-code #64150) that more retries will not reliably escape. "
+    "STOP calling AskUserQuestion for this decision.\n"
+    "Instead, RIGHT NOW:\n"
+    "1. In your normal reply text, write out the choice you were going to "
+    "ask about, list the options in prose, and state which one you "
+    "RECOMMEND and why.\n"
+    "2. Proceed with that recommended option. Do NOT call AskUserQuestion "
+    "again for this decision — the user can read your recommendation and "
+    "interrupt if they want a different option.\n"
+    "3. If the context has grown very large, consider telling the user they "
+    "can run /compact to reduce the malformed-call rate going forward."
 )
 
 
@@ -121,14 +162,29 @@ def _is_empty_askuserquestion_error(block: dict) -> bool:
     return _ERR_TOOL in text and _ERR_MISSING in text and _ERR_PHRASE in text
 
 
-def _looks_like_empty_call(transcript_path: str) -> bool:
-    """True iff the most recent tool_result in the transcript is an empty
-    AskUserQuestion rejection. Anchored to the LAST tool_result so an older,
-    already-recovered failure earlier in the session never re-triggers."""
+def _count_consecutive_empty_calls(transcript_path: str) -> int:
+    """Count how many empty-AskUserQuestion rejections sit at the very tail of
+    the transcript, CONSECUTIVELY, newest-first. A non-empty-call tool_result
+    (any successful or unrelated tool) breaks the streak — that boundary is
+    what distinguishes 'currently looping' from 'an older, already-recovered
+    failure earlier in the session'.
+
+    Returns:
+      0  -> the last tool_result is NOT an empty-call rejection (allow stop)
+      1  -> exactly one empty call at the tail (first failure)
+      2  -> two in a row (the model already retried once and failed again)
+      3+ -> runaway; we will force AskUserQuestion to be abandoned entirely
+    """
     results = _tail_tool_results(transcript_path)
     if not results:
-        return False
-    return _is_empty_askuserquestion_error(results[-1])
+        return 0
+    streak = 0
+    for block in reversed(results):
+        if _is_empty_askuserquestion_error(block):
+            streak += 1
+        else:
+            break  # streak broken by a different/successful tool_result
+    return streak
 
 
 def _log(cwd: str, record: dict) -> None:
@@ -161,28 +217,49 @@ def main() -> int:
     if not isinstance(transcript_path, str) or not transcript_path:
         return 0  # no transcript to inspect -> allow stop
 
-    if not _looks_like_empty_call(transcript_path):
+    streak = _count_consecutive_empty_calls(transcript_path)
+    if streak == 0:
         return 0  # last tool_result is not an empty-call rejection -> allow
 
     cwd = payload.get("cwd") or os.getcwd()
     already_firing = payload.get("stop_hook_active") is True
+
+    # Decide the intervention by how many empty calls are stacked at the tail.
+    #   1-2 in a row  -> retry with prose-first discipline (REASON_RETRY)
+    #   3+ in a row   -> stop retrying, force prose+recommend (REASON_ABANDON)
+    if streak >= 3:
+        reason, mode = REASON_ABANDON, "abandon"
+    else:
+        reason, mode = REASON_RETRY, "retry"
+
+    # Loop guard: `stop_hook_active` is True only when THIS Stop is the re-fire
+    # caused by our own previous block. If we already blocked once for the
+    # current streak and the model STILL produced an empty call (streak grew),
+    # blocking again on every re-fire would wedge the session in our own loop.
+    # So: at the abandon stage, intervene at most once — if we are already
+    # firing, let the stop through. The retry stage is naturally self-limiting
+    # because a successful retry breaks the streak (-> streak 0 -> allow), and
+    # a failed retry escalates the streak to 3+ -> the abandon branch.
+    blocked = True
+    if already_firing and mode == "abandon":
+        blocked = False
 
     _log(
         cwd,
         {
             "session_id": payload.get("session_id"),
             "signal": "empty_askuserquestion",
+            "streak": streak,
+            "mode": mode,
             "stop_hook_active": already_firing,
-            "blocked": not already_firing,
+            "blocked": blocked,
         },
     )
 
-    # Loop guard: if this Stop is the re-fire after our own block, do NOT block
-    # again — log only and let the session stop. Caps intervention at one turn.
-    if already_firing:
+    if not blocked:
         return 0
 
-    return _block(REASON)
+    return _block(reason)
 
 
 if __name__ == "__main__":

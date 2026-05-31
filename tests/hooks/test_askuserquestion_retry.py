@@ -145,7 +145,12 @@ def test_hook_anchors_to_last_result_only(tmp_path):
     assert out == {}, "a recovered earlier failure must not re-block"
 
 
-def test_hook_dedupes_on_refire(tmp_path):
+def test_retry_stage_keeps_blocking_on_refire(tmp_path):
+    # NEW CONTRACT (2026-05-31): at the retry stage (streak 1-2) the hook keeps
+    # blocking even on a re-fire, so the model is pushed to retry up to twice.
+    # A single empty call at the tail is streak 1 -> retry, block regardless of
+    # stop_hook_active. (The streak self-terminates: a successful retry clears
+    # the tail; a failed one escalates the streak into the abandon branch.)
     tpath = _write_transcript(tmp_path, [_err_result_block()])
     out = _run_hook({
         "hook_event_name": "Stop",
@@ -153,7 +158,54 @@ def test_hook_dedupes_on_refire(tmp_path):
         "transcript_path": tpath,
         "cwd": str(tmp_path),
     })
-    assert out == {}, "must not block twice for the same empty call (loop guard)"
+    assert out.get("decision") == "block", "retry stage must still block on re-fire"
+    assert "rejected" in out.get("reason", "").lower()
+
+
+def test_two_in_a_row_still_retries(tmp_path):
+    # streak 2 is still the retry stage
+    tpath = _write_transcript(tmp_path, [_err_result_block(), _err_result_block()])
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+    })
+    assert out.get("decision") == "block"
+    # the retry reason, not the abandon reason
+    assert "three or more times" not in out.get("reason", "").lower()
+
+
+def test_three_in_a_row_forces_abandon(tmp_path):
+    # streak 3 -> abandon stage: stop retrying the tool, force prose+recommend
+    tpath = _write_transcript(
+        tmp_path, [_err_result_block(), _err_result_block(), _err_result_block()])
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+    })
+    assert out.get("decision") == "block"
+    assert "three or more times" in out.get("reason", "").lower()
+    assert "stop calling askuserquestion" in out.get("reason", "").lower()
+
+
+def test_abandon_stage_caps_at_one_block_on_refire(tmp_path):
+    # streak 3+ AND our own block re-fired -> do NOT block again (loop guard).
+    # This is what stops a model that simply cannot emit the call from wedging
+    # the session. Use streak 4 to mimic "already abandoned once, still failed".
+    tpath = _write_transcript(
+        tmp_path,
+        [_err_result_block(), _err_result_block(),
+         _err_result_block(), _err_result_block()])
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": True,  # the abandon block already re-fired
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+    })
+    assert out == {}, "abandon stage must release the stop on re-fire (loop guard)"
 
 
 def test_hook_ignores_non_stop_event(tmp_path):
