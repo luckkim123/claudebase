@@ -50,6 +50,20 @@ recreates it.
 
 Put machine-specific plugins / permissions in `~/.claude/settings.local.json` (gitignored). Claude Code merges it on top of `config/settings.json`. See `templates/settings.local.example.json`.
 
+## Output style (opt-in)
+
+출력 형식을 *코드로* 강제하는 hook 2개(매 턴 baseline 주입 + 필러/아첨 오프너 검출). 기본 **off** —
+원하는 머신에서만 shell 에 export:
+
+```bash
+export CLAUDEBASE_OUTPUT_STYLE=nudge     # baseline 주입만 (block 없음)
+export CLAUDEBASE_OUTPUT_STYLE=enforce   # 주입 + 구어체/아첨 오프너 block
+```
+
+결론 먼저·산문 우선·비교는 표·간결 단정형·불확실성은 지식경계 명시 + CJK 안 깨지는 박스(`box.py`).
+근거·설계·명세: [`docs/specs/2026-06-01-output-style-enforcement/`](docs/specs/2026-06-01-output-style-enforcement/) ·
+[`runtime/output-style/concise-structured.md`](runtime/output-style/concise-structured.md).
+
 ## Learn more
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — directory layout, symlink model, plugin sync, secrets, drift detection

@@ -48,6 +48,7 @@ Before concluding: zero pending tasks, tests passing, verifier evidence collecte
 Hooks inject `<system-reminder>` tags. Key patterns: `hook success: Success` (proceed), `[MAGIC KEYWORD: ...]` (invoke skill), `The boulder never stops` (ralph/ultrawork active).
 Persistence: `<remember>` (7 days), `<remember priority>` (permanent).
 Kill switches: `DISABLE_OMC`, `OMC_SKIP_HOOKS` (comma-separated).
+Output-style hooks: `CLAUDEBASE_OUTPUT_STYLE` (off|nudge|enforce, default off — opt-in; see runtime/output-style/).
 </hooks_and_context>
 
 <cancellation>
