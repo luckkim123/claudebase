@@ -75,6 +75,18 @@ fi
 
 maybe_install_omc_hud
 
+# 8. settings-shrink guard: point this clone's git hooks at the tracked
+# installer/githooks dir so the pre-commit guard (which blocks committing a
+# CLI-shrunk config/settings.json) is active on every machine. .git/hooks alone
+# is per-clone + untracked, so without this the guard would be silently absent
+# on fresh clones. See docs/specs/2026-06-01-settings-shrink-guard/.
+if command -v git >/dev/null 2>&1 && [[ -d "$REPO_DIR/.git" ]]; then
+  if [[ "$(git -C "$REPO_DIR" config --local --get core.hooksPath 2>/dev/null)" != "installer/githooks" ]]; then
+    git -C "$REPO_DIR" config --local core.hooksPath installer/githooks
+    log "linked git hooks: core.hooksPath -> installer/githooks (settings-shrink guard active)"
+  fi
+fi
+
 # Stage 9 → lib/drift.sh (P3-T10).
 # shellcheck source=lib/drift.sh
 source "$REPO_DIR/installer/lib/drift.sh"

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# installer/githooks/pre-commit — block committing a config/settings.json that
+# the Claude Code CLI silently shrank (dropped the custom hooks block,
+# non-official plugins, or the omcHud.layout.main array on /permissions,
+# plugin toggle, /compact, or HUD change).
+#
+# This is the ONLY guard the CLI's re-serializer can never reach — the CLI never
+# runs git, so it cannot rewrite this hook, and a shrunk file becomes literally
+# uncommittable (so silent loss can never reach origin). A guard inside
+# settings.json's own hooks block would be deleted by the very shrink it detects.
+#
+# Deployed per-clone by installer/install.sh via `git config core.hooksPath
+# installer/githooks` (a tracked dir — survives clone, unlike .git/hooks).
+#
+# Bypass is explicit and intentional only: `git commit --no-verify`.
+set -euo pipefail
+
+REPO_DIR="$(git rev-parse --show-toplevel)"
+
+# Only act when config/settings.json is actually staged.
+if ! git diff --cached --name-only | grep -qx 'config/settings.json'; then
+  exit 0
+fi
+
+VERIFY="$REPO_DIR/installer/lib/settings_verify.py"
+if [[ ! -f "$VERIFY" ]]; then
+  # Fail-open if the verifier is absent (e.g. mid-refactor) — never wedge commits
+  # on a missing tool, but say so loudly.
+  echo "[pre-commit] WARNING: $VERIFY missing — settings integrity NOT checked" >&2
+  exit 0
+fi
+
+PY="$(command -v python3 || command -v python || true)"
+if [[ -z "$PY" ]]; then
+  echo "[pre-commit] WARNING: python3 not found — settings integrity NOT checked" >&2
+  exit 0
+fi
+
+# Check the STAGED blob (what would actually be committed), not the worktree.
+if git show ":config/settings.json" | "$PY" "$VERIFY" -; then
+  exit 0
+fi
+
+echo "" >&2
+echo "[pre-commit] BLOCKED: config/settings.json is missing critical keys (see above)." >&2
+echo "[pre-commit] This is the CLI-shrink failure the guard exists to stop." >&2
+echo "[pre-commit] Fix:    installer/bin/restore-settings.sh" >&2
+echo "[pre-commit] Intent: if you truly changed a critical key, update config/settings.critical.json and re-stage." >&2
+echo "[pre-commit] Force:  git commit --no-verify   (only if you know exactly why)" >&2
+exit 1

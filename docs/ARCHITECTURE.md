@@ -148,3 +148,37 @@ Three knobs for things that should not be shared across machines:
 ```
 
 That's the cue to commit (or revert) Claude's changes. The installer never auto-stages or auto-reverts — it only flags.
+
+### Settings-shrink guard
+
+A *formatting* drift is harmless. A **shrink** is not: on certain events
+(`/permissions` approval, plugin enable/disable, `/compact`, HUD preset change)
+the Claude CLI re-serializes `settings.json` through its own schema and silently
+**drops keys it doesn't recognize** — the custom `hooks` block (the defense
+hooks), non-official plugins + their marketplaces, and `omcHud.layout.main`.
+Because the file is symlinked into this repo, that loss lands as drift, and
+without a guard it can be committed and pushed to every machine.
+
+Three out-of-`settings.json` layers prevent silent loss (a guard *inside* the
+`hooks` block would be deleted by the very shrink it detects — the
+self-deletion trap):
+
+1. **Enforcement — git pre-commit hook** (`installer/githooks/pre-commit`,
+   deployed by `install.sh` via `git config core.hooksPath installer/githooks`).
+   When `config/settings.json` is staged it runs `installer/lib/settings_verify.py`
+   against the staged blob and **blocks the commit** if any critical key from
+   `config/settings.critical.json` is missing. The CLI never runs git, so it can
+   never rewrite this hook — a shrunk file is uncommittable (bypass only via the
+   explicit `git commit --no-verify`).
+2. **Safety net — `drift.sh`** runs the same validator against the working tree
+   at the end of every install and escalates a shrink from a soft `drift:` note
+   to a loud `CRITICAL: ... MISSING <keys>`.
+3. **Recovery — `installer/bin/restore-settings.sh`** restores the file from
+   `origin/main` (the cross-machine canonical) and re-verifies. Every guard's
+   error message cites it.
+
+The manifest `config/settings.critical.json` checks **named** plugin membership
+(not a count — a count passes when the CLI swaps one plugin for another). When
+you *intentionally* add or remove a critical key, update the manifest in the
+same commit; never auto-bless. Full design:
+`docs/specs/2026-06-01-settings-shrink-guard/`.
