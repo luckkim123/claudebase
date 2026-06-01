@@ -46,17 +46,72 @@ def visual_width(s: str) -> int:
     return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
 
 
-def render_box(title: str, lines: list[str], ascii_only: bool = False) -> str:
+def wrap_visual(text: str, width: int) -> list[str]:
+    """Wrap `text` into segments each ≤ `width` visual columns. Prefers space
+    boundaries; falls back to hard width-based breaks for CJK / spaceless runs.
+    Content is preserved exactly when segments are concatenated (space-joins
+    are reconstructable; no characters are dropped)."""
+    if width < 1:
+        width = 1
+    segments: list[str] = []
+    cur = ""
+    cur_w = 0
+
+    def flush():
+        nonlocal cur, cur_w
+        segments.append(cur)
+        cur, cur_w = "", 0
+
+    for ch in text:
+        cw = visual_width(ch)
+        # If a single char alone exceeds width (rare), emit it on its own line.
+        if cw > width:
+            if cur:
+                flush()
+            segments.append(ch)
+            continue
+        if cur_w + cw > width:
+            # Try to break at the last space within the current segment so we
+            # don't split a word; otherwise hard-break at the width boundary.
+            sp = cur.rfind(" ")
+            if sp > 0 and ch != " ":
+                head, tail = cur[:sp], cur[sp + 1:]
+                segments.append(head)
+                cur = tail
+                cur_w = visual_width(tail)
+            else:
+                flush()
+        cur += ch
+        cur_w += cw
+    if cur:
+        flush()
+    return segments or [""]
+
+
+def render_box(
+    title: str, lines: list[str], ascii_only: bool = False, max_width: int = 80
+) -> str:
     if ascii_only:
         tl, tr, bl, br, h, v = "+", "+", "+", "+", "-", "|"
     else:
         tl, tr, bl, br, h, v = "╭", "╮", "╰", "╯", "─", "│"
     title = title or ""
     lines = lines or [""]
-    inner = max([visual_width(title) + 4] + [visual_width(line) + 2 for line in lines])
+    # Inner text area = max_width minus borders/padding ("│ " + " │" = 4 cols).
+    text_cap = max(8, max_width - 4)
+    wrapped: list[str] = []
+    for line in lines:
+        for seg in wrap_visual(line, text_cap):
+            # Trim a leading space that a width-forced break pushed to the
+            # start of a continuation line (cosmetic; word breaks already
+            # consume their space).
+            wrapped.append(seg.lstrip(" ") if seg != " " else seg)
+    # Box inner width fits the longest wrapped line and the title, capped.
+    inner = max([visual_width(title) + 4] + [visual_width(line) + 2 for line in wrapped])
+    inner = min(inner, max_width - 2)
     top = tl + h + " " + title + " " + h * (inner - visual_width(title) - 3) + tr
     out = [top]
-    for line in lines:
+    for line in wrapped:
         out.append(v + " " + line + " " * (inner - visual_width(line) - 2) + " " + v)
     out.append(bl + h * inner + br)
     return "\n".join(out)

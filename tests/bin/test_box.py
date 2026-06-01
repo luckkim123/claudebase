@@ -67,6 +67,49 @@ def test_cli_no_args_exits_clean():
     assert proc.returncode == 0  # no crash on empty
 
 
+# ---- wrapping: long lines must not overflow the max width ------------------
+
+
+def test_wrap_width_breaks_long_line():
+    m = _load()
+    out = m.wrap_visual("a" * 100, 40)
+    assert all(m.visual_width(seg) <= 40 for seg in out)
+    assert "".join(out) == "a" * 100  # no content lost
+
+
+def test_wrap_prefers_space_boundaries():
+    m = _load()
+    out = m.wrap_visual("the quick brown fox jumps over", 12)
+    # every segment within width, and no word is split mid-token when a space fit exists
+    assert all(m.visual_width(seg) <= 12 for seg in out)
+    assert "quick" in " ".join(out)
+
+
+def test_wrap_cjk_no_space_force_breaks():
+    m = _load()
+    # Korean has no spaces here — must still break by visual width
+    s = "가나다라마바사아자차카타파하" * 3
+    out = m.wrap_visual(s, 20)
+    assert all(m.visual_width(seg) <= 20 for seg in out)
+    assert "".join(out) == s
+
+
+def test_render_box_wraps_long_line():
+    m = _load()
+    long = "§2.3.2 미시 표현 어색함 3건 " * 5
+    out = m.render_box("분석", [long], max_width=60)
+    widths = {m.visual_width(line) for line in out.splitlines()}
+    assert len(widths) == 1, "all rows share one width"
+    assert widths.pop() <= 60, "box must not exceed max_width"
+
+
+def test_render_box_short_line_no_forced_width():
+    m = _load()
+    # a short line should NOT be padded out to max_width
+    out = m.render_box("T", ["hi"], max_width=80)
+    assert m.visual_width(out.splitlines()[0]) < 80
+
+
 # ---- typed boxes: 5 defined types + free-title fallback --------------------
 
 
