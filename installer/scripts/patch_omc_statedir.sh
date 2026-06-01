@@ -149,4 +149,75 @@ while IFS= read -r wp; do
   fi
 done < <(find "$OMC_ROOT" -path '*/dist/lib/worktree-paths.js' -type f 2>/dev/null)
 
+# ── Point D for the MCP bridge bundle (bridge/mcp-server.cjs) ─────────────────
+# The HUD path is dist/lib/worktree-paths.js (patched above), but OMC ALSO ships
+# worktree-paths INLINED into bridge/mcp-server.cjs — the MCP server that
+# notepad/state/team/mission tools run through. That bundled getOmcRoot is a
+# separate copy; patching only dist/lib leaves MCP tools scattering .omc in
+# non-git subfolders. So apply point D there too. Differences from the ESM file:
+#   - It is CommonJS (.cjs), so NO createRequire shim — `require('./...')` works
+#     directly. The helper is copied next to mcp-server.cjs.
+#   - esbuild renames the join import (import_pathNN.join), so the next-line
+#     return is `return (0, import_pathNN.join)(root, OmcPaths.ROOT);` — matched
+#     with a flexible NN.
+#   - The OMC_STATE_DIR branch uses `root2` (not `root`), so the bare `root`
+#     anchor + this return lookahead pins only the default fallback.
+# NOTE: an already-running MCP server holds the old code in memory; the patch
+# takes effect when that server next restarts (new session / OMC reload).
+BRIDGE_ANCHOR='  const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
+BRIDGE_REPL="  const root = require('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot) || worktreeRoot || getWorktreeRoot() || require('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
+
+while IFS= read -r bp; do
+  [[ -f "$bp" ]] || continue
+  bdir="$(dirname "$bp")"
+
+  if [[ "$DRY_RUN" != "1" ]]; then
+    cp "$HELPER_SRC" "$bdir/_claudebase-omc-ascent.cjs"
+  fi
+
+  # Idempotency: the bridge marks itself with the same ascent calls.
+  if grep -q "ascendToMarker(worktreeRoot)" "$bp" 2>/dev/null; then
+    skipped=$((skipped + 1))
+    continue
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "would patch omc statedir-ascent (bridge) in: $bp"
+    patched=$((patched + 1))
+    continue
+  fi
+
+  cp "$bp" "$bp.bak"
+
+  # Rewrite only the bare-`root` fallback whose next line is the esbuild-mangled
+  # `return (0, import_pathNN.join)(root, OmcPaths.ROOT);`.
+  BRIDGE_ANCHOR="$BRIDGE_ANCHOR" BRIDGE_REPL="$BRIDGE_REPL" \
+  perl -ne '
+    BEGIN { $a=$ENV{BRIDGE_ANCHOR}; $r=$ENV{BRIDGE_REPL}; @buf=(); }
+    push @buf, $_;
+    if (@buf == 2) {
+      my ($prev,$cur) = @buf;
+      chomp(my $pc=$prev); chomp(my $cc=$cur);
+      if ($pc eq $a && $cc =~ /^\s*return \(0, import_path\d+\.join\)\(root, OmcPaths\.ROOT\);$/) {
+        $prev = "$r\n";
+      }
+      print $prev;
+      shift @buf;
+    }
+    END { print @buf; }
+  ' "$bp" > "$bp.tmp" && mv "$bp.tmp" "$bp"
+
+  ok=1
+  grep -q "ascendToMarker(worktreeRoot)" "$bp" || ok=0
+  grep -q "ascendToMarker(process.cwd())" "$bp" || ok=0
+  if [[ "$ok" == "1" ]] && node --check "$bp" 2>/dev/null; then
+    rm -f "$bp.bak"
+    patched=$((patched + 1))
+  else
+    echo "WARNING: omc statedir-ascent patch did not apply cleanly to $bp — restoring"
+    mv "$bp.bak" "$bp"
+    rm -f "$bdir/_claudebase-omc-ascent.cjs"
+  fi
+done < <(find "$OMC_ROOT" -path '*/bridge/mcp-server.cjs' -type f 2>/dev/null)
+
 echo "omc statedir-ascent patch: patched=$patched, already-patched=$skipped"

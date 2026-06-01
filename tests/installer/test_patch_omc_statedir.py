@@ -46,16 +46,50 @@ export function getOmcRoot(worktreeRoot) {{
 '''
 
 
+# Real bridge shape: a CommonJS bundle (bridge/mcp-server.cjs) with
+# worktree-paths INLINED. getOmcRoot's fallback uses the bare `root` var and the
+# next line is the esbuild-mangled `return (0, import_path11.join)(root, ...)`.
+# The OMC_STATE_DIR branch uses `root2` so the patch must NOT touch it. No
+# `import`/`export` — it is CJS, so the patch must use require(), not the ESM
+# createRequire shim.
+BRIDGE_ANCHOR = "  const root = worktreeRoot || getWorktreeRoot() || process.cwd();"
+STUB_BRIDGE = f'''\
+"use strict";
+const import_path11 = require("path");
+function getWorktreeRoot() {{ return null; }}
+const OmcPaths = {{ ROOT: ".omc" }};
+
+function getOmcRoot(worktreeRoot) {{
+  const customDir = process.env.OMC_STATE_DIR;
+  if (customDir) {{
+  const root2 = worktreeRoot || getWorktreeRoot() || process.cwd();
+    return (0, import_path11.join)(customDir, String(root2).length);
+  }}
+{BRIDGE_ANCHOR}
+  return (0, import_path11.join)(root, OmcPaths.ROOT);
+}}
+module.exports = {{ getOmcRoot }};
+'''
+
+
 def make_mock_omc(tmp: Path) -> Path:
-    dist = tmp / "plugins" / "cache" / "omc" / "oh-my-claudecode" / "4.14.0" / "dist" / "lib"
+    base = tmp / "plugins" / "cache" / "omc" / "oh-my-claudecode" / "4.14.0"
+    dist = base / "dist" / "lib"
     dist.mkdir(parents=True)
     (dist / "worktree-paths.js").write_text(STUB_JS)
+    # Real OMC also bundles worktree-paths into the CJS MCP bridge — a separate
+    # copy the patch must reach so MCP tools stop scattering .omc too.
+    bridge = base / "bridge"
+    bridge.mkdir(parents=True)
+    (bridge / "mcp-server.cjs").write_text(STUB_BRIDGE)
     # Real OMC package is ESM — the stub dir needs a type:module package.json
     # so `node --check` / require-from-ESM behaves like production.
-    (tmp / "plugins" / "cache" / "omc" / "oh-my-claudecode" / "4.14.0" / "package.json").write_text(
-        '{"type":"module"}'
-    )
+    (base / "package.json").write_text('{"type":"module"}')
     return tmp
+
+
+def bridge_of(cfg: Path) -> Path:
+    return cfg / "plugins/cache/omc/oh-my-claudecode/4.14.0/bridge"
 
 
 def dist_of(cfg: Path) -> Path:
@@ -113,7 +147,8 @@ def test_idempotent_second_run_skips(tmp_path):
     r2 = run_patch(cfg)
     after = (dist_of(cfg) / "worktree-paths.js").read_text()
     assert before == after  # no double-patch
-    assert "already-patched=1" in (r2.stdout + r2.stderr)
+    # Both copies (dist/lib + bridge bundle) skip on the second run.
+    assert "already-patched=2" in (r2.stdout + r2.stderr)
 
 
 def test_helper_refreshed_even_when_already_patched(tmp_path):
@@ -125,7 +160,8 @@ def test_helper_refreshed_even_when_already_patched(tmp_path):
     helper = dist_of(cfg) / "_claudebase-omc-ascent.cjs"
     helper.write_text("// STALE\n")  # corrupt the live helper
     r2 = run_patch(cfg)  # second run: JS already patched (skipped), helper must refresh
-    assert "already-patched=1" in (r2.stdout + r2.stderr)
+    # dist/lib + bridge bundle both skip the rewrite on the second run.
+    assert "already-patched=2" in (r2.stdout + r2.stderr)
     assert helper.read_text() == HELPER.read_text()  # refreshed to repo source
 
 
@@ -209,4 +245,58 @@ def test_ascent_ignores_untrusted_worktreeroot_argument(tmp_path):
         capture_output=True, text=True, check=True,
     )
     # Must converge to the marker root, NOT echo back the subfolder.
+    assert out.stdout == str(proj / ".omc")
+
+
+def test_bridge_bundle_is_patched(tmp_path):
+    # OMC inlines worktree-paths into the CJS MCP bridge — a second copy. The
+    # patch must reach it too (dist/lib alone leaves MCP tools scattering .omc).
+    cfg = make_mock_omc(tmp_path)
+    run_patch(cfg)
+    bridge = bridge_of(cfg) / "mcp-server.cjs"
+    js = bridge.read_text()
+    assert "ascendToMarker(worktreeRoot)" in js
+    assert "ascendToMarker(process.cwd())" in js
+    # CJS bridge uses plain require(), NOT the ESM createRequire shim.
+    assert "_cbRequire" not in js
+    assert "require('./_claudebase-omc-ascent.cjs')" in js
+    # Helper copied next to the bridge so the require resolves.
+    assert (bridge_of(cfg) / "_claudebase-omc-ascent.cjs").exists()
+    # The OMC_STATE_DIR branch (root2) must stay untouched.
+    assert "const root2 = worktreeRoot || getWorktreeRoot() || process.cwd();" in js
+    chk = subprocess.run(["node", "--check", str(bridge)], capture_output=True, text=True)
+    assert chk.returncode == 0, chk.stderr
+
+
+def test_bridge_idempotent(tmp_path):
+    cfg = make_mock_omc(tmp_path)
+    run_patch(cfg)
+    bridge = bridge_of(cfg) / "mcp-server.cjs"
+    before = bridge.read_text()
+    run_patch(cfg)
+    assert bridge.read_text() == before  # no double-patch
+    assert before.count("ascendToMarker(worktreeRoot)") == 1
+
+
+def test_bridge_getomcroot_converges_via_require(tmp_path):
+    # End-to-end through the bridge's OWN require resolution: the patched
+    # getOmcRoot, called with a non-git subfolder, must converge to the marker
+    # root using require('./_claudebase-omc-ascent.cjs') resolved next to the
+    # bridge file (not the dist copy).
+    cfg = make_mock_omc(tmp_path)
+    assert HELPER.exists()
+    run_patch(cfg)
+    bridge = bridge_of(cfg) / "mcp-server.cjs"
+
+    proj = tmp_path / "proj3"
+    sub = proj / "a" / "b"
+    sub.mkdir(parents=True)
+    (proj / "CLAUDE.md").write_text("x")
+
+    code = (
+        f"process.env.HOME={json.dumps(str(tmp_path))};"
+        f"const m=require({json.dumps(str(bridge))});"
+        f"process.stdout.write(m.getOmcRoot({json.dumps(str(sub))}));"
+    )
+    out = subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True)
     assert out.stdout == str(proj / ".omc")

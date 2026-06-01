@@ -207,3 +207,14 @@ const root = _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeR
 - 회귀 5/5: ①git repo 불변 ②git 하위폴더 repo루트 수렴 ③비-git 루트 ④**비-git 깊은하위→루트 수렴·validateWD throw 없음** ⑤마커없는 폴더→cwd 폴백(광역오염 없음).
 - 멱등: 2회 실행 시 `already-patched=1`, ascent 라인 중복 0.
 - `tests/installer/test_patch_omc_statedir.py` 10 + 전체 82 pass (옵션 D 핵심 = `test_ascent_ignores_untrusted_worktreeroot_argument`: 하위폴더를 인자로 넘겨도 루트 수렴).
+
+### 9-1. 두 번째 사본 — MCP bridge 번들 (2026-06-01 추가)
+**dist/lib 만 패치하면 산포의 절반만 막힌다.** OMC 는 worktree-paths 를 **두 곳**에 들고 있다:
+1. `dist/lib/worktree-paths.js` — 독립 ESM. HUD(`dist/hud/index.js`)·CLI 가 import. (위 §9 가 패치)
+2. `bridge/mcp-server.cjs` — worktree-paths 가 **인라인 번들**된 CJS MCP 서버. notepad/state/team/mission/wiki 등 **MCP 툴**이 이 사본의 `getOmcRoot` 를 씀.
+
+dist 만 패치하면 MCP 툴이 비-git 하위폴더 cwd 에서 동작할 때 거기에 `.omc` 를 만든다(실측: 진단 중 paper 폴더 cwd 로 MCP 가 돌아 `paper/.omc/state/` 빈 디렉토리 재생성). 그래서 bridge 번들에도 옵션 D 적용. dist 와 다른 점:
+- **CJS** 라 `createRequire` 셔임 불필요 — `require('./_claudebase-omc-ascent.cjs')` 직접. 헬퍼를 `bridge/` 옆에 복사.
+- esbuild 가 join import 를 리네임(`(0, import_pathNN.join)(root, ...)`) → 다음줄 lookahead 를 유연한 `NN` 으로 매칭. OMC_STATE_DIR 분기는 `root2` 변수라 bare-`root` 앵커가 기본 fallback 만 핀포인트.
+- **한계**: 이미 떠 있는 MCP 서버 프로세스는 stock 코드를 메모리에 들고 있어, 패치 효과는 그 서버 **재시작(새 세션/OMC reload) 후**부터. ESM/CJS 모듈 캐시 특성상 불가피.
+- 검증: /tmp 복사본에 dist+bridge 동시 패치 → bridge/ 위치 require resolution 으로 `getOmcRoot(하위폴더)`·`getOmcRoot()` 둘 다 루트 수렴 실측. bridge 테스트 3종(`test_bridge_bundle_is_patched`·`test_bridge_idempotent`·`test_bridge_getomcroot_converges_via_require`) 추가 → 13 patch + 85 full pass.
