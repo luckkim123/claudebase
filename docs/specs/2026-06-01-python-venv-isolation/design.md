@@ -79,12 +79,17 @@ modifying external plugin repos.
    python-hwpx→hwpx). matplotlib→matplotlib; Pillow→PIL (explicit mapping,
    since the `python-` strip rule does not apply to Pillow).
 
-5. **PATH injection** → add `~/.claude/.venv/bin` to the front of `env.PATH`
-   in `config/settings.json`, so a consumer's bare `python3` resolves to the
-   venv interpreter inside a Claude Code session. This is the single point
-   that connects the venv to the un-editable external consumers. OS-agnostic
-   at the settings layer (the path string differs per OS — see windows
-   mirroring).
+5. **PATH injection** → add the venv bin dir to the front of `env.PATH` in
+   the **machine-local `~/.claude/settings.local.json`** (gitignored), NOT
+   the shared `config/settings.json`. Rationale: the venv path is a
+   machine-specific absolute path (`/Users/<user>/.claude/.venv/bin`; `~`/
+   `$HOME` do not expand in the settings `env` block), and CLAUDE.md:49
+   forbids baking machine-specific paths into shared files. Since the venv is
+   itself machine-local, its PATH entry belongs in the machine-local settings
+   file. Claude Code merges `settings.local.json` over `config/settings.json`,
+   so this still reaches the session env that the consumers' bare `python3`
+   sees. (Revised from the original "shared settings.json" decision during
+   plan self-review — see plan Task 3.)
 
 6. **Windows mirroring** → `install.ps1` builds the venv with
    `py -3.12 -m venv` and probes `<venv>\Scripts\python.exe` (vs macOS
@@ -105,7 +110,7 @@ modifying external plugin repos.
 |---|---|
 | `platform/macos/install.sh` | Replace the `--user` pip stage with: probe interpreter → create `~/.claude/.venv` if absent → pip-install missing packages into venv → silent-skip when present |
 | `platform/windows/install.ps1` | Mirror: `py -3.12 -m venv`, `Scripts\python.exe` probe, same package list |
-| `config/settings.json` | Prepend venv `bin`/`Scripts` to `env.PATH` |
+| `~/.claude/settings.local.json` (machine-local, gitignored) | Prepend venv `bin`/`Scripts` to `env.PATH` (NOT shared settings.json — see decision 5) |
 | `README.md` | Document venv + the docx/hwpx/pptx dependency set |
 | `docs/ARCHITECTURE.md` | Document venv location, base-interpreter probe, PATH-injection link to consumers |
 
@@ -120,7 +125,7 @@ install.sh
         ▼
      ~/.claude/.venv/bin/pip install <missing of pptx,docx,hwpx,matplotlib,Pillow>
         ▼  (probe each via venv python; skip silently if all present)
-config/settings.json  env.PATH = "~/.claude/.venv/bin:${PATH}"
+~/.claude/settings.local.json  env.PATH = "<abs venv bin>:${PATH}"  (machine-local)
         ▼
 Claude Code session  →  omd doc-builder / mckinsey slide-agent
         ▼  bare `python3`  resolves to  ~/.claude/.venv/bin/python (3.12)
