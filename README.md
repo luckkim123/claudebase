@@ -28,6 +28,24 @@ installer/install.sh                  # re-render mcp.json
 
 `secrets/secrets.env` is gitignored.
 
+## Document-skill Python dependencies
+
+The `oh-my-docs` (omd) and `ppt-academic` skills build documents with Python
+libraries: `python-pptx`, `python-docx`, `python-hwpx`, `matplotlib`,
+`Pillow`. `installer/install.sh` installs these into a dedicated virtual
+environment at `~/.claude/.venv` built on Python ≥3.10 (required by
+`python-hwpx`; the system `python3` may be older, and Homebrew Python is PEP
+668 externally-managed). Prepend the venv's `bin` to the session `PATH` so
+the skills' bare `python3` calls resolve to it:
+
+```jsonc
+// ~/.claude/settings.local.json  (machine-local, gitignored)
+{ "env": { "PATH": "/Users/<you>/.claude/.venv/bin:$PATH" } }
+```
+
+The venv is machine-local (not git-synced) — re-running `installer/install.sh`
+recreates it.
+
 ## Per-machine overrides
 
 Put machine-specific plugins / permissions in `~/.claude/settings.local.json` (gitignored). Claude Code merges it on top of `config/settings.json`. See `templates/settings.local.example.json`.

@@ -84,6 +84,36 @@ MCP server credentials are kept out of git:
 
 If you don't have an `secrets.env`, the installer renders the template verbatim (placeholders intact) and the corresponding MCP servers simply won't authenticate. There is no fallback to "track encrypted secrets in git" — out of scope.
 
+## Python venv (document skills)
+
+Document skills (`oh-my-docs`, `ppt-academic`) build with `python-pptx`,
+`python-docx`, `python-hwpx`, `matplotlib`, `Pillow`. Because `python-hwpx`
+requires Python ≥3.10 — newer than the system `/usr/bin/python3` (3.9) — and
+Homebrew Python is PEP 668 externally-managed, `installer/install.sh`
+(`platform/{macos,windows}/install.sh`) installs these into a dedicated venv
+at `~/.claude/.venv`, built on the first of `python3.12/3.13/3.11/3.10`
+found. The stage is idempotent: it skips silently when the venv exists and
+every package imports.
+
+The venv's `bin` (Windows: `Scripts`) is prepended to the session `PATH` via
+the machine-local `~/.claude/settings.local.json` `env.PATH` (Claude Code
+expands `$PATH` and prepends — verified against the settings docs). This is
+how the **external** omd `doc-builder` and mckinsey `slide-agent` — which
+invoke a bare `python3` and live outside this repo — resolve to the venv
+interpreter with no edits to those plugins. PATH injection lives in
+`settings.local.json`, not the shared `config/settings.json`, because the
+venv path is a machine-specific absolute path (`~`/`$HOME` do not expand in
+the `env` block) and shared files must stay machine-portable.
+
+The venv is machine-local and not git-tracked (`.gitignore` ignores
+`**/.venv/`); each machine rebuilds it on `installer/install.sh`.
+
+Accepted risk: every `python3` in a Claude Code session resolves to the venv
+(3.12). The stdlib-only internal callers (`installer/lib/omc.sh`,
+`project_hooks.sh`, `plugin_sync.py`, `runtime/hooks/*.py`) run fine on 3.12.
+A future internal script needing 3.9-specific behavior must call
+`/usr/bin/python3` explicitly.
+
 ## Skills catalog
 
 User-scope skills live under `runtime/skills/` and are auto-symlinked.
