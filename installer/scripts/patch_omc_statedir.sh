@@ -3,7 +3,7 @@
 # fallback so .omc state stops scattering across every visited subfolder of a
 # git-less tree (docs/slides/notes workspaces, iCloud/Desktop folders, etc.).
 #
-# What it does (2-point patch of dist/lib/worktree-paths.js, an ESM module):
+# What it does (3-point patch of dist/lib/worktree-paths.js, an ESM module):
 #   A. Inject a createRequire shim near the top so the ESM file can sync-load
 #      a CJS helper (dynamic import() is async — unusable in sync getOmcRoot).
 #   B. Rewrite ONLY the getOmcRoot default fallback line (the anchor line that
@@ -11,6 +11,18 @@
 #      ascendToMarker(process.cwd()) before the cwd fallback. The same anchor
 #      also appears in getProjectIdentifier and in the OMC_STATE_DIR branch;
 #      those are left untouched (next-line lookahead pins the right one).
+#   C. Rewrite the resolveToWorktreeRoot non-git fallback (its final
+#      `return getWorktreeRoot(process.cwd()) || process.cwd();`) the same way.
+#      This is the UPSTREAM normalizer the HUD calls (hud/index.js) with the
+#      session cwd: in a non-git tree it would otherwise promote whatever
+#      subfolder the session is in to the "worktree root" and hand that polluted
+#      value to getOmcRoot as `worktreeRoot` — short-circuiting point B's ascent.
+#      Fixing it here converges the cwd itself, so every caller (HUD included)
+#      lands on one .omc. The line is unique (validateWorkingDirectory* use
+#      `const trustedRoot = ...`, a different prefix), so a plain exact-line
+#      match pins it without a lookahead. Those security-boundary validators are
+#      deliberately left untouched — widening their trusted root would change
+#      what counts as "outside the root" (#576 boundary semantics).
 #
 # Why a patch and not an upstream change: OMC is a vendored plugin, not our
 # repo. This mirrors patch_omc_freeze.sh — edit the cache in-place; OMC
@@ -56,6 +68,13 @@ ANCHOR='    const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
 REPLACEMENT="    const root = worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
 RETURN_LINE='    return join(root, OmcPaths.ROOT);'
 
+# Point C: resolveToWorktreeRoot's non-git fallback. Single unique line (no
+# next-line lookahead needed — validateWorkingDirectory* use a `const
+# trustedRoot =` prefix, so this exact `    return getWorktreeRoot(...` form
+# matches only resolveToWorktreeRoot).
+RWR_ANCHOR='    return getWorktreeRoot(process.cwd()) || process.cwd();'
+RWR_REPLACEMENT="    return getWorktreeRoot(process.cwd()) || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
+
 patched=0
 skipped=0
 while IFS= read -r wp; do
@@ -71,7 +90,15 @@ while IFS= read -r wp; do
     cp "$HELPER_SRC" "$dir/_claudebase-omc-ascent.cjs"
   fi
 
-  if grep -q '_cbRequire' "$wp" 2>/dev/null; then
+  # Idempotency key = BOTH ascent calls present (point B + point C). Keying on
+  # the _cbRequire shim alone is NOT enough: an older claudebase shipped only
+  # points A+B, so a shim-only file is half-patched (C missing). Skipping it on
+  # "shim exists" would strand C forever. Re-enter when the count is not 2 — the
+  # perl passes below are self-idempotent (they match the ORIGINAL anchor shape,
+  # which an already-rewritten line no longer has), and the shim is injected
+  # only when absent (guarded in the point-A pass), so re-entry tops up the
+  # missing point without duplicating the shim or the already-patched line.
+  if [[ "$(grep -c 'ascendToMarker(process.cwd())' "$wp" 2>/dev/null)" == "2" ]]; then
     skipped=$((skipped + 1))
     continue
   fi
@@ -90,8 +117,10 @@ while IFS= read -r wp; do
   # the shim once after the import block.
   perl -0777 -pe '
     my $shim = "import { createRequire as _cbCreateRequire } from '"'"'module'"'"';\nconst _cbRequire = _cbCreateRequire(import.meta.url); /* claudebase-ascent */\n";
-    # Insert shim after the final top-level "import ... from ...;" line.
-    if (/^(import .*?;\n)(?!import )/ms) {
+    # Inject the shim only if absent. On a half-patched re-entry (points A+B
+    # present, C missing) the shim is already there — re-adding it would
+    # duplicate the createRequire line. Skip when _cbRequire already exists.
+    if (!/_cbRequire/ && /^(import .*?;\n)(?!import )/ms) {
       s/((?:^import .*?;\n)+)/$1$shim/m;
     }
   ' "$wp" > "$wp.tmp1"
@@ -111,12 +140,25 @@ while IFS= read -r wp; do
     END { print @buf; }
   ' "$wp.tmp1" > "$wp.tmp2"
 
-  mv "$wp.tmp2" "$wp"
-  rm -f "$wp.tmp1"
+  # Point C: rewrite the single unique resolveToWorktreeRoot fallback line.
+  RWR_ANCHOR="$RWR_ANCHOR" RWR_REPLACEMENT="$RWR_REPLACEMENT" \
+  perl -ne '
+    BEGIN { $a=$ENV{RWR_ANCHOR}; $r=$ENV{RWR_REPLACEMENT}; }
+    chomp(my $line=$_);
+    if ($line eq $a) { print "$r\n"; } else { print; }
+  ' "$wp.tmp2" > "$wp.tmp3"
+
+  mv "$wp.tmp3" "$wp"
+  rm -f "$wp.tmp1" "$wp.tmp2"
 
   ok=1
   grep -q '_cbRequire' "$wp" || ok=0
-  grep -q "ascendToMarker(process.cwd())" "$wp" || ok=0
+  # Both point B (getOmcRoot) and point C (resolveToWorktreeRoot) inject the
+  # same ascendToMarker(process.cwd()) call, so the count must be exactly 2.
+  # A count of 1 means one of them failed (e.g. OMC changed that function's
+  # shape) — treat it as a failed patch and restore, rather than silently
+  # shipping a half-patch that lets HUD scatter revive.
+  [[ "$(grep -c 'ascendToMarker(process.cwd())' "$wp")" == "2" ]] || ok=0
   if [[ "$ok" == "1" ]] && node --check "$wp" 2>/dev/null; then
     rm -f "$wp.bak"
     patched=$((patched + 1))
