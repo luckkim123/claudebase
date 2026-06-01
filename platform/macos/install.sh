@@ -11,7 +11,7 @@ set -u
 # The sync-claude-settings skill and install.sh's plugin sync both assume gh is present.
 REQUIRED_PKGS=(tmux gh)
 REQUIRED_CASKS=(font-pretendard)
-REQUIRED_PIP=(python-pptx)
+REQUIRED_PIP=(python-pptx python-docx python-hwpx matplotlib Pillow)
 
 if ! command -v brew >/dev/null 2>&1; then
   printf '[platform/macos] WARNING: Homebrew not found — install via https://brew.sh, then: brew install %s\n' "${REQUIRED_PKGS[*]}"
@@ -52,27 +52,52 @@ else
   fi
 fi
 
-# Python packages — for PPT skills (ppt-academic uses python-pptx via mckinsey-pptx plugin)
-if command -v python3 >/dev/null 2>&1 && command -v pip3 >/dev/null 2>&1; then
+# Python packages — for PPT skills (ppt-academic via mckinsey-pptx) and the
+# oh-my-docs (omd) docx/hwpx engine (python-docx + python-hwpx). Installed
+# into a dedicated venv on Python >=3.10 because python-hwpx requires >=3.10
+# (the system /usr/bin/python3 is 3.9) and Homebrew python is PEP 668
+# externally-managed. ~/.claude/settings.local.json prepends the venv bin to
+# PATH so omd's bare `python3` calls resolve here. See
+# docs/specs/2026-06-01-python-venv-isolation/.
+VENV_DIR="${HOME}/.claude/.venv"
+VENV_PY="${VENV_DIR}/bin/python"
+
+# Probe for a base interpreter >=3.10 (never 3.9 — hwpx needs >=3.10).
+base_py=""
+for cand in python3.12 python3.13 python3.11 python3.10; do
+  if command -v "$cand" >/dev/null 2>&1; then base_py="$cand"; break; fi
+done
+
+if [[ -z "$base_py" ]]; then
+  printf '[platform/macos] HINT: no Python >=3.10 found — document skills (omd) need it.\n'
+  printf '[platform/macos]       install: brew install python@3.12\n'
+elif [[ ! -x "$VENV_PY" ]]; then
+  printf '[platform/macos] creating venv (%s) at %s\n' "$base_py" "$VENV_DIR"
+  if ! "$base_py" -m venv "$VENV_DIR"; then
+    printf '[platform/macos] WARNING: venv creation failed — skipping pip packages\n'
+  fi
+fi
+
+# Install missing packages into the venv (skip silently if all present).
+if [[ -x "$VENV_PY" ]]; then
   missing_pip=()
   for pkg in "${REQUIRED_PIP[@]}"; do
-    # python-pptx imports as `pptx`
-    import_name="${pkg//python-/}"
-    python3 -c "import $import_name" >/dev/null 2>&1 || missing_pip+=("$pkg")
+    # python-pptx->pptx, python-docx->docx, python-hwpx->hwpx, matplotlib->matplotlib;
+    # Pillow is the exception (imports as PIL).
+    if [[ "$pkg" == "Pillow" ]]; then import_name="PIL"; else import_name="${pkg//python-/}"; fi
+    "$VENV_PY" -c "import $import_name" >/dev/null 2>&1 || missing_pip+=("$pkg")
   done
 
   if [[ ${#missing_pip[@]} -eq 0 ]]; then
     printf '[platform/macos] pip packages already present (skip): %s\n' "${REQUIRED_PIP[*]}"
   else
     printf '[platform/macos] installing pip packages: %s\n' "${missing_pip[*]}"
-    if pip3 install --user --quiet "${missing_pip[@]}"; then
+    if "$VENV_PY" -m pip install --quiet "${missing_pip[@]}"; then
       printf '[platform/macos] installed pip: %s\n' "${missing_pip[*]}"
     else
       printf '[platform/macos] WARNING: pip install failed for: %s\n' "${missing_pip[*]}"
     fi
   fi
-else
-  printf '[platform/macos] python3/pip3 not found — skipping pip packages (install Python first)\n'
 fi
 
 # Optional: LibreOffice + poppler (visual verification for ppt-academic)
