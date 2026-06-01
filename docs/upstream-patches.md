@@ -37,30 +37,28 @@ been upstream-accepted but not yet released stay listed with a note.
 
 ## OMC `.omc` scatter in non-git trees (getOmcRoot marker-ascent)
 
-- **Target**: `~/.claude/plugins/cache/omc/oh-my-claudecode/<ver>/dist/lib/worktree-paths.js` — TWO fallbacks (`getOmcRoot()` ~line 197 and `resolveToWorktreeRoot()` ~line 530) + a `createRequire` shim after the import block.
-- **Patch**: a 3-point edit that gives the git-less case a project-boundary fallback at both the leaf (`getOmcRoot`) and the upstream normalizer (`resolveToWorktreeRoot`, which the HUD calls every turn).
+- **Target**: `~/.claude/plugins/cache/omc/oh-my-claudecode/<ver>/dist/lib/worktree-paths.js`, `getOmcRoot()` default fallback (around line 195) + a `createRequire` shim after the import block.
+- **Patch**: a 2-point edit that gives the git-less case a project-boundary fallback.
 
   ```javascript
-  // A) top of file, after the import block:
+  // top of file, after the import block:
   import { createRequire as _cbCreateRequire } from 'module';
   const _cbRequire = _cbCreateRequire(import.meta.url); /* claudebase-ascent */
 
-  // B) getOmcRoot() default fallback — pinned by the next line `return join(root, OmcPaths.ROOT)`:
+  // getOmcRoot() default fallback — before:
+  const root = worktreeRoot || getWorktreeRoot() || process.cwd();
+  // after (ONLY this anchor, pinned by the next line `return join(root, OmcPaths.ROOT)`):
   const root = worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();
-
-  // C) resolveToWorktreeRoot() non-git fallback — the unique `return getWorktreeRoot(...` line
-  //    (validateWorkingDirectory* use a `const trustedRoot =` prefix and are left untouched):
-  return getWorktreeRoot(process.cwd()) || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();
   ```
 
   A companion CJS helper `_claudebase-omc-ascent.cjs` (source: `runtime/omc-patches/`) is copied next to the module; `ascendToMarker` climbs for a marker (`.omcroot` > `.git` > `CLAUDE.md` > `.claude/CLAUDE.md`), stopping at `$HOME` / filesystem root, returning `null` when none found.
 
-- **Why**: both functions fall back to `process.cwd()` when not in a git repo (`getWorktreeRoot()` returns null). git repos normalize to the repo root via `git rev-parse --show-toplevel`, so their `.omc` converges to one dir — but a non-git tree (docs/slides/notes workspaces, iCloud/Desktop folders) has no such boundary, so `.omc` scatters across every visited subfolder. **Point B alone is insufficient**: the HUD calls `resolveToWorktreeRoot(stdin.cwd)`, which in a non-git tree promotes the session subfolder to a "worktree root" and hands it to `getOmcRoot` as `worktreeRoot` — short-circuiting B's `worktreeRoot || ... || ascend` chain. Point C patches that upstream normalizer so the cwd itself converges first, fixing every caller (HUD included). **git repos are untouched** in both (the ascent runs only when `getWorktreeRoot()` is null) → zero regression. When no marker is found, both return null/cwd and OMC keeps its own fallback → never widens blast radius. The two `validateWorkingDirectory*` security validators share C's right-hand side but a different prefix and are deliberately left alone (widening their trusted root would change #576 boundary semantics).
+- **Why**: `getOmcRoot` falls back to `process.cwd()` when not in a git repo (`getWorktreeRoot()` returns null). git repos normalize to the repo root via `git rev-parse --show-toplevel`, so their `.omc` converges to one dir — but a non-git tree (docs/slides/notes workspaces, iCloud/Desktop folders) has no such boundary, so `.omc` scatters across every visited subfolder. The patch gives the git-less case the symmetric behavior: ascend for a project marker and converge there. **git repos are untouched** (the ascent runs only when `getWorktreeRoot()` is null) → zero regression. When no marker is found, it returns null and OMC keeps its own cwd fallback → never widens blast radius.
 
-  Design + verification: `docs/specs/2026-05-31-omc-statedir-marker-ascent/design.md` (§9 = point C). Verified live: workspace subfolders converge to `workspace/.omc` AND `resolveToWorktreeRoot` returns `workspace` (not the subfolder); claudebase (git) unchanged in both.
+  Design + verification: `docs/specs/2026-05-31-omc-statedir-marker-ascent/design.md`. Verified live: workspace subfolders converge to `workspace/.omc`; claudebase (git) unchanged.
 
-- **Applied by**: `installer/scripts/patch_omc_statedir.sh`. **Idempotency key = both ascent calls present** (`grep -c 'ascendToMarker(process.cwd())' == 2`), NOT the `_cbRequire` shim alone — an older claudebase shipped only A+B, so a shim-only file is half-patched and must be re-entered to top up C. The perl passes match the ORIGINAL anchor shape (self-idempotent), and the shim is injected only when `_cbRequire` is absent, so re-entry never duplicates. The helper `.cjs` is refreshed on every run (its logic can change between versions). Graceful-fail: a count other than 2 (e.g. OMC changed a function's shape) → WARNING + `.bak` restore, install continues. `node --check` validated. Called from `installer/install.sh` after `patch_omc_bash_freeze`.
+- **Applied by**: `installer/scripts/patch_omc_statedir.sh`. Idempotent via marker (`_cbRequire`) for the JS rewrite; the helper `.cjs` is refreshed on every run (its logic can change between versions). Graceful-fail: missing anchor → WARNING + `.bak` restore, install continues. `node --check` validated. Called from `installer/install.sh` after `patch_omc_bash_freeze`.
 
-- **Removal condition**: Upstream OMC ships a release where BOTH `getOmcRoot` and `resolveToWorktreeRoot` find a non-git project boundary themselves (marker ascent or equivalent) before falling back to `process.cwd()`. Verify by removing the patch and confirming a non-git workspace's `.omc` still converges to one root across several visited subfolders. (This patch is also the reference implementation for that upstream PR.)
+- **Removal condition**: Upstream OMC ships a release where `getOmcRoot` finds a non-git project boundary itself (marker ascent or equivalent) before falling back to `process.cwd()`. Verify by removing the patch and confirming a non-git workspace's `.omc` still converges to one root across several visited subfolders. (This patch is also the reference implementation for that upstream PR.)
 
 - **First applied**: 2026-05-31 (claudebase repo).
