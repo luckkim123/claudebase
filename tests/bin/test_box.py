@@ -65,3 +65,57 @@ def test_cli_no_args_exits_clean():
         timeout=15,
     )
     assert proc.returncode == 0  # no crash on empty
+
+
+# ---- typed boxes: 5 defined types + free-title fallback --------------------
+
+
+def test_type_label_lookup():
+    m = _load()
+    # the 5 defined types map to standard Korean labels (no emoji)
+    assert m.type_label("skill") == "SKILL"
+    assert m.type_label("analysis") == "분석"
+    assert m.type_label("plan") == "계획"
+    assert m.type_label("summary") == "요약"
+    assert m.type_label("warning") == "주의"
+
+
+def test_type_label_unknown_returns_none():
+    m = _load()
+    # unknown type -> None, so the caller falls back to a free title
+    assert m.type_label("garbage") is None
+    assert m.type_label("") is None
+
+
+def test_cli_type_skill_renders_label():
+    proc = subprocess.run(
+        [sys.executable, str(BOX_PATH), "--type", "skill", "external-context 사용"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0
+    assert "SKILL" in proc.stdout
+
+def test_cli_type_with_extra_title_suffix():
+    # --type skill plus a leading "subtitle" arg appends to the label
+    proc = subprocess.run(
+        [sys.executable, str(BOX_PATH), "--type", "skill", "--label", "external-context",
+         "5 facet 병렬 조사"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0
+    assert "SKILL" in proc.stdout and "external-context" in proc.stdout
+
+def test_cli_unknown_type_is_treated_as_title():
+    # no --type: first arg is a free title (Claude-authored category)
+    proc = subprocess.run(
+        [sys.executable, str(BOX_PATH), "검증 결과", "전부 통과"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0
+    assert "검증 결과" in proc.stdout
