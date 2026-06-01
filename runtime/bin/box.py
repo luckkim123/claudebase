@@ -53,11 +53,11 @@ def render_box(title: str, lines: list[str], ascii_only: bool = False) -> str:
         tl, tr, bl, br, h, v = "╭", "╮", "╰", "╯", "─", "│"
     title = title or ""
     lines = lines or [""]
-    inner = max([visual_width(title) + 4] + [visual_width(l) + 2 for l in lines])
+    inner = max([visual_width(title) + 4] + [visual_width(line) + 2 for line in lines])
     top = tl + h + " " + title + " " + h * (inner - visual_width(title) - 3) + tr
     out = [top]
-    for l in lines:
-        out.append(v + " " + l + " " * (inner - visual_width(l) - 2) + " " + v)
+    for line in lines:
+        out.append(v + " " + line + " " * (inner - visual_width(line) - 2) + " " + v)
     out.append(bl + h * inner + br)
     return "\n".join(out)
 
