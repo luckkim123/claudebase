@@ -24,8 +24,19 @@ This skill is **rigid** — follow the procedure in order. The procedure exists 
 
 ```bash
 CLAUDEBASE_ROOT="${CLAUDEBASE_ROOT:-$HOME/claudebase}"   # canonical; override only if cloned elsewhere
-# Forced unification: if the old ~/claude-settings clone is still around and ~/claudebase isn't, rename it.
+# Legacy-clone detection: old ~/claude-settings around but ~/claudebase isn't.
+# DO NOT auto-rename+install here — a dirty legacy clone (uncommitted edits)
+# must trip the pre-flight "stop on dirty" gate first, not get silently moved
+# and re-installed. Detect, then hand off to the user.
 if [ ! -d "$CLAUDEBASE_ROOT/.git" ] && [ -d "$HOME/claude-settings/.git" ]; then
+  if [ -n "$(git -C "$HOME/claude-settings" status --porcelain 2>/dev/null)" ]; then
+    echo "STOP: legacy clone ~/claude-settings exists AND is dirty (uncommitted changes)."
+    echo "      Surface the dirty files to the user and let them decide:"
+    echo "      commit → rename, discard → rename, or trash → re-clone to ~/claudebase."
+    git -C "$HOME/claude-settings" status -sb
+    exit 1
+  fi
+  # Clean legacy clone → safe to rename in place (no uncommitted work to lose).
   echo "renaming legacy clone: ~/claude-settings -> ~/claudebase"
   mv "$HOME/claude-settings" "$HOME/claudebase"
   git -C "$HOME/claudebase" worktree repair 2>/dev/null || true
@@ -34,6 +45,16 @@ if [ ! -d "$CLAUDEBASE_ROOT/.git" ] && [ -d "$HOME/claude-settings/.git" ]; then
 fi
 [ -d "$CLAUDEBASE_ROOT/.git" ] || { echo "no claudebase repo at $CLAUDEBASE_ROOT"; exit 1; }
 ```
+
+> **Why the dirty guard (2026-06-01).** The original version of this block
+> renamed + re-installed unconditionally whenever a legacy clone was found.
+> On a machine where `~/claude-settings/claude/CLAUDE.md` had an uncommitted
+> edit, that auto-path ran `install.sh` on a dirty tree — exactly what the
+> pre-flight gate below forbids. The fix: a clean legacy clone renames
+> silently (nothing to lose); a **dirty** one stops and surfaces the diff so
+> the user picks commit / discard / trash-and-re-clone. Discovered while
+> migrating the obsidian-vault Mac: the legacy clone was dirty, so the run
+> bailed here and the user chose trash-and-re-clone to `~/claudebase`.
 
 Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUDEBASE_ROOT" && ...`.
 
@@ -82,11 +103,19 @@ If non-FF, bail. Never `--rebase` autonomously when local commits exist.
 **4a. Symlinks intact**
 
 ```bash
-ls -la ~/.claude/settings.json ~/.tmux.conf 2>&1
-readlink ~/.claude/settings.json
+# All three primary symlinks — settings.json, CLAUDE.md, tmux.conf.
+# CLAUDE.md became a symlink target when config moved to config/CLAUDE.md;
+# omitting it here is how a broken CLAUDE.md link slips through (it broke
+# alongside the other two during the ~/claude-settings → ~/claudebase move).
+for f in ~/.claude/settings.json ~/.claude/CLAUDE.md ~/.tmux.conf; do
+  printf '%-35s -> %s' "$f" "$(readlink "$f" 2>/dev/null || echo '(not a symlink)')"
+  [ -e "$f" ] && echo "  [OK]" || echo "  [BROKEN — target missing]"
+done
 ```
 
-Both should resolve into `~/claudebase/`. If not symlinked or broken, step 5 (install.sh) will repair.
+All three should resolve into `~/claudebase/` and show `[OK]`. A `[BROKEN]`
+line means the target moved (e.g. a leftover link into the old
+`~/claude-settings`); step 5 (install.sh) re-links it.
 
 **4b. Plugins forward (common pool installed?)**
 
@@ -97,6 +126,24 @@ comm -23 /tmp/enabled.txt /tmp/installed.txt
 ```
 
 Empty = good. Non-empty = step 5's `sync_plugins` will install them.
+
+**Marketplace cold-start race (expect on a fresh clone).** `plugin_sync.py`'s
+`apply()` runs `claude plugin install` once per plugin with **no retry** — on
+`rc != 0` it logs `WARNING: failed to install: <plugin>` and moves on
+(verified in `installer/scripts/plugin_sync.py`). For a **git-source**
+marketplace (`heroacademia`, `omx`) that was *just added* in the same run, the
+first install can fail because the marketplace metadata hasn't finished
+fetching yet. This is **not** a real failure — it's eventually-consistent:
+each re-run of install.sh installs one more, so the WARNINGs shrink to zero
+over 2–3 passes (observed 2026-06-01: `oh-my-docs@heroacademia` failed on pass
+1 & 2, succeeded on pass 3 / direct `claude plugin install`). So:
+
+- Don't report a first-pass `WARNING: failed to install` as a drift finding.
+- Re-run install.sh (step 5/6 already do this) until `plugin sync: … 0 fixed`.
+- Only a plugin that **still** fails after the tree has converged (`0 fixed`
+  but the plugin is still absent from `installed_plugins.json`) is a genuine
+  problem worth surfacing — try a direct `claude plugin install <id>` to see
+  the real error.
 
 **4c. Plugins reverse (extras unaccounted for?)**
 
