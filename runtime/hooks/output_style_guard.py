@@ -28,12 +28,18 @@ _MISSING = object()
 
 # Opener filler/sycophancy patterns (EN + KO). Anchored to the start of the
 # first non-blank line only — never matches mid-body.
+# Anchored to the first non-blank line's start. EN openers match the
+# EXCLAMATORY/filler form only — `of course!` / `absolutely!` (not the
+# declarative adverb `of course it does` / `absolutely not`). KO `맞-` family
+# (맞습니다/정확히 맞-) is INTENTIONALLY OMITTED in v1: it overlaps too many
+# normal stems (맞는/맞물려/맞춰) for a high-confidence opener match. Per
+# design.md §7, start safe and widen from telemetry, not the reverse.
 _FILLER_RE = re.compile(
     r"^\s*(?:"
-    r"certainly[!,. ]|sure thing|of course[!,. ]|absolutely[!,. ]|"
+    r"certainly[!,.]|sure thing|of course[!,.]|absolutely[!,.]|"
     r"great question|excellent question|good question|that's a (?:great|fantastic|excellent)|"
     r"you'?re absolutely right|i'?d be happy to|i'?d be glad to|happy to help|"
-    r"좋은 질문|훌륭한 질문|물론입니다|물론이에요|기꺼이|맞습니다[!,. ]?그|정확히 맞"
+    r"좋은 질문|훌륭한 질문|물론입니다|물론이에요|기꺼이"
     r")",
     re.IGNORECASE,
 )

@@ -77,6 +77,11 @@ CLAUDE.md 에 *글로 적는 것*은 권고일 뿐이라 큰 컨텍스트에서 
 
 > v1 검출은 (1)(2) 오프너 필러/아첨만. 장황함·불릿 남용은 정량 임계가 위험해 검출 대상에서 제외하고
 > nudge(주입)로만 다룬다. 위반 시 block reason = "오프너 필러/아첨 제거하고 결론부터 다시"+증거(첫 80자).
+>
+> **code-reviewer 반영(2026-06-01)**: 영어 패턴은 감탄형만 매칭(`of course!`·`absolutely!`), 평서 부사
+> (`of course it does`·`absolutely not`)는 통과. 한국어 `맞-` 계열(`맞습니다`·`정확히 맞`)은 정상 어간
+> (맞는·맞물려·맞춰)과 과도하게 겹쳐 **v1 에서 제외** — §7 "안전하게 시작, 텔레메트리로 확장" 원칙. 회귀
+> 테스트 `test_declarative_adverbs_not_flagged`·`test_exclamatory_filler_still_flagged` 로 고정.
 
 ## 6. 주입 hook 설계 — `output_style_inject.py` (UserPromptSubmit)
 

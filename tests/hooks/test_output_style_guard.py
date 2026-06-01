@@ -52,6 +52,25 @@ def test_clean_opener_not_flagged():
     assert m._filler_opener("결론부터: 이건 캐시 문제입니다.") is None
 
 
+def test_declarative_adverbs_not_flagged():
+    """평서 부사 용법은 필러가 아님 — 리뷰 실측 재현 케이스(false positive 회귀 방지)."""
+    m = _load()
+    # 영어: of course / absolutely 가 평서문 부사로 쓰인 경우
+    assert m._filler_opener("Of course the build fails.") is None
+    assert m._filler_opener("Absolutely not — that's wrong.") is None
+    # 한국어: 정상 기술 문장의 '맞-' 어간 (v1 에서 맞- 계열 패턴 제거)
+    assert m._filler_opener("정확히 맞는 동작입니다.") is None
+    assert m._filler_opener("맞물려 돌아갑니다.") is None
+    assert m._filler_opener("맞습니다. 캐시가 원인입니다.") is None
+
+
+def test_exclamatory_filler_still_flagged():
+    """감탄형 아첨은 여전히 잡혀야 함."""
+    m = _load()
+    assert m._filler_opener("Of course! Here you go.") is not None
+    assert m._filler_opener("Absolutely! Let me help.") is not None
+
+
 def test_great_midtext_is_safe():
     m = _load()
     # "great" only mid-body, opener is clean -> must NOT flag
