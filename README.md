@@ -52,12 +52,17 @@ Put machine-specific plugins / permissions in `~/.claude/settings.local.json` (g
 
 ## Output style (opt-in)
 
-출력 형식을 *코드로* 강제하는 hook 2개(매 턴 baseline 주입 + 필러/아첨 오프너 검출). 기본 **off** —
-원하는 머신에서만 shell 에 export:
+출력 형식을 *코드로* 강제하는 hook 2개(매 턴 baseline 주입 + 필러/아첨 오프너 검출). 기본 **off**.
+Claude Code 는 settings 의 `env` 를 hook 에 주입하지 않으므로, hook 이 셸 export 와 settings 파일을 직접
+읽는다. 켜는 법(택1, 다음 세션부터 적용):
 
+```jsonc
+// 이 머신만 — ~/.claude/settings.local.json (gitignored)
+{ "env": { "CLAUDEBASE_OUTPUT_STYLE": "enforce" } }   // nudge = 주입만, enforce = 주입+block
+```
 ```bash
-export CLAUDEBASE_OUTPUT_STYLE=nudge     # baseline 주입만 (block 없음)
-export CLAUDEBASE_OUTPUT_STYLE=enforce   # 주입 + 구어체/아첨 오프너 block
+# 또는 셸에 export (zsh/bash)
+export CLAUDEBASE_OUTPUT_STYLE=enforce
 ```
 
 결론 먼저·산문 우선·비교는 표·간결 단정형·불확실성은 지식경계 명시 + CJK 안 깨지는 박스(`box.py`).

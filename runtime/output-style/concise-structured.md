@@ -40,7 +40,15 @@ python3 ~/claudebase/runtime/bin/box.py "네가 지은 제목" "내용"   # 5종
 
 남용 금지: 페이지당 1-2개, 연속으로 쌓지 말 것. [Google·NN/g style guide]
 
-## 끄기
+## 켜기 / 끄기
 
-- `export CLAUDEBASE_OUTPUT_STYLE=off` (또는 미설정) — 완전 비활성.
+Claude Code 는 settings 의 `env` 를 hook 에 주입하지 *않으므로*, hook 이 두 소스를 직접 본다:
+부모 셸 export(우선) → `~/.claude/settings.local.json`·`settings.json` 의 `env.CLAUDEBASE_OUTPUT_STYLE`.
+
+**켜기 (택1)** — 둘 다 효과 동일, 다음 세션부터 적용:
+- 이 머신만: `~/.claude/settings.local.json` 의 `"env"` 에 `"CLAUDEBASE_OUTPUT_STYLE": "enforce"` (gitignored).
+- 셸 단위: `~/.zshrc` 등에 `export CLAUDEBASE_OUTPUT_STYLE=enforce`.
+
+**끄기**:
+- settings.local.json 에서 키 제거(또는 `"off"`), 또는 export 제거.
 - `DISABLE_OMC` / `OMC_SKIP_HOOKS=output_style` — kill switch (강제 off).

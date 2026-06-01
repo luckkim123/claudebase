@@ -51,8 +51,16 @@ CLAUDE.md 에 *글로 적는 것*은 권고일 뿐이라 큰 컨텍스트에서 
 - claudebase repo 에 설계 → `install.sh` 가 `runtime/hooks/` 를 배포(기존과 동일 경로).
 - **opt-in (기본 OFF).** claudebase 는 모든 머신·프로젝트에 배포되므로, 출력 스타일을 강제로 켜면
   다른 작업(코드·논문 등)에 부작용. 따라서:
-  - 환경변수 `CLAUDEBASE_OUTPUT_STYLE` 이 set 일 때만 hook 이 활성(미set 이면 즉시 exit 0).
-  - 값: `off`(기본/미set) · `nudge`(주입만) · `enforce`(주입 + 검출 block).
+  - `CLAUDEBASE_OUTPUT_STYLE` 이 `nudge`/`enforce` 일 때만 hook 활성(아니면 즉시 exit 0).
+  - 값: `off`(기본) · `nudge`(주입만) · `enforce`(주입 + 검출 block).
+
+  ⚠️ **활성화 메커니즘 교정(2026-06-01, 공식 문서 검증)**: Claude Code 는 settings.json/
+  settings.local.json 의 `env` 블록을 **hook 프로세스에 주입하지 않는다**(settings env 는 Claude Code
+  *자체* 설정용; hook 은 부모 셸의 export 된 env 만 상속). 따라서 `output_style_common.style_mode()` 는
+  **두 소스를 본다**: ① 부모 셸 export 된 `CLAUDEBASE_OUTPUT_STYLE`(유효하면 우선), ② 없으면
+  `~/.claude/settings.local.json` → `settings.json` 의 `env.CLAUDEBASE_OUTPUT_STYLE` 을 *직접 파싱*.
+  덕분에 settings.local.json 의 env 에 적기만 하면 켜진다(머신별 제어, gitignored). 파일 없음/깨짐 → off.
+  처음에 "settings env 가 자동 주입된다"고 가정했다가 실제 세션에서 무동작 → 이 교정으로 해결.
   - kill switch 기존 패턴(`DISABLE_OMC`/`OMC_SKIP_HOOKS`)과 공존 — 이들이 set 이면 무조건 OFF.
 
 ## 5. 검출 hook 설계 — `output_style_guard.py` (Stop)
