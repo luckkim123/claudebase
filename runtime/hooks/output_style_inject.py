@@ -26,9 +26,11 @@ BASELINE = (
     "3. 항목 비교는 표로.\n"
     "4. 간결한 단정형. 구어체 필러('좋은 질문', 'Certainly!')·아첨 금지.\n"
     "5. 불확실하면 모호한 헤지 대신 지식 경계를 명시('X에 대한 출처 없음').\n"
-    "6. 강조 블록은 box.py 도구로 그려라(인라인 ╭─╮ 금지 — 한글 폭에 우변 어긋남):\n"
-    "   python3 ~/claudebase/runtime/bin/box.py --type <skill|analysis|plan|summary|warning> \"내용\"\n"
-    "   5종에 안 맞으면 box.py \"적절한 제목\" \"내용\" 으로 직접 분류. 1-2개 한도, 연속 금지."
+    "6. 강조 블록은 box.py 도구로 그려라(인라인 ╭─╮ 금지 — 한글 폭에 우변 어긋남).\n"
+    "   분류는 네가 내용을 보고 가장 적절한 제목을 직접 정하라(자율). 자주 쓰는 5종\n"
+    "   (skill·analysis·plan·summary·warning)은 표준 라벨이 있으니 맞으면 `--type` 으로:\n"
+    "   python3 ~/claudebase/runtime/bin/box.py --type analysis \"내용\"  또는\n"
+    "   python3 ~/claudebase/runtime/bin/box.py \"네가 지은 제목\" \"내용\". 1-2개 한도, 연속 금지."
 )
 
 
