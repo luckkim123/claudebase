@@ -11,9 +11,15 @@ $RequiredWinget = @(
     @{ Id = "sunbk201.Pretendard"; Name = "Pretendard font" }
     @{ Id = "GitHub.cli"; Name = "GitHub CLI (gh)" }
 )
-# pip packages (import_name -> package_name)
+# pip packages (import_name -> package_name). Mirror of platform/macos REQUIRED_PIP.
+# python-pptx: ppt-academic. python-docx + python-hwpx: omd docx/hwpx engine.
+# matplotlib + Pillow(import PIL): omd equation-PNG / image paths.
 $RequiredPip = @(
-    @{ Import = "pptx"; Package = "python-pptx" }
+    @{ Import = "pptx";       Package = "python-pptx" }
+    @{ Import = "docx";       Package = "python-docx" }
+    @{ Import = "hwpx";       Package = "python-hwpx" }
+    @{ Import = "matplotlib"; Package = "matplotlib" }
+    @{ Import = "PIL";        Package = "Pillow" }
 )
 
 function Has-Winget {
@@ -45,26 +51,48 @@ if (-not (Has-Winget)) {
     }
 }
 
-# Python packages (for ppt-academic skill via mckinsey-pptx plugin)
-$python = Get-Command python -ErrorAction SilentlyContinue
-$pip = Get-Command pip -ErrorAction SilentlyContinue
-if ($python -and $pip) {
+# Python packages — venv mirror of platform/macos. python-hwpx needs >=3.10,
+# so build a dedicated venv at ~/.claude/.venv on the first py >=3.10 found.
+# Windows venv interpreter lives in Scripts\python.exe (vs macOS bin/python).
+$VenvDir = Join-Path $HOME ".claude\.venv"
+$VenvPy  = Join-Path $VenvDir "Scripts\python.exe"
+
+# Probe base interpreter >=3.10 via the py launcher (never 3.9).
+$basePy = $null
+foreach ($ver in @("3.12","3.13","3.11","3.10")) {
+    & py "-$ver" --version 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $basePy = $ver; break }
+}
+
+if (-not $basePy) {
+    Write-Host "[platform/windows] HINT: no Python >=3.10 found - omd document skills need it."
+    Write-Host "[platform/windows]       install: winget install Python.Python.3.12"
+} elseif (-not (Test-Path $VenvPy)) {
+    Write-Host "[platform/windows] creating venv (py -$basePy) at $VenvDir"
+    & py "-$basePy" -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[platform/windows] WARNING: venv creation failed - skipping pip packages"
+    }
+}
+
+if (Test-Path $VenvPy) {
+    $missing = @()
     foreach ($pkg in $RequiredPip) {
-        $installed = python -c "import $($pkg.Import)" 2>$null
+        & $VenvPy -c "import $($pkg.Import)" 2>$null
+        if ($LASTEXITCODE -ne 0) { $missing += $pkg }
+    }
+    if ($missing.Count -eq 0) {
+        Write-Host "[platform/windows] pip packages already present (skip): $($RequiredPip.Package -join ', ')"
+    } else {
+        $names = ($missing.Package -join ', ')
+        Write-Host "[platform/windows] installing pip packages: $names"
+        & $VenvPy -m pip install --quiet @($missing.Package)
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "[platform/windows] pip package already present (skip): $($pkg.Package)"
+            Write-Host "[platform/windows] installed pip: $names"
         } else {
-            Write-Host "[platform/windows] installing pip: $($pkg.Package)"
-            pip install --user --quiet $pkg.Package 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "[platform/windows] installed pip: $($pkg.Package)"
-            } else {
-                Write-Host "[platform/windows] WARNING: pip install failed for $($pkg.Package)"
-            }
+            Write-Host "[platform/windows] WARNING: pip install failed for: $names"
         }
     }
-} else {
-    Write-Host "[platform/windows] python/pip not found - skipping pip packages (install Python first via: winget install Python.Python.3.11)"
 }
 
 # Optional: LibreOffice (visual verification for ppt-academic) - heavy, manual only
