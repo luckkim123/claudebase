@@ -4,6 +4,12 @@
 조사 방법: external-context, 5 facet 병렬 document-specialist(sonnet). 모든 출처 URL 검증됨(에이전트가
 미검증은 명시하도록 지시). 용도: claudebase 출력-스타일 hook 설계 근거.
 
+> **결말(2026-06-01):** hook 메커니즘(UserPromptSubmit 주입 + Stop 오프너 검출)은 폐기됨. 대신
+> 이 5 facet 종합을 `config/CLAUDE.md` 의 "### 6. Output Form" 텍스트 규칙으로 흡수(시스템
+> 프롬프트 이후 user 메시지로 주입, 항상 켜짐). 공식 custom output style 도 검토했으나 채택 안 함 —
+> 코딩 지침을 대체하는 부작용이 있어 "어투/구조 규칙만" 목적엔 과함(`keep-coding-instructions`
+> 옵션은 있으나 불필요). 이 문서는 그 텍스트 규칙의 근거로만 보존. design·plan(hook 설계)은 폐기.
+
 ---
 
 ## Facet 1 — 구조 / 레이아웃

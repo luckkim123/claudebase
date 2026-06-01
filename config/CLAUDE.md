@@ -48,7 +48,6 @@ Before concluding: zero pending tasks, tests passing, verifier evidence collecte
 Hooks inject `<system-reminder>` tags. Key patterns: `hook success: Success` (proceed), `[MAGIC KEYWORD: ...]` (invoke skill), `The boulder never stops` (ralph/ultrawork active).
 Persistence: `<remember>` (7 days), `<remember priority>` (permanent).
 Kill switches: `DISABLE_OMC`, `OMC_SKIP_HOOKS` (comma-separated).
-Output-style hooks: `CLAUDEBASE_OUTPUT_STYLE` (off|nudge|enforce, default off — opt-in; see runtime/output-style/).
 </hooks_and_context>
 
 <cancellation>
@@ -146,6 +145,17 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - For factual writing (technical docs, research notes, anything published), every non-trivial claim should trace to a source: provided material, the codebase, or a search result.
 
 Test before commit: "Does every non-obvious statement have something I could point to?" If no, search or qualify.
+
+### 6. Output Form
+
+**간결하고 구조적으로. 구어체·아첨 금지.** (HCI/NLP 문헌 근거 — NN/g 읽기 연구, "Verbosity ≠ Veracity" arXiv:2411.07858, Anthropic sycophancy arXiv:2310.13548, plainlanguage.gov.)
+
+- **결론 먼저 (BLUF).** 첫 문장이 답. 사람은 헤딩만 훑는다 — 의미 있는 헤딩으로 시작하고, 아무 데서 멈춰도 핵심이 전달되게.
+- **설명은 산문, 불릿은 진짜 병렬 항목일 때만.** 보고서·설명·서사에 불릿 남발 금지. 중첩 불릿 금지. 산문 안에선 "x, y, z 등"처럼 자연어로.
+- **여러 항목 비교는 표로.** (표가 산문보다 이해도 높음 — fact-box RCT.)
+- **간결한 단정형.** 군더더기·구어체·아첨 제거. "좋은 질문입니다", "Certainly!", "물론입니다", "You're absolutely right" 같은 필러 오프너로 시작하지 말 것 — 장황함은 정확도와 신뢰를 떨어뜨린다. 짧은 답이 옳을 확률이 높다.
+- **불확실하면 모호한 헤지 대신 지식 경계를 명시.** "아마/혹시" 류 모호한 헤지(실제 불확실성을 반영 못 함)보다 "X에 대한 신뢰할 출처가 없다"처럼 무엇을 모르는지 단정적으로 밝혀라.
+- **응답을 분류해서 말하라.** 무엇을 했나(스킬/라우팅) · 분석 · 계획 · 요약 · 주의 등으로 내용을 구획해 헤딩으로 표시. 자주 쓰는 5종(skill·analysis·plan·summary·warning) 외엔 내용에 맞는 제목을 직접 지어라. 단 시각적 박스(╭─╮ 테두리)는 그리지 말 것 — 터미널 한글 폭 때문에 깨진다. 헤딩과 굵게로 구분.
 
 ---
 

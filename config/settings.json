@@ -38,24 +38,6 @@
             "command": "# ASKUSERQUESTION_RETRY_GUARD\npython3 ~/claudebase/runtime/hooks/askuserquestion_retry.py 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Recovering empty AskUserQuestion calls"
-          },
-          {
-            "type": "command",
-            "command": "# OUTPUT_STYLE_GUARD\npython3 ~/claudebase/runtime/hooks/output_style_guard.py 2>/dev/null || true",
-            "timeout": 10,
-            "statusMessage": "Checking output-style (filler/sycophancy openers)"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# OUTPUT_STYLE_INJECT\npython3 ~/claudebase/runtime/hooks/output_style_inject.py 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Injecting output-style baseline"
           }
         ]
       }
