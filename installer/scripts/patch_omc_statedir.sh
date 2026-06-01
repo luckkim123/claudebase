@@ -35,7 +35,8 @@
 #     from .bak, but the install continues (scatter reverting to OMC's own
 #     default is a safe fallback, not a failure).
 #   - Validated: `node --check` after patching; restore + WARN on syntax error.
-#   - Cross-OS: handles BSD (macOS) and GNU sed/perl is POSIX-portable.
+#   - Cross-OS: edits via perl + tmp files (no `sed -i`), so it runs identically
+#     on BSD (macOS) and GNU (Linux); no npm deps (helper uses node built-ins).
 #
 # Full rationale: docs/specs/2026-05-31-omc-statedir-marker-ascent/design.md
 set -euo pipefail
