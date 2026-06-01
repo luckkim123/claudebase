@@ -7,10 +7,23 @@
 #   A. Inject a createRequire shim near the top so the ESM file can sync-load
 #      a CJS helper (dynamic import() is async — unusable in sync getOmcRoot).
 #   B. Rewrite ONLY the getOmcRoot default fallback line (the anchor line that
-#      is immediately followed by `return join(root, OmcPaths.ROOT)`) to call
-#      ascendToMarker(process.cwd()) before the cwd fallback. The same anchor
-#      also appears in getProjectIdentifier and in the OMC_STATE_DIR branch;
-#      those are left untouched (next-line lookahead pins the right one).
+#      is immediately followed by `return join(root, OmcPaths.ROOT)`). The new
+#      line does NOT trust the worktreeRoot ARGUMENT: it puts
+#      ascendToMarker(worktreeRoot) FIRST, so even when the HUD hands getOmcRoot
+#      a non-git session subfolder as worktreeRoot, state still converges to the
+#      marker-bearing ancestor. The same anchor also appears in
+#      getProjectIdentifier and in the OMC_STATE_DIR branch; those are left
+#      untouched (next-line lookahead pins the right one).
+#
+#   WHY NOT patch resolveToWorktreeRoot (the abandoned "point C"): that upstream
+#   normalizer feeds validateWorkingDirectory()'s trusted-root check, whose
+#   trustedRoot stays at process.cwd() (the #576 security boundary, deliberately
+#   un-patched). Ascending resolveToWorktreeRoot above that boundary makes the
+#   normalized cwd an *ancestor* of trustedRoot → "outside the trusted worktree
+#   root" throw → the HUD dies with "[OMC] HUD error - check stderr". Patching
+#   ONLY getOmcRoot's argument (point B as written here) moves the .omc location
+#   without ever touching the security-boundary input, so the HUD is unaffected.
+#   Reproduced + regression-verified 2026-06-01 (see design.md §9).
 #
 # Why a patch and not an upstream change: OMC is a vendored plugin, not our
 # repo. This mirrors patch_omc_freeze.sh — edit the cache in-place; OMC
@@ -53,7 +66,11 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 ANCHOR='    const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
-REPLACEMENT="    const root = worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
+# Point D: ascendToMarker(worktreeRoot) goes FIRST so getOmcRoot does not trust
+# the (possibly non-git subfolder) worktreeRoot argument the HUD hands it. The
+# trailing ascendToMarker(process.cwd()) covers the worktreeRoot===undefined
+# call path. resolveToWorktreeRoot stays stock → no #576 boundary conflict.
+REPLACEMENT="    const root = _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot) || worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
 RETURN_LINE='    return join(root, OmcPaths.ROOT);'
 
 patched=0
@@ -116,6 +133,10 @@ while IFS= read -r wp; do
 
   ok=1
   grep -q '_cbRequire' "$wp" || ok=0
+  # Point D pins BOTH ascent forms: ascendToMarker(worktreeRoot) (don't-trust-arg)
+  # AND ascendToMarker(process.cwd()) (worktreeRoot===undefined path). Requiring
+  # both rejects a stale point-A line (which had only the process.cwd() form).
+  grep -q "ascendToMarker(worktreeRoot)" "$wp" || ok=0
   grep -q "ascendToMarker(process.cwd())" "$wp" || ok=0
   if [[ "$ok" == "1" ]] && node --check "$wp" 2>/dev/null; then
     rm -f "$wp.bak"

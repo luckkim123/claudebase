@@ -170,3 +170,40 @@ workspace 내부 `.omc` 11개:
 - OMC를 순수 설치한(claudebase 미사용) 사용자에겐 미적용 → upstream PR이 진짜 해결책(별도 트랙).
 - OMC 업데이트마다 patch 재적용 필요 (install.sh 멱등 재실행으로 흡수).
 - `OMC_STATE_DIR`을 별도로 쓰는 사용자는 그 동작이 우선 (patch는 그 분기를 안 건드림).
+
+---
+
+## 9. 옵션 C 폐기 · 옵션 D 채택 (2026-06-01)
+
+### 배경 — 옵션 A(=§4 본문)의 한계
+§4의 patch(=옵션 A·B: `getOmcRoot` fallback에 `worktreeRoot || ... || ascendToMarker(process.cwd())`)는 **HUD 경로에서 산포를 못 막았다**. HUD(`dist/hud/index.js:214`)는 `getOmcRoot(resolveToWorktreeRoot(stdin.cwd))`를 부르는데, 비-git 트리에서 `resolveToWorktreeRoot`가 세션 **하위 폴더**를 그대로 반환 → 그게 `getOmcRoot`의 `worktreeRoot` 인자(truthy)가 되어 `worktreeRoot || ... || ascend` 단락평가에서 **ascent를 건너뜀**. `.omcroot`가 무력.
+
+### 옵션 C 시도와 실패 (HUD 깨짐)
+이를 고치려 상류 `resolveToWorktreeRoot()`의 비-git fallback(`return getWorktreeRoot(process.cwd()) || process.cwd();`)에도 ascent를 주입했다(옵션 C, commit a80a892). 결과 **`[OMC] HUD error - check stderr`로 HUD가 죽었다**.
+
+**근본 원인 (2026-06-01 실제 HUD 로드그래프 재현으로 규명)**: OMC #576은 두 루트 개념을 의도적으로 분리한다 —
+- `resolveToWorktreeRoot` = "state를 어디 둘까"용 (정규화 가능)
+- `validateWorkingDirectory()`(L659, OMC tools가 호출)의 `trustedRoot = getWorktreeRoot(process.cwd()) || process.cwd()`(L660) = **보안 경계** (절대 위로 안 넓힘, 하위폴더 `.omc` 생성 차단이 목적).
+
+옵션 C가 `resolveToWorktreeRoot`를 마커 조상으로 올리면, 그 정규화된 cwd가 `validateWorkingDirectory`의 trustedRoot(=`process.cwd()`, 미정규화)의 **조상**이 되어 `relative(trustedRoot, normalized)`가 `..`로 시작 → L706 `throw 'X is outside the trusted worktree root Y'`. 즉 **`resolveToWorktreeRoot`를 위로 올리는 한 보안검증과 구조적으로 충돌**(단순 버그 아님). a80a892는 883702e로 revert.
+
+### 옵션 D = 채택된 해법
+**`resolveToWorktreeRoot`는 stock 그대로 두고**(보안검증 입력 불변 → 충돌 회피), **`getOmcRoot`만** 받은 `worktreeRoot` 인자를 불신하여 ascent를 **맨 앞**에 둔다:
+
+```js
+const root = _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot)
+  || worktreeRoot || getWorktreeRoot()
+  || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd())
+  || process.cwd();
+```
+
+- HUD가 비-git 하위폴더를 `worktreeRoot`로 넘겨도 → `ascendToMarker(worktreeRoot)`가 마커 조상(`workspace`)으로 수렴 → state는 `workspace/.omc`.
+- `resolveToWorktreeRoot`는 안 건드리니 `validateWorkingDirectory`의 trustedRoot는 stock(`process.cwd()`) 유지 → throw 없음. **state 위치만 옮기고 보안 경계 입력은 불변.**
+- `validateWorkingDirectory`는 `getOmcRoot`를 경유하지 않는 별도 경로라 옵션 D의 영향 없음.
+
+### 검증 (실제 HUD 로드그래프 + 회귀 5종, 2026-06-01)
+격리 함수호출이 아니라 **wrapper(omc-hud.mjs)와 동일하게 `dist/hud/index.js`를 동적 import + statusline stdin 주입**해 재현. (이전 실패의 교훈: 격리 `node -e` 통과 ≠ 실제 statusline 안전.)
+- 비-git 깊은 하위폴더에서 HUD 로드 → **throw 없음** ✅, `getOmcRoot`는 `workspace/.omc` 수렴 ✅.
+- 회귀 5/5: ①git repo 불변 ②git 하위폴더 repo루트 수렴 ③비-git 루트 ④**비-git 깊은하위→루트 수렴·validateWD throw 없음** ⑤마커없는 폴더→cwd 폴백(광역오염 없음).
+- 멱등: 2회 실행 시 `already-patched=1`, ascent 라인 중복 0.
+- `tests/installer/test_patch_omc_statedir.py` 10 + 전체 82 pass (옵션 D 핵심 = `test_ascent_ignores_untrusted_worktreeroot_argument`: 하위폴더를 인자로 넘겨도 루트 수렴).

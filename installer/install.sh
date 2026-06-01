@@ -57,17 +57,15 @@ sync_plugins
 # shellcheck source=lib/omc.sh
 source "$REPO_DIR/installer/lib/omc.sh"
 patch_omc_bash_freeze
-# DISABLED 2026-06-01: patch_omc_statedir broke the OMC HUD — the statusline
-# showed "[OMC] HUD error - check stderr" once a conversation got going. The
-# ascent injection into worktree-paths.js (getOmcRoot + resolveToWorktreeRoot)
-# passed isolated `node -e` tests but threw in the real Claude Code statusline
-# runtime, and did NOT actually stop .omc scatter in the live session. Point C
-# was git-reverted; the call is commented out so reinstall/omc-update never
-# re-applies even point A. .omc scatter is back to OMC stock (the .omcroot
-# marker still narrows it). Re-enable ONLY after the HUD throw is root-caused
-# and reproduced in the real runtime. See
-# docs/specs/2026-05-31-omc-statedir-marker-ascent (design §9 = the broken C).
-# patch_omc_statedir
+# Re-enabled 2026-06-01 as POINT D (design §9): the broken point C patched
+# resolveToWorktreeRoot and threw "[OMC] HUD error" (it fed a value above the
+# #576 trusted-root boundary into validateWorkingDirectory). Point D patches
+# ONLY getOmcRoot's argument — ascendToMarker(worktreeRoot) first — so .omc
+# converges to the marker root while resolveToWorktreeRoot stays stock and the
+# security boundary is untouched. Verified by reproducing the real HUD load
+# graph (not just isolated node -e) + 5 regression scenarios. See
+# docs/specs/2026-05-31-omc-statedir-marker-ascent/design.md §9.
+patch_omc_statedir
 
 # 7. local-overrides hint
 LOCAL_FILE="$CLAUDE_HOME/settings.local.json"

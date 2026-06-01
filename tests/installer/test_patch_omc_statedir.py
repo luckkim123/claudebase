@@ -73,17 +73,37 @@ def test_patch_applies_and_helper_copied(tmp_path):
     assert r.returncode == 0, r.stderr
     js = (dist_of(cfg) / "worktree-paths.js").read_text()
     assert "_cbRequire" in js
+    # Point D: the rewritten line ascends on BOTH the worktreeRoot argument
+    # (don't-trust-arg) and process.cwd() (worktreeRoot===undefined path).
+    assert "ascendToMarker(worktreeRoot)" in js
     assert "ascendToMarker(process.cwd())" in js
     assert (dist_of(cfg) / "_claudebase-omc-ascent.cjs").exists()
 
 
 def test_only_getomcroot_fallback_is_patched(tmp_path):
     # The anchor appears 3x; only the getOmcRoot fallback (before the .omc
-    # return) must gain the ascent call. The other two stay untouched.
+    # return) must be rewritten. The rewritten line carries exactly one of each
+    # ascent form, so the other two anchor occurrences stay untouched.
     cfg = make_mock_omc(tmp_path)
     run_patch(cfg)
     js = (dist_of(cfg) / "worktree-paths.js").read_text()
+    assert js.count("ascendToMarker(worktreeRoot)") == 1
     assert js.count("ascendToMarker(process.cwd())") == 1
+
+
+def test_resolvetoworktreeroot_stays_stock(tmp_path):
+    # Point D's whole reason for existing: resolveToWorktreeRoot must NOT be
+    # patched. Ascending it (the abandoned point C) fed a value ABOVE the #576
+    # trusted-root boundary into validateWorkingDirectory and threw
+    # "outside the trusted worktree root" — killing the HUD. The fix lives in
+    # getOmcRoot's argument only, so the upstream normalizer stays untouched.
+    cfg = make_mock_omc(tmp_path)
+    run_patch(cfg)
+    js = (dist_of(cfg) / "worktree-paths.js").read_text()
+    # The stub has no resolveToWorktreeRoot, so the only ascent calls must be
+    # the two inside the getOmcRoot rewrite — never a third on a `return
+    # getWorktreeRoot(process.cwd())` line.
+    assert "getWorktreeRoot(process.cwd()) || _cbRequire" not in js
 
 
 def test_idempotent_second_run_skips(tmp_path):
@@ -157,4 +177,36 @@ def test_ascent_resolves_after_patch(tmp_path):
         ["node", "--input-type=module", "-e", code],
         capture_output=True, text=True, check=True,
     )
+    assert out.stdout == str(proj / ".omc")
+
+
+def test_ascent_ignores_untrusted_worktreeroot_argument(tmp_path):
+    # This is what point D fixes and point A could not: the HUD calls
+    # getOmcRoot(resolveToWorktreeRoot(cwd)), and in a non-git tree
+    # resolveToWorktreeRoot returns the session SUBFOLDER unchanged. Point A's
+    # `worktreeRoot || ... || ascend` short-circuited on that truthy subfolder
+    # and never ascended. Point D puts ascendToMarker(worktreeRoot) FIRST, so
+    # even when handed the subfolder as the argument, state converges to the
+    # CLAUDE.md root. Pass the subfolder explicitly to prove it.
+    cfg = make_mock_omc(tmp_path)
+    assert HELPER.exists()
+    run_patch(cfg)
+    dist = dist_of(cfg)
+
+    proj = tmp_path / "proj2"
+    sub = proj / "deep" / "sub"
+    sub.mkdir(parents=True)
+    (proj / "CLAUDE.md").write_text("x")
+
+    code = (
+        f"process.env.HOME={json.dumps(str(tmp_path))};"
+        f"const m=await import({json.dumps(str(dist / 'worktree-paths.js'))});"
+        # Hand getOmcRoot the SUBFOLDER as worktreeRoot — the HUD's exact pattern.
+        f"process.stdout.write(m.getOmcRoot({json.dumps(str(sub))}));"
+    )
+    out = subprocess.run(
+        ["node", "--input-type=module", "-e", code],
+        capture_output=True, text=True, check=True,
+    )
+    # Must converge to the marker root, NOT echo back the subfolder.
     assert out.stdout == str(proj / ".omc")
