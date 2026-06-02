@@ -39,7 +39,8 @@ Escalation strategy (revised 2026-05-31 after transcript evidence):
   escalate:
     streak 1-2 -> REASON_RETRY  (retry, but enforce prose-first discipline)
     streak 3+  -> REASON_ABANDON (stop calling the tool; state a prose
-                  recommendation and proceed — the user can still interrupt)
+                  recommendation and WAIT for the user — abandoning the tool
+                  does not authorize doing the work on an unmade decision)
   A successful retry breaks the streak (next Stop sees streak 0 -> allow), so
   the retry stage self-terminates; the abandon stage is capped at one block
   via `stop_hook_active` so a model that simply cannot emit the call never
@@ -90,16 +91,25 @@ REASON_RETRY = (
     "content in the `questions` array. Every question object needs all four "
     "fields: question, header, options (>=2), multiSelect.\n"
     "3. If there is an obvious recommended choice, do NOT call "
-    "AskUserQuestion at all — state the recommendation in prose and proceed; "
-    "the user can interrupt. AskUserQuestion is for genuine branch decisions."
+    "AskUserQuestion at all — state the recommendation in prose and STOP "
+    "THERE for the user to decide. 'Proceed' here means continue the "
+    "conversation, NOT start doing the work: do not begin edits or file "
+    "changes on a decision the user has not actually made. A user merely "
+    "confirming a FACT you guessed (\"that's correct, but...\") is NOT "
+    "approval to act on it. AskUserQuestion is for genuine branch decisions "
+    "that are the user's to make; treating your own recommendation as their "
+    "answer is exactly the failure this guard exists to prevent."
 )
 
 # Streak 3+: retrying has not worked. On a large-context Opus session the
 # empty-payload emission is a known model-side failure mode (claude-code
 # issue #64150) that repeated retries do NOT reliably escape — one observed
 # session looped 38 times. So STOP retrying the tool and route around it:
-# state the recommendation in prose and proceed. The user keeps a real choice
-# (they can interrupt) and the session is no longer wedged.
+# state the recommendation in prose, then WAIT for the user to decide.
+# Abandoning the TOOL is not authorization to do the WORK — on a decision the
+# user has not made, present the recommendation and stop; do not start edits
+# or irreversible actions. The user keeps a real choice and the session is no
+# longer wedged.
 REASON_ABANDON = (
     "Your AskUserQuestion call has now failed with a missing `questions` "
     "array THREE OR MORE TIMES IN A ROW. Retrying the tool is not working — "
@@ -110,9 +120,16 @@ REASON_ABANDON = (
     "1. In your normal reply text, write out the choice you were going to "
     "ask about, list the options in prose, and state which one you "
     "RECOMMEND and why.\n"
-    "2. Proceed with that recommended option. Do NOT call AskUserQuestion "
-    "again for this decision — the user can read your recommendation and "
-    "interrupt if they want a different option.\n"
+    "2. Then STOP and wait for the user to decide. Abandoning the TOOL does "
+    "NOT authorize doing the WORK: presenting a recommendation is not the "
+    "same as getting approval. Do NOT start edits, file changes, or any "
+    "irreversible/out-of-scope action on a branch the user has not actually "
+    "chosen. A user confirming a fact you guessed (\"yeah that's right, "
+    "but...\") is NOT a 'yes, proceed'. The ONLY case where you may continue "
+    "without waiting is a trivial sub-choice INSIDE work the user already "
+    "approved — and even then, state which assumption you are proceeding on "
+    "so they can correct it. Do NOT call AskUserQuestion again for this "
+    "decision — the user can read your recommendation and reply.\n"
     "3. If the context has grown very large, consider telling the user they "
     "can run /compact to reduce the malformed-call rate going forward."
 )

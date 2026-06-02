@@ -187,8 +187,19 @@ def test_three_in_a_row_forces_abandon(tmp_path):
         "cwd": str(tmp_path),
     })
     assert out.get("decision") == "block"
-    assert "three or more times" in out.get("reason", "").lower()
-    assert "stop calling askuserquestion" in out.get("reason", "").lower()
+    reason = out.get("reason", "").lower()
+    assert "three or more times" in reason
+    assert "stop calling askuserquestion" in reason
+    # Regression guard (2026-06-02): abandoning the TOOL must not be read as
+    # authorization to do the WORK. The abandon message must tell the model to
+    # WAIT for the user on an unmade decision, never to "proceed" with edits.
+    # This is the exact failure that prompted this fix — "proceed with the
+    # recommended option" was misread as "start the work without approval".
+    assert "wait" in reason, "abandon message must tell the model to wait for the user"
+    assert "not authorize" in reason or "not a 'yes" in reason, (
+        "abandon message must state that abandoning the tool is not approval to act")
+    assert "proceed with that recommended option" not in reason, (
+        "the old 'proceed with that recommended option' wording must be gone")
 
 
 def test_abandon_stage_caps_at_one_block_on_refire(tmp_path):
