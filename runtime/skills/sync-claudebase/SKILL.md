@@ -63,7 +63,7 @@ Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUD
 
 - `~/claudebase/` is a git repo with `origin` set
 - `claude` CLI on PATH (otherwise the plugin-sync sub-step skips with a warning, which is fine but flag it)
-- `~/claudebase/` working tree is clean — if dirty, **stop and surface the dirty files to the user**. Do not pull, do not run install.sh on a dirty tree.
+- `~/claudebase/` working tree is clean — if dirty, **do not pull and do not run install.sh on a dirty tree**. But "dirty" is not automatically "stop": a tracked file like `config/CLAUDE.md` (symlinked to `~/.claude/CLAUDE.md`) is routinely edited in place by a *different* session writing a learning, so the working tree is dirty through no action of this run. Go to **Step 1.5 (Dirty working-tree triage)** to classify the change before deciding — only a change that is genuinely the user's to keep stops the run for a human.
 
 ## Procedure
 
@@ -77,6 +77,33 @@ cd ~/claudebase && git fetch && git status -sb
 - Behind only → list incoming commits: `git log --oneline HEAD..@{u}`.
 - Ahead only → unpushed local commits already exist. Surface them; do not pull-rebase silently.
 - Diverged → bail to user. Do not auto-merge.
+
+### 1.5. Dirty working-tree triage (only if pre-flight found a dirty tree)
+
+A dirty tree on a **distributed clone** is the common case this step exists for: another session on this machine edited a tracked file in place (most often `config/CLAUDE.md` ← `~/.claude/CLAUDE.md`, where learnings get written), so the change is real but may already be obsolete. **Never blanket-stop on dirty, and never blanket-discard.** Classify first, because the right action differs and a *non-owner* (a person who received this clone but cannot push to `origin`) can be left stuck if you stop on a change that should simply be dropped.
+
+For each dirty tracked file (`git status --porcelain`):
+
+1. **Read the local diff** — `git diff <file>`. Understand what the uncommitted change actually says.
+2. **Compare against the incoming commits** — does `origin/main` already contain this change, or a superseding version of it?
+   ```bash
+   # Pick a distinctive phrase from your local diff's added line, then:
+   git show origin/main:config/CLAUDE.md | grep -qF "<distinctive phrase>" \
+     && echo "ABSORBED: origin already has it (or a superset)" \
+     || echo "UNIQUE: origin does not have this change"
+   ```
+   Also skim the incoming commit subjects (`git log --oneline HEAD..@{u}`) — a local 1-line note is frequently the *draft* of a fuller incoming commit (same topic, but incoming adds code + tests). If the incoming commit supersedes the local note, the local note is redundant.
+3. **Decide by classification:**
+   - **ABSORBED / superseded** → the local change adds nothing origin doesn't already have. **Back it up to a patch first** (recoverable, per the Deletion-Safety rule), then discard so `git pull --ff-only` can proceed:
+     ```bash
+     git diff <file> > /tmp/claudebase-local-$(basename <file>)-$(date +%Y%m%d-%H%M%S).patch
+     git checkout -- <file>
+     ```
+     State in the summary that the change was absorbed and where the backup patch is. Then continue to step 2 (analyze) → step 3 (pull).
+   - **UNIQUE and worth keeping** → this is genuinely the user's content. **Now** the pre-flight "stop and surface to the user" applies — show the diff and let the user decide. Branch on push authority:
+     - **Owner (can push `origin`)** → offer: commit the change locally now (so the tree is clean), then `git pull --ff-only` (or rebase the new commit onto incoming if they diverge), and push at the step-8 gate.
+     - **Non-owner (cannot push `origin`)** → committing locally is fine for *their* clone, but it will make them diverge from `origin` on the next sync and they cannot upstream it. Guide them instead: keep the change as a **patch file** (`git diff <file> > ~/my-claudebase-change.patch`) or a local branch, `git checkout --` the tracked file so `--ff-only` works, then either (a) send the patch to the repo owner to merge, or (b) re-apply the patch after each pull if it's a personal-machine tweak. The point: a non-owner is never forced to choose between "lose my change" and "block forever" — preserve it out-of-tree and keep syncing.
+   - **UNIQUE but disposable** (scratch edit, debug print, abandoned experiment) → confirm with the user it's disposable, then discard as in the ABSORBED path (patch-backup is cheap insurance even here).
 
 ### 2. Analyze the incoming diff
 
@@ -332,6 +359,8 @@ If `git log --oneline @{u}..HEAD` shows local commits:
 
 Never push autonomously, even in auto mode. CLAUDE.md governance overrides auto mode.
 
+**Non-owner clones (no push access to `origin`).** If `git push` would fail because this is a distributed clone the user does not own, do NOT treat that as "stuck". The push gate is for the *owner*; a non-owner who ended up with a local commit (e.g. a unique change preserved in Step 1.5) keeps it on their own clone and forwards it to the repo owner as a patch (`git format-patch -1` / `git diff`) or a PR. Surface that path instead of looping on a denied push.
+
 ### 9. Template adoption (only if step 2 flagged a `templates/` change)
 
 For each new template:
@@ -357,6 +386,8 @@ For each new template:
 | "Skip the second install.sh run — first one passed" | That's exactly how the mcp.json idempotency bug went undetected for a day. Step 6 is non-negotiable. |
 | "I'll auto-upgrade the claude CLI silently" | Non-idempotent. Plugin metadata or APIs can break across major versions and brick the current session. Step 4e requires user confirmation, same as commit/push. |
 | "OMC drift detected, I'll just run `omc update`" | Non-idempotent — it rewrites CLAUDE.md and re-syncs the plugin mid-session. Step 4f requires user confirmation, same as 4e. Detect-then-ask, never auto-apply. |
+| "Tree is dirty → stop, the user must decide" | Not always. A tracked file (esp. `config/CLAUDE.md`) is often dirtied by another session writing a learning, and the change may already be in `origin`. Run Step 1.5 triage first: ABSORBED → patch-backup + discard; UNIQUE → *then* stop and ask. Blanket-stopping leaves a non-owner wedged on a change they should just drop. |
+| "Dirty change conflicts with the pull → discard it so `--ff-only` works" | Only after Step 1.5 classifies it as ABSORBED/disposable. A UNIQUE change is the user's content — back it up to a patch and surface it; a non-owner preserves it out-of-tree (patch/branch), never silently loses it. |
 
 ## Outputs the user expects after a run
 

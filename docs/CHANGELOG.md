@@ -2,6 +2,33 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-06-05 — sync skill: dirty-tree triage + non-owner path
+
+A live sync run hit a gap: the working tree was dirty (`config/CLAUDE.md`, the
+`~/.claude/CLAUDE.md` symlink target, had a 1-line uncommitted learning written
+by another session) **and** `origin` was behind. The skill's only guidance was
+pre-flight "if dirty, stop and surface to the user" — but the dirty change
+turned out to be the *draft* of an incoming commit (`2e59219`, same topic, but
+with code + tests), i.e. already absorbed by `origin`. The correct action was
+patch-backup + discard, not stop. Worse, blanket-stopping on dirty strands a
+**non-owner** (someone who received this clone but can't push `origin`): they'd
+be told to "decide" on a change they should simply drop, with no documented way
+to keep a *genuinely unique* change either, since they can't upstream it.
+
+The fix is procedural — classify the dirty change before deciding, and give the
+non-owner an out-of-tree path so they're never forced to choose between losing
+their change and blocking sync forever.
+
+### Added
+- `runtime/skills/sync-claudebase/SKILL.md` — new **Step 1.5 (Dirty working-tree triage)** between fetch and analyze. For each dirty tracked file: read the local diff, compare it against `origin/main` (and the incoming commit subjects), then branch — **ABSORBED/superseded** → patch-backup (`git diff > /tmp/...patch`) + `git checkout --` + continue; **UNIQUE & worth keeping** → *then* the pre-flight "stop and surface" applies, split by push authority (owner: commit-then-pull-then-step-8-gate; non-owner: preserve as a patch/branch, `checkout --` to unblock `--ff-only`, forward to the owner or re-apply after pull); **UNIQUE but disposable** → confirm + discard. The recurring trigger (another session edits `config/CLAUDE.md` in place) is named explicitly so the dirty state isn't misread as this run's doing.
+
+### Changed
+- `runtime/skills/sync-claudebase/SKILL.md` — pre-flight dirty bullet reworded from a flat "stop and surface" to "dirty ≠ automatically stop → go to Step 1.5"; step-8 push gate gained a **Non-owner clones** paragraph (a denied `git push` is not "stuck" — forward the commit as a patch/PR, don't loop); two new Red-flags rows ("dirty → stop" and "discard so `--ff-only` works") each redirect to Step 1.5 classification.
+
+### Notes
+- Why this matters for distributed clones specifically: the owner can always commit→push to preserve a unique change, so for them "stop and ask" is sufficient. A non-owner cannot — which is the case the user flagged ("다른 사람은 push도 마음대로 할 수 없잖아"). Step 1.5's non-owner branch is the part that didn't exist before.
+- Docs/skill-only change; no code, no tests touched. The triage procedure is the same sequence verified live in the sync run that surfaced the gap (patch-backup → `checkout --` → `pull --ff-only` succeeded).
+
 ## [Unreleased] — 2026-06-05 — opt-in `--update` for plugin sync
 
 `installer/scripts/plugin_sync.py` only ever *installed* missing plugins; an
