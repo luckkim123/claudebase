@@ -8,7 +8,7 @@ set -u
 
 # gh: the GitHub CLI is the household's sole GitHub interface (clone/push/auth) —
 # claudebase relies on it instead of any github plugin (see config/settings.json).
-# The sync-claude-settings skill and install.sh's plugin sync both assume gh is present.
+# The sync-claudebase skill and install.sh's plugin sync both assume gh is present.
 REQUIRED_PKGS=(tmux gh)
 REQUIRED_CASKS=(font-pretendard)
 REQUIRED_PIP=(python-pptx python-docx python-hwpx matplotlib Pillow)

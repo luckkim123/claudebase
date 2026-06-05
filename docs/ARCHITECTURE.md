@@ -125,7 +125,7 @@ User-scope skills live under `runtime/skills/` and are auto-symlinked.
 | `memory-update` | Compact and organize auto-memory files | `/memory-update` |
 | `omc-teams-ops` | omc-teams launch / debug manual (sentinel, pane labels, monitor) | "omc team", "sentinel" |
 | `readme-project` | Generate a project README by analyzing the codebase | `/readme-project` |
-| `sync-claude-settings` | Sync this repo across machines (pull, drift-check, install, verify) | "settings sync", "plugin drift" |
+| `sync-claudebase` | Sync this repo across machines (pull, drift-check, install, verify) | "settings sync", "plugin drift" |
 
 Skills from plugins are loaded automatically by Claude Code from `~/.claude/plugins/`.
 
