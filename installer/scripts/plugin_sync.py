@@ -42,6 +42,7 @@ class Action(Enum):
     OK         — already at user scope; no-op
     INSTALL    — enabled but not installed at any scope
     REINSTALL  — installed at wrong scope (project/local); uninstall + reinstall at user
+    UPDATE     — at user scope, opt-in --update requested; `claude plugin update`
     DRIFT      — installed at user scope but not in any enabledPlugins
     SKIP_OS    — marketplace gated to OSes not matching this host
     """
@@ -49,6 +50,7 @@ class Action(Enum):
     OK = "ok"
     INSTALL = "install"
     REINSTALL = "reinstall"
+    UPDATE = "update"
     DRIFT = "drift"
     SKIP_OS = "skip_os"
 
@@ -139,8 +141,17 @@ def find_drift(settings: dict, installed: dict, local_enabled: dict) -> list[Dec
 
 
 def plan_actions(settings: dict, installed: dict, metadata: dict,
-                 platform: str, local_enabled: dict | None = None) -> list[Decision]:
-    """Full pass: one Decision per enabled plugin, plus drift decisions."""
+                 platform: str, local_enabled: dict | None = None,
+                 update_candidates: bool = False) -> list[Decision]:
+    """Full pass: one Decision per enabled plugin, plus drift decisions.
+
+    update_candidates (opt-in --update): re-label user-scope OK plugins as
+    UPDATE so the apply layer runs `claude plugin update`. Only OK→UPDATE —
+    INSTALL/REINSTALL/SKIP_OS are untouched (you cannot update what is not
+    installed, and a scope fix takes priority). Whether a candidate is
+    *actually* stale is left to the CLI (idempotent: no-op when current); we
+    never compare commit SHAs ourselves.
+    """
     out: list[Decision] = []
     enabled = {k for k, v in settings.get("enabledPlugins", {}).items() if v}
     for plugin in enabled:
@@ -151,6 +162,9 @@ def plan_actions(settings: dict, installed: dict, metadata: dict,
                                 reason=f"marketplace {mp} not allowed on {platform}"))
             continue
         d = decide_plugin(plugin, settings, installed)
+        if update_candidates and d.action is Action.OK:
+            d.action = Action.UPDATE
+            d.reason = "user scope; --update requested (CLI decides if stale)"
         d.post_install = post_install_hooks_for(plugin, metadata)
         out.append(d)
     out.extend(find_drift(settings, installed, local_enabled or {}))
@@ -218,6 +232,19 @@ def apply(decisions: list[Decision], dry_run: bool, prune: bool) -> list[str]:
             log.append(f"plugin uninstalled (drift): {d.plugin}" if rc == 0
                        else f"WARNING: failed to uninstall: {d.plugin}")
             continue
+        if d.action is Action.UPDATE:
+            # `claude plugin update` is idempotent — a no-op when already current,
+            # so we never decide staleness ourselves (mirror SHAs are unreliable).
+            if dry_run:
+                log.append(f"would update (user): {d.plugin}")
+                continue
+            rc = subprocess.run(
+                ["claude", "plugin", "update", d.plugin],
+                capture_output=True,
+            ).returncode
+            log.append(f"plugin updated (user): {d.plugin}" if rc == 0
+                       else f"WARNING: failed to update: {d.plugin}")
+            continue
         # INSTALL or REINSTALL
         if dry_run:
             log.append(f"would {d.action.value} at user scope: {d.plugin} "
@@ -241,6 +268,7 @@ def apply(decisions: list[Decision], dry_run: bool, prune: bool) -> list[str]:
     log.append(
         f"plugin sync: {counts[Action.OK]} already user-scope, "
         f"{counts[Action.INSTALL] + counts[Action.REINSTALL]} fixed, "
+        f"{counts[Action.UPDATE]} updated, "
         f"{counts[Action.DRIFT] if prune else 0} removed, "
         f"{counts[Action.DRIFT] if not prune else 0} drift-kept, "
         f"{counts[Action.SKIP_OS]} os-skipped"
@@ -346,6 +374,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--apply", action="store_true", help="execute decisions")
     ap.add_argument("--dry-run", action="store_true", help="print intended actions")
     ap.add_argument("--prune", action="store_true", help="remove drift plugins")
+    ap.add_argument("--update", action="store_true",
+                    help="also `claude plugin update` enabled user-scope plugins "
+                         "(idempotent; CLI no-ops when already current)")
     ap.add_argument("--report", action="store_true",
                     help="print one TAB-separated line per decision and exit")
     args = ap.parse_args(argv)
@@ -356,7 +387,17 @@ def main(argv: list[str] | None = None) -> int:
     for line in ensure_marketplaces(settings, metadata, platform, args.dry_run):
         print(line)
 
-    decisions = plan_actions(settings, installed, metadata, platform, local_enabled)
+    decisions = plan_actions(settings, installed, metadata, platform, local_enabled,
+                             update_candidates=args.update)
+
+    # Without --update, advise (don't act) how many user-scope plugins could be
+    # refreshed. We can't tell which are stale — only the CLI can — so the note
+    # reports the candidate count, never a "N updates available" claim.
+    if not args.update:
+        candidates = sum(1 for d in decisions if d.action is Action.OK)
+        if candidates:
+            print(f"plugin update: {candidates} user-scope plugin(s) installed — "
+                  f"re-run with --update to refresh to latest")
 
     if args.report:
         for d in decisions:

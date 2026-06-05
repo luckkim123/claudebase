@@ -169,6 +169,68 @@ def test_plan_actions_skips_os_gated_marketplace_on_linux(installed, metadata):
     assert "gated-example" in d.reason.lower() or "linux" in d.reason.lower()
 
 
+# ─── update candidates (opt-in --update) ────────────────────────────────────
+
+
+def test_plan_actions_default_keeps_user_scope_as_ok(settings, installed, metadata):
+    """Without update_candidates, a user-scope plugin stays Action.OK (idempotency)."""
+    decisions = ps.plan_actions(
+        settings=settings, installed=installed, metadata=metadata,
+        platform="macos", local_enabled={},
+    )
+    by_plugin = {d.plugin: d for d in decisions}
+    assert by_plugin["superpowers@claude-plugins-official"].action is Action.OK
+
+
+def test_plan_actions_update_flag_turns_user_scope_into_update(settings, installed, metadata):
+    """With update_candidates=True, an enabled user-scope plugin becomes Action.UPDATE."""
+    decisions = ps.plan_actions(
+        settings=settings, installed=installed, metadata=metadata,
+        platform="macos", local_enabled={}, update_candidates=True,
+    )
+    by_plugin = {d.plugin: d for d in decisions}
+    assert by_plugin["superpowers@claude-plugins-official"].action is Action.UPDATE
+
+
+def test_update_flag_does_not_touch_install_or_reinstall(settings, installed, metadata):
+    """update_candidates only re-labels user-scope OK; INSTALL/REINSTALL are unchanged."""
+    decisions = ps.plan_actions(
+        settings=settings, installed=installed, metadata=metadata,
+        platform="macos", local_enabled={}, update_candidates=True,
+    )
+    by_plugin = {d.plugin: d for d in decisions}
+    # not-installed stays INSTALL, never UPDATE (you can't update what isn't there)
+    assert by_plugin["oh-my-claudecode@omc"].action is Action.INSTALL
+    # wrong-scope stays REINSTALL (scope fix takes priority over update)
+    assert by_plugin["axlabs-mckinsey-pptx@axlabs"].action is Action.REINSTALL
+
+
+# ─── apply: UPDATE handling (dry-run only — no subprocess) ───────────────────
+
+
+def test_apply_dry_run_update_emits_would_update():
+    """dry_run apply of an UPDATE decision logs 'would update', runs no subprocess."""
+    decisions = [Decision(plugin="superpowers@claude-plugins-official",
+                          action=Action.UPDATE, current_scope="user",
+                          reason="--update requested")]
+    log = ps.apply(decisions, dry_run=True, prune=False)
+    joined = "\n".join(log)
+    assert "would update" in joined
+    assert "superpowers@claude-plugins-official" in joined
+
+
+def test_apply_summary_counts_update_separately():
+    """The summary line reports the update count so the user sees how many ran."""
+    decisions = [
+        Decision(plugin="a@m", action=Action.UPDATE, current_scope="user"),
+        Decision(plugin="b@m", action=Action.UPDATE, current_scope="user"),
+        Decision(plugin="c@m", action=Action.OK, current_scope="user"),
+    ]
+    log = ps.apply(decisions, dry_run=True, prune=False)
+    summary = log[-1]
+    assert "2 updated" in summary
+
+
 # ─── post-install registry ──────────────────────────────────────────────────
 
 

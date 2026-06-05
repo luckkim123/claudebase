@@ -206,7 +206,7 @@ After upgrade, re-run `claude --version` to confirm and then proceed to step 5. 
 
 **4f. OMC plugin version up-to-date?**
 
-The plugin sync in install.sh only *registers* OMC (`claude plugin install` when missing); it never *upgrades* an already-installed plugin — verified in `install.sh` (`current == user` → `ok++` and skip; no version comparison). So OMC version drift is independent of install.sh and must be checked separately here.
+The plugin sync in install.sh only *registers* OMC (`claude plugin install` when missing); it never *upgrades* an already-installed plugin — verified in `install.sh` (`current == user` → `ok++` and skip; no version comparison). So OMC version drift is independent of install.sh and must be checked separately here. (This step stays OMC-specific because `omc update` syncs three things at once — plugin + npm CLI + CLAUDE.md; the generic `claude plugin update` path for *every other* plugin is step 4g.)
 
 ```bash
 current="$(omc --version 2>/dev/null)"
@@ -242,6 +242,52 @@ omc doctor conflicts 2>&1 | tail -20
 Note: `omc doctor conflicts` may report pre-existing warnings unrelated to the update (e.g. unknown fields in `.omc-config.json`, no MCP registry — both present on a healthy 4.14.0 as of 2026-05-24). So the signal is **new** conflicts that appear *after* the update, not the mere presence of warnings. If `omc doctor conflicts` surfaces something that wasn't there before, report it and run `/oh-my-claudecode:omc-setup` as the doctor suggests — do NOT auto-fix config conflicts (they may need a judgment call). If the version didn't bump to `$latest`, the update half-applied — re-run `omc update --force`, or `omc update --clean` to purge stale plugin cache, then re-check.
 
 **Why ask, don't auto-run:** `omc update` rewrites the canonical `CLAUDE.md` and re-syncs the plugin while *this* session has them loaded. A mid-session plugin/CLAUDE.md swap can desync the running session's tool registry and skill list. Treat it like the claude CLI upgrade in 4e: confirm, then ideally restart the session to pick up the new plugin cleanly. If `omc update` fails (network, npm), surface the error and continue to step 5 — a stale OMC is better than a half-applied one.
+
+**4g. Other plugins up-to-date? (detect-then-ask via `--update`)**
+
+4f handles `omc` specifically. Every *other* enabled user-scope plugin
+(superpowers, the heroacademia family, axlabs, the official plugins) has the
+same drift property: `install.sh`'s plugin sync only *installs* missing ones, it
+never *updates* an already-installed one. `plugin_sync.py --update` closes that
+gap. Crucially it does **not** decide staleness itself — `claude plugin update`
+is idempotent and no-ops when a plugin is already at the latest commit (verified
+2026-06-05: re-running it printed `already at the latest version` and left the
+installed SHA + timestamp untouched). So this step is **safe to offer every
+sync** with zero risk of clobbering current plugins.
+
+First show the candidate set without acting (dry-run asks the CLI, not us):
+
+```bash
+cd ~/claudebase && python3 installer/scripts/plugin_sync.py --dry-run --update \
+  | grep -E 'would update'
+```
+
+This lists every enabled user-scope plugin `claude plugin update` *would* touch
+— but remember the CLI no-ops the ones already current, so the real effect is
+"refresh whatever is stale." **Ask the user** before applying, same governance
+as 4e/4f (detect-then-ask, never auto-apply):
+
+> "N user-scope plugins can be checked for updates. Run `claude plugin update` on
+> them now? (already-current ones are skipped automatically.)"
+
+On yes:
+
+```bash
+cd ~/claudebase && python3 installer/scripts/plugin_sync.py --apply --update
+```
+
+The summary line reports `… N updated …` — that N is how many the CLI actually
+refreshed (stale ones), not the candidate count. `claude plugin update` notes
+"restart required to apply", so tell the user to relaunch the session if any
+plugin was actually updated. If a plugin fails to update (network, bad
+marketplace), `apply()` logs `WARNING: failed to update: <plugin>` and continues
+— surface it but don't abort the rest.
+
+**Why opt-in, not folded into step 5's install.sh:** keeping `--update` off the
+default install path preserves install.sh's idempotency contract (a second run
+prints zero action lines — step 6 depends on this). Bundling auto-update would
+make every install non-idempotent and could swap a plugin's commit at a moment
+the user didn't choose. Detect-then-ask keeps the choice explicit.
 
 ### 5. Run installer
 
@@ -322,6 +368,7 @@ A short summary table:
 | Drift findings | `<list, or "none">` |
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
+| Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |

@@ -2,6 +2,35 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-06-05 — opt-in `--update` for plugin sync
+
+`installer/scripts/plugin_sync.py` only ever *installed* missing plugins; an
+already-user-scope plugin returned `Action.OK` (no-op), so a newer marketplace
+commit was never picked up — exactly why the freshly-pushed omp routing card
+didn't reach the cache until a manual `/plugin` reinstall. Step 4f of the
+sync skill already called this out for `omc` specifically ("install.sh never
+upgrades an already-installed plugin"); this generalizes the fix to every
+enabled user-scope plugin via an **opt-in** `--update` flag, without touching
+install.sh's idempotency contract.
+
+The flag does **not** decide staleness itself — `claude plugin update` is
+idempotent and no-ops when a plugin is already current (verified live
+2026-06-05: re-running it printed `already at the latest version` and left the
+installed SHA + timestamp untouched). Self-comparing marketplace-mirror SHAs was
+rejected as the detection mechanism because a mirror's `.git` tracks the
+*marketplace manifest* repo, not each contained plugin's code repo — so a
+multi-plugin marketplace (e.g. claude-plugins-official) would mis-judge. Letting
+the CLI judge keeps the "never clobber a current plugin" guarantee.
+
+### Added
+- `installer/scripts/plugin_sync.py` — `Action.UPDATE` and a `plan_actions(..., update_candidates=False)` flag. When set, a user-scope plugin that would be `OK` is re-labelled `UPDATE` (only `OK→UPDATE`; `INSTALL`/`REINSTALL`/`SKIP_OS` are untouched — you can't update what isn't installed and a scope fix takes priority). `apply()` handles `UPDATE` with `claude plugin update <plugin>` (dry-run logs `would update`); the summary line now reports `N updated`. New `--update` CLI flag; without it, a one-line advisory reports the candidate count (`re-run with --update`) — never a false "N updates available" claim, since only the CLI knows what's stale.
+- `runtime/skills/sync-claudebase/SKILL.md` — new **step 4g** ("Other plugins up-to-date?") with the detect-then-ask flow: show `plugin_sync.py --dry-run --update` candidates, ask the user, then `--apply --update`. Same governance as 4e/4f (never auto-apply). Added a 4g pointer in step 4f, a `Plugin updates (4g)` row in the outputs table, and the live-verified idempotency note.
+- `tests/installer/test_plugin_sync.py` — 5 new tests: default keeps user-scope `OK` (idempotency regression guard), `--update` re-labels to `UPDATE`, `--update` leaves INSTALL/REINSTALL alone, dry-run `apply` emits `would update` without a subprocess, and the summary counts updates separately. **104 tests total, all passing** (was 99; +5).
+
+### Notes
+- `claude plugin update` prints "restart required to apply" — the skill tells the user to relaunch the session if any plugin was actually refreshed.
+- Design decisions (CLI-delegated detection, opt-in not auto, `--dry-run` as the "ask" channel) were taken interactively with the user; the "never let latest updates get erased" constraint drove the idempotency-first approach.
+
 ## [Unreleased] — 2026-06-05 — harden the AskUserQuestion empty-call guards
 
 External research (GitHub `anthropics/claude-code` #64150 / #64774 / #65247) confirmed the empty-`questions` `AskUserQuestion` failure is a **model-side emission defect** on large-context Opus 4.8 (1.5% vs 0% on Opus 4.7 / Sonnet 4.6), worsened by large injected context — not a settings or plugin bug, and not directly caused by OMC (whose bridge only reads the payload to notify). The defect is upstream and unfixable here; these are recovery/mitigation improvements to the two existing guards. Model inference is unaffected — the hooks run only at turn-end / on an actual empty call.
