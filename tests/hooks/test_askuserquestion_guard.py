@@ -223,3 +223,47 @@ def test_surrogate_heal_missing_file_is_noop(capsys, monkeypatch):
     rc, out = _run(_poisoned_payload("/nonexistent/path/session.jsonl"), capsys, monkeypatch)
     assert rc == 0
     assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# ---- [3] every deny is logged so the Stop hook can count cross-shape -------
+
+
+def test_deny_writes_log(tmp_path, capsys, monkeypatch):
+    """A deny (here: empty input) must append a telemetry record to
+    .omc/logs/askuserquestion_guard.jsonl so the Stop hook can fold guard denies
+    (empty-array / partial / surrogate) together with its own missing-`questions`
+    rejections into one per-session failure count."""
+    rc, out = _run(
+        {"tool_name": "AskUserQuestion", "tool_input": {},
+         "cwd": str(tmp_path), "session_id": "guard-sess"},
+        capsys, monkeypatch,
+    )
+    assert rc == 0
+    assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    log = tmp_path / ".omc" / "logs" / "askuserquestion_guard.jsonl"
+    assert log.exists(), "a deny must be logged for cross-shape counting"
+    rec = json.loads(log.read_text().strip())
+    assert rec["signal"] == "denied_askuserquestion"
+    assert rec["session_id"] == "guard-sess"
+
+
+def test_valid_call_writes_no_log(tmp_path, capsys, monkeypatch):
+    """A passing call must NOT log — only denies are failures."""
+    rc, out = _run(
+        {
+            "tool_name": "AskUserQuestion",
+            "cwd": str(tmp_path),
+            "session_id": "ok-sess",
+            "tool_input": {"questions": [
+                {"question": "Q?", "header": "H",
+                 "options": [{"label": "A", "description": "x"},
+                             {"label": "B", "description": "y"}],
+                 "multiSelect": False}]},
+        },
+        capsys, monkeypatch,
+    )
+    assert rc == 0
+    assert out.strip() == "", "a valid call produces no decision output"
+    _ = capsys  # output already captured via the _run helper
+    log = tmp_path / ".omc" / "logs" / "askuserquestion_guard.jsonl"
+    assert not log.exists(), "a passing call must not be logged as a failure"

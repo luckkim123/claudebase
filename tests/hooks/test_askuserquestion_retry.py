@@ -61,6 +61,29 @@ def _ok_result_block():
             "content": [{"type": "text", "text": "user answered: option A"}]}
 
 
+def _write_transcript_lines(tmp_path: Path, lines, name="transcript.jsonl") -> str:
+    """Write a transcript from raw JSONL-able dicts (full control over the mix of
+    assistant / tool_result-bearing-user / genuine-human-user lines). Returns
+    the path. Used to test streak-breaking on a real human turn and the
+    tail-window size."""
+    p = tmp_path / name
+    p.write_text("\n".join(json.dumps(o) for o in lines) + "\n", encoding="utf-8")
+    return str(p)
+
+
+def _tool_result_user_line(blocks):
+    """A user-role line that is really a tool_result container (how the harness
+    records a tool rejection) — NOT a human turn."""
+    return {"type": "user", "message": {"role": "user", "content": blocks}}
+
+
+def _human_user_line(text="here is my answer: go with option B"):
+    """A genuine human turn: a user-role line whose content is plain text, no
+    tool_result block. This is what must BREAK an empty-call streak."""
+    return {"type": "user", "message": {"role": "user",
+            "content": [{"type": "text", "text": text}]}}
+
+
 def _run_hook(stdin_obj: dict) -> dict:
     proc = subprocess.run(
         [sys.executable, str(HOOK_PATH)],
@@ -274,3 +297,154 @@ def test_hook_writes_log_on_detection(tmp_path):
     rec = json.loads(log.read_text().strip())
     assert rec["signal"] == "empty_askuserquestion"
     assert rec["blocked"] is True
+
+
+# ---- [2] a genuine human turn breaks the streak ---------------------------
+
+
+def test_human_turn_breaks_streak(tmp_path):
+    """An empty call, then a REAL human answer, then another empty call must be
+    streak 1 (the human turn resets it) — NOT streak 2. Without this, a user who
+    answers between two unrelated empty calls is wrongly escalated toward abandon.
+    """
+    m = _load_module()
+    lines = [
+        _tool_result_user_line([_err_result_block()]),   # older empty call
+        _human_user_line(),                              # genuine human turn
+        _tool_result_user_line([_err_result_block()]),   # newest empty call
+    ]
+    tpath = _write_transcript_lines(tmp_path, lines)
+    assert m._count_consecutive_empty_calls(tpath) == 1
+
+
+def test_consecutive_empties_without_human_still_stack(tmp_path):
+    """Guard against over-correction: two empty calls with NO human turn between
+    them must still count as streak 2 (model looping on its own)."""
+    m = _load_module()
+    lines = [
+        _tool_result_user_line([_err_result_block()]),
+        _tool_result_user_line([_err_result_block()]),
+    ]
+    tpath = _write_transcript_lines(tmp_path, lines)
+    assert m._count_consecutive_empty_calls(tpath) == 2
+
+
+# ---- [1] the tail window is large enough for a busy turn -------------------
+
+
+def test_empty_error_found_beyond_40_lines(tmp_path):
+    """A busy turn can push the empty-call rejection past the old 40-line tail
+    window. The detector must still find an empty rejection that sits, say, 60
+    lines from the end, behind many successful tool_results."""
+    m = _load_module()
+    # 60 successful tool_result lines AFTER... no: the empty must be the most
+    # recent tool_result. Put the empty rejection, then 60 NON-tool_result
+    # assistant lines (thinking/text) so the empty is still the last result but
+    # lies >40 physical lines from EOF.
+    lines = [_tool_result_user_line([_err_result_block()])]
+    for i in range(60):
+        lines.append({"type": "assistant", "message": {"role": "assistant",
+                      "content": [{"type": "text", "text": f"thinking {i}"}]}})
+    tpath = _write_transcript_lines(tmp_path, lines)
+    assert m._count_consecutive_empty_calls(tpath) == 1, (
+        "empty rejection beyond the old 40-line window must still be detected")
+
+
+# ---- [4] the retry reason now nudges /compact -----------------------------
+
+
+def test_retry_reason_mentions_compact(tmp_path):
+    """The /compact tip (context shrink = the only documented mitigation for the
+    underlying model-side failure) must appear at the RETRY stage too, not only
+    at abandon — so the user learns the lever early."""
+    tpath = _write_transcript(tmp_path, [_err_result_block()])
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+    })
+    assert out.get("decision") == "block"
+    assert "/compact" in out.get("reason", "")
+
+
+# ---- [3] cross-shape session failure count escalates to abandon ------------
+
+
+def _seed_guard_log(tmp_path: Path, session_id: str, n: int) -> None:
+    """Write n guard-deny records (the PreToolUse guard's shape: empty-array /
+    partial / surrogate denies) for a session into the shared log dir."""
+    log_dir = tmp_path / ".omc" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    p = log_dir / "askuserquestion_guard.jsonl"
+    with p.open("a", encoding="utf-8") as f:
+        for _ in range(n):
+            f.write(json.dumps({"signal": "denied_askuserquestion",
+                                "session_id": session_id}) + "\n")
+
+
+def test_session_failure_count_folds_both_logs(tmp_path):
+    """The Stop hook's session counter must sum guard denies + its own retry
+    rejections for the SAME session_id, ignoring other sessions."""
+    m = _load_module()
+    _seed_guard_log(tmp_path, "sess-A", 3)
+    _seed_guard_log(tmp_path, "sess-B", 9)  # noise: a different session
+    # one prior retry rejection of our own, same session
+    retry_log = tmp_path / ".omc" / "logs" / "askuserquestion_retry.jsonl"
+    retry_log.write_text(json.dumps(
+        {"signal": "empty_askuserquestion", "session_id": "sess-A"}) + "\n",
+        encoding="utf-8")
+    assert m._session_failure_count(str(tmp_path), "sess-A") == 4  # 3 + 1
+
+
+def test_string_content_rejection_does_not_break_streak(tmp_path):
+    """REGRESSION (review bug 2): the harness sometimes records a tool rejection
+    with `content` as a BARE STRING, not a list of blocks. Such a line must NOT
+    be mistaken for a genuine human turn — otherwise a real loop of empty calls
+    (recorded in string form) is miscounted as streak 1 each and never escalates.
+    """
+    m = _load_module()
+    string_err_line = {"type": "user", "message": {"role": "user",
+                       "content": EMPTY_ERR}}  # bare string, not a list
+    lines = [string_err_line, string_err_line, string_err_line]
+    tpath = _write_transcript_lines(tmp_path, lines)
+    assert m._count_consecutive_empty_calls(tpath) == 3, (
+        "bare-string-content empty rejections must stack, not reset the streak")
+
+
+def test_in_flight_failure_counts_toward_abandon_threshold(tmp_path):
+    """REGRESSION (review bug 1): the cross-shape session count reads only logs
+    written BEFORE this decision; the in-flight failure is not yet logged. With
+    threshold 5, exactly 4 prior failures + this one = 5 must abandon. Before the
+    fix, 4 prior read as 4 (< 5) and wrongly stayed in the retry stage."""
+    _seed_guard_log(tmp_path, "edge", 4)  # 4 prior, in-flight makes 5
+    tpath = _write_transcript(tmp_path, [_err_result_block()])  # tail streak 1
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+        "session_id": "edge",
+    })
+    assert out.get("decision") == "block"
+    assert "three or more times" in out.get("reason", "").lower(), (
+        "4 prior + 1 in-flight = threshold 5 must abandon")
+
+
+def test_high_session_count_forces_abandon_even_at_low_streak(tmp_path):
+    """Even a tail streak of just 1, when the session has already racked up many
+    AskUserQuestion failures of ANY shape (guard denies + retry rejections),
+    escalates to ABANDON — the model is clearly looping across shapes, so stop
+    nudging retries and route to prose+recommend."""
+    _seed_guard_log(tmp_path, "loopy", 5)  # 5 prior guard denies this session
+    tpath = _write_transcript(tmp_path, [_err_result_block()])  # tail streak 1
+    out = _run_hook({
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "transcript_path": tpath,
+        "cwd": str(tmp_path),
+        "session_id": "loopy",
+    })
+    assert out.get("decision") == "block"
+    assert "three or more times" in out.get("reason", "").lower(), (
+        "a high cross-shape session count must trigger the abandon reason")

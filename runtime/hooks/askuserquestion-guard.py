@@ -114,7 +114,25 @@ SURROGATE_REASON = (
 )
 
 
-def _deny(reason: str) -> int:
+def _log_deny(cwd, session_id) -> None:
+    """Best-effort telemetry: record one deny so the Stop hook
+    (askuserquestion_retry.py) can fold guard denies — empty-array / partial /
+    surrogate shapes — together with its own missing-`questions` rejections into
+    one per-session failure count ([3] cross-shape counting). Never raises."""
+    try:
+        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        path = os.path.join(log_dir, "askuserquestion_guard.jsonl")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(
+                {"signal": "denied_askuserquestion", "session_id": session_id},
+                ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _deny(reason: str, cwd=None, session_id=None) -> int:
+    _log_deny(cwd, session_id)
     sys.stdout.write(
         json.dumps(
             {
@@ -174,15 +192,20 @@ def main() -> int:
     if payload.get("tool_name") != "AskUserQuestion":
         return 0  # matcher should prevent this, but be defensive
 
+    # Pulled once and threaded through every _deny so each deny is logged for
+    # cross-shape session counting ([3]). cwd/session_id are standard hook stdin.
+    cwd = payload.get("cwd")
+    session_id = payload.get("session_id")
+
     tool_input = payload.get("tool_input") or {}
     if not isinstance(tool_input, dict) or not tool_input:
-        return _deny(REASON)
+        return _deny(REASON, cwd, session_id)
 
     questions = tool_input.get("questions")
     # Direct early-return (not via an `is_empty` bool) so the type checker can
     # narrow `questions` to a non-empty list for the per-question loop below.
     if not isinstance(questions, list) or len(questions) == 0:
-        return _deny(REASON)
+        return _deny(REASON, cwd, session_id)
 
     # Partial-fill check: questions[] exists but a question object is missing its
     # own required fields. This shape IS delivered to the hook (the top-level
@@ -190,24 +213,24 @@ def main() -> int:
     # can actually catch it here before the harness's deeper per-item validation.
     for q in questions:
         if not isinstance(q, dict):
-            return _deny(PARTIAL_REASON)
+            return _deny(PARTIAL_REASON, cwd, session_id)
         if not q.get("question") or not isinstance(q.get("question"), str):
-            return _deny(PARTIAL_REASON)
+            return _deny(PARTIAL_REASON, cwd, session_id)
         if not q.get("header") or not isinstance(q.get("header"), str):
-            return _deny(PARTIAL_REASON)
+            return _deny(PARTIAL_REASON, cwd, session_id)
         opts = q.get("options")
         if not isinstance(opts, list) or len(opts) < 2:
-            return _deny(PARTIAL_REASON)
+            return _deny(PARTIAL_REASON, cwd, session_id)
         for o in opts:
             if not isinstance(o, dict) or not o.get("label") or not o.get("description"):
-                return _deny(PARTIAL_REASON)
+                return _deny(PARTIAL_REASON, cwd, session_id)
 
     if _has_lone_surrogate(tool_input):
         # Deny is not enough on its own: the poisoned tool_use block is already
         # in the transcript. Scrub it in place NOW to close the deadlock window
         # before the next request serializes the conversation.
         _heal_transcript(payload.get("transcript_path"))
-        return _deny(SURROGATE_REASON)
+        return _deny(SURROGATE_REASON, cwd, session_id)
 
     # Valid-looking call: let normal permission flow handle it. We deliberately
     # do NOT validate per-question fields here; the harness's own validator

@@ -90,6 +90,9 @@ REASON_RETRY = (
     "2. Only after that prose exists, call AskUserQuestion with the SAME "
     "content in the `questions` array. Every question object needs all four "
     "fields: question, header, options (>=2), multiSelect.\n"
+    "If empty calls keep recurring, the context has likely grown large — "
+    "tell the user they can run /compact, the only documented mitigation for "
+    "the underlying model-side emission failure.\n"
     "3. If there is an obvious recommended choice, do NOT call "
     "AskUserQuestion at all — state the recommendation in prose and STOP "
     "THERE for the user to decide. 'Proceed' here means continue the "
@@ -135,27 +138,72 @@ REASON_ABANDON = (
 )
 
 
-def _tail_tool_results(transcript_path: str, max_lines: int = 40) -> list:
-    """Return tool_result content-blocks from the last `max_lines` of the
-    transcript JSONL, newest last. Best-effort; returns [] on any problem."""
+# How many physical JSONL lines from the tail to inspect. Raised from 40 to
+# 200 ([1]): a single busy turn can emit dozens of tool_result + thinking lines,
+# pushing the empty-call rejection past a 40-line window so the detector misses
+# it (streak 0 -> no recovery). 200 covers a very busy turn while bounding the
+# read on a huge transcript to a few ms.
+_TAIL_MAX_LINES = 200
+
+
+def _tail_lines(transcript_path: str, max_lines: int = _TAIL_MAX_LINES) -> list:
+    """Return parsed JSONL objects from the last `max_lines` of the transcript,
+    oldest-first. Best-effort; returns [] on any problem. (Returns whole line
+    objects, not just tool_result blocks, so the streak counter can also see
+    genuine human turns that must break a streak — see [2].)"""
     try:
         with open(transcript_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except (OSError, UnicodeDecodeError):
         return []
-    results = []
+    objs = []
     for line in lines[-max_lines:]:
         try:
-            obj = json.loads(line)
+            objs.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-        content = (obj.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_result":
-                results.append(block)
-    return results
+    return objs
+
+
+def _line_tool_results(obj: dict) -> list:
+    """The tool_result blocks carried by one transcript line (possibly empty)."""
+    content = (obj.get("message") or {}).get("content")
+    if not isinstance(content, list):
+        return []
+    return [b for b in content
+            if isinstance(b, dict) and b.get("type") == "tool_result"]
+
+
+def _is_string_content_empty_error(obj: dict) -> bool:
+    """True iff this user-role line carries the empty-call rejection as BARE
+    STRING content (no block list). `_line_tool_results` only sees list-form
+    blocks, so this catches the string-form rejection the harness also emits."""
+    msg = obj.get("message") or {}
+    if msg.get("role") != "user":
+        return False
+    content = msg.get("content")
+    if not isinstance(content, str) or not content:
+        return False
+    return (_ERR_TOOL in content and _ERR_MISSING in content
+            and _ERR_PHRASE in content)
+
+
+def _is_genuine_human_turn(obj: dict) -> bool:
+    """True iff this line is a real user turn (human typed something), NOT a
+    tool_result container. The harness records tool rejections on user-role
+    lines too; those are NOT human turns. A line is a human turn when its role
+    is user and it carries no tool_result — as a list of blocks OR as bare
+    string content. The harness sometimes records a rejection with `content` as
+    a plain string (see test_string_content_form_is_flattened); that string is a
+    tool error, not a typed message, so a non-empty string content must NOT
+    count as a human turn (else a string-form rejection would wrongly break the
+    streak and stop a real loop from escalating)."""
+    msg = obj.get("message") or {}
+    if msg.get("role") != "user":
+        return False
+    if isinstance(msg.get("content"), str) and msg.get("content"):
+        return False  # bare-string content = a tool rejection, not a human turn
+    return not _line_tool_results(obj)
 
 
 def _result_text(block: dict) -> str:
@@ -186,22 +234,87 @@ def _count_consecutive_empty_calls(transcript_path: str) -> int:
     what distinguishes 'currently looping' from 'an older, already-recovered
     failure earlier in the session'.
 
+    A genuine human turn between two empty calls ALSO breaks the streak ([2]):
+    if the user actually answered, the next empty call is a fresh first failure,
+    not a continuation of the runaway — otherwise a user who replies between two
+    unrelated empty calls is wrongly escalated toward abandon.
+
     Returns:
       0  -> the last tool_result is NOT an empty-call rejection (allow stop)
       1  -> exactly one empty call at the tail (first failure)
       2  -> two in a row (the model already retried once and failed again)
       3+ -> runaway; we will force AskUserQuestion to be abandoned entirely
     """
-    results = _tail_tool_results(transcript_path)
-    if not results:
+    objs = _tail_lines(transcript_path)
+    if not objs:
         return 0
+    # Flatten the tail into a time-ordered sequence of markers, oldest-first:
+    #   "empty"  -> a tool_result that is the empty-call rejection
+    #   "other"  -> any other tool_result (success / unrelated tool)
+    #   "human"  -> a genuine human turn (breaks a streak, see [2])
+    # Assistant text / thinking lines are transparent and contribute no marker.
+    # Each tool_result BLOCK is its own marker (a single line may carry several),
+    # preserving the per-block ordering the original detector relied on.
+    seq = []
+    for obj in objs:
+        results = _line_tool_results(obj)
+        if results:
+            for b in results:
+                seq.append("empty" if _is_empty_askuserquestion_error(b) else "other")
+        elif _is_string_content_empty_error(obj):
+            # A rejection recorded with bare-string content (no block list) —
+            # still an empty-call failure, must stack like a list-form one.
+            seq.append("empty")
+        elif _is_genuine_human_turn(obj):
+            seq.append("human")
     streak = 0
-    for block in reversed(results):
-        if _is_empty_askuserquestion_error(block):
+    for marker in reversed(seq):
+        if marker == "empty":
             streak += 1
         else:
-            break  # streak broken by a different/successful tool_result
+            break  # "other" tool_result OR a genuine human turn breaks the streak
     return streak
+
+
+# A session that has racked up this many AskUserQuestion failures of ANY shape
+# (guard denies + missing-`questions` rejections) is clearly looping across
+# shapes; escalate straight to abandon even if the tail streak is only 1-2 ([3]).
+_SESSION_ABANDON_THRESHOLD = 5
+
+# The two shared logs that together record every AskUserQuestion failure in a
+# session: the PreToolUse guard's denies and this Stop hook's own rejections.
+_GUARD_LOG = "askuserquestion_guard.jsonl"
+_RETRY_LOG = "askuserquestion_retry.jsonl"
+
+
+def _count_log_records(path: str, session_id) -> int:
+    """Count records in one jsonl whose session_id matches. Best-effort -> 0."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except (OSError, UnicodeDecodeError):
+        return 0
+    n = 0
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("session_id") == session_id:
+            n += 1
+    return n
+
+
+def _session_failure_count(cwd: str, session_id) -> int:
+    """Total AskUserQuestion failures recorded for this session across BOTH the
+    guard log (empty-array / partial / surrogate denies) and the retry log
+    (missing-`questions` rejections). Cross-shape signal for [3]. session_id
+    None -> 0 (cannot attribute, so do not escalate)."""
+    if not session_id:
+        return 0
+    log_dir = os.path.join(cwd or ".", ".omc", "logs")
+    return (_count_log_records(os.path.join(log_dir, _GUARD_LOG), session_id)
+            + _count_log_records(os.path.join(log_dir, _RETRY_LOG), session_id))
 
 
 def _log(cwd: str, record: dict) -> None:
@@ -239,12 +352,23 @@ def main() -> int:
         return 0  # last tool_result is not an empty-call rejection -> allow
 
     cwd = payload.get("cwd") or os.getcwd()
+    session_id = payload.get("session_id")
     already_firing = payload.get("stop_hook_active") is True
 
-    # Decide the intervention by how many empty calls are stacked at the tail.
-    #   1-2 in a row  -> retry with prose-first discipline (REASON_RETRY)
-    #   3+ in a row   -> stop retrying, force prose+recommend (REASON_ABANDON)
-    if streak >= 3:
+    # Cross-shape session signal ([3]): how many AskUserQuestion failures of ANY
+    # shape this session has logged so far (guard denies + our own rejections).
+    # The current tail streak does not yet include THIS rejection's log write
+    # (we log below), so a session already at/over threshold is genuinely looping.
+    session_failures = _session_failure_count(cwd, session_id)
+
+    # Decide the intervention. Abandon when EITHER the tail is a 3+ runaway OR the
+    # session has crossed the cross-shape failure threshold (looping across empty
+    # / empty-array / partial shapes, which a tail-only streak cannot see).
+    #   else 1-2 at the tail -> retry with prose-first discipline (REASON_RETRY)
+    # The current in-flight failure is not yet written to either log (the retry
+    # log is appended below, after this decision), so +1 represents it — without
+    # it, a session at exactly threshold-1 prior failures would never escalate.
+    if streak >= 3 or (session_failures + 1) >= _SESSION_ABANDON_THRESHOLD:
         reason, mode = REASON_ABANDON, "abandon"
     else:
         reason, mode = REASON_RETRY, "retry"
@@ -264,9 +388,10 @@ def main() -> int:
     _log(
         cwd,
         {
-            "session_id": payload.get("session_id"),
+            "session_id": session_id,
             "signal": "empty_askuserquestion",
             "streak": streak,
+            "session_failures": session_failures,
             "mode": mode,
             "stop_hook_active": already_firing,
             "blocked": blocked,
