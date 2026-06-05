@@ -249,9 +249,11 @@ else
 fi
 ```
 
-If versions differ, **surface the gap and ask before upgrading** — same governance as step 4e's claude CLI upgrade. `omc update` is non-idempotent (syncs plugin + npm package + CLAUDE.md together, per the OMC update banner), so it is NOT auto-run. On user confirmation:
+If versions differ, **surface the gap and ask before upgrading** — same governance as step 4e's claude CLI upgrade. `omc update` is non-idempotent (syncs plugin + npm package + CLAUDE.md together, per the OMC update banner), so it is NOT auto-run. On user confirmation, **first snapshot the statusLine command** (an `omc update` can rewrite it — see the HUD-cache note below), then update:
 
 ```bash
+# Snapshot BEFORE the update so we can detect a statusLine command swap after.
+hud_cmd_before="$(jq -r '.statusLine.command // ""' ~/claudebase/config/settings.json 2>/dev/null)"
 omc update
 ```
 
@@ -267,6 +269,29 @@ omc doctor conflicts 2>&1 | tail -20
 ```
 
 Note: `omc doctor conflicts` may report pre-existing warnings unrelated to the update (e.g. unknown fields in `.omc-config.json`, no MCP registry — both present on a healthy 4.14.0 as of 2026-05-24). So the signal is **new** conflicts that appear *after* the update, not the mere presence of warnings. If `omc doctor conflicts` surfaces something that wasn't there before, report it and run `/oh-my-claudecode:omc-setup` as the doctor suggests — do NOT auto-fix config conflicts (they may need a judgment call). If the version didn't bump to `$latest`, the update half-applied — re-run `omc update --force`, or `omc update --clean` to purge stale plugin cache, then re-check.
+
+**Invalidate the HUD cache if the statusLine command changed (2026-06-05).** An `omc update` can rewrite `statusLine.command` in `config/settings.json` — 4.14.5 swapped it from `node …/omc-hud.mjs` to `sh …/omc-hud-cache.sh …/omc-hud.mjs`, introducing a session-scoped output cache under `~/.claude/hud/cache/`. The HUD *render* is unchanged (verified byte-identical: old `omc-hud.mjs.bak` vs new produce the same line), but a freshly-introduced cache wrapper reads pre-existing `statusline.<session>.txt` files first, so the **previous session's stale frame can flash for one render** before the background refresh catches up — which reads as "the HUD changed/broke" even though it didn't. Clearing the stale cache when the command swaps makes the first post-update frame render clean:
+
+```bash
+hud_cmd_after="$(jq -r '.statusLine.command // ""' ~/claudebase/config/settings.json 2>/dev/null)"
+if [ "$hud_cmd_before" != "$hud_cmd_after" ]; then
+  echo "(4f) statusLine command changed by omc update — clearing stale HUD cache"
+  echo "      before: ${hud_cmd_before:-<none>}"
+  echo "      after:  ${hud_cmd_after:-<none>}"
+  # Cache dir per omc-hud-cache.sh: ${OMC_HUD_CACHE_DIR:-$CONFIG_DIR/hud/cache}.
+  # Only the regenerable cache frames (statusline.*.txt / stdin.*.json) are
+  # removed — the wrapper recreates them on the next render. Never touch the
+  # scripts (omc-hud.mjs, omc-hud-cache.sh) themselves.
+  cache_dir="${OMC_HUD_CACHE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/cache}"
+  if [ -d "$cache_dir" ]; then
+    rm -f "$cache_dir"/statusline.*.txt "$cache_dir"/stdin.*.json 2>/dev/null || :
+    echo "      cleared: $cache_dir/{statusline.*.txt,stdin.*.json}"
+  fi
+  echo "      Tell the user to relaunch the session so the new wrapper renders a fresh frame."
+else
+  echo "(4f) statusLine command unchanged — no HUD cache action needed"
+fi
+```
 
 **Why ask, don't auto-run:** `omc update` rewrites the canonical `CLAUDE.md` and re-syncs the plugin while *this* session has them loaded. A mid-session plugin/CLAUDE.md swap can desync the running session's tool registry and skill list. Treat it like the claude CLI upgrade in 4e: confirm, then ideally restart the session to pick up the new plugin cleanly. If `omc update` fails (network, npm), surface the error and continue to step 5 — a stale OMC is better than a half-applied one.
 
@@ -386,6 +411,7 @@ For each new template:
 | "Skip the second install.sh run — first one passed" | That's exactly how the mcp.json idempotency bug went undetected for a day. Step 6 is non-negotiable. |
 | "I'll auto-upgrade the claude CLI silently" | Non-idempotent. Plugin metadata or APIs can break across major versions and brick the current session. Step 4e requires user confirmation, same as commit/push. |
 | "OMC drift detected, I'll just run `omc update`" | Non-idempotent — it rewrites CLAUDE.md and re-syncs the plugin mid-session. Step 4f requires user confirmation, same as 4e. Detect-then-ask, never auto-apply. |
+| "HUD looks different after the update — something broke" | The render is byte-identical; an `omc update` can swap `statusLine.command` to a cache wrapper whose *stale* frame flashes once. Step 4f clears `statusline.*.txt`/`stdin.*.json` when the command changes. Never edit the HUD scripts (omc-hud.mjs / omc-hud-cache.sh) to "fix" this — only the regenerable cache frames. |
 | "Tree is dirty → stop, the user must decide" | Not always. A tracked file (esp. `config/CLAUDE.md`) is often dirtied by another session writing a learning, and the change may already be in `origin`. Run Step 1.5 triage first: ABSORBED → patch-backup + discard; UNIQUE → *then* stop and ask. Blanket-stopping leaves a non-owner wedged on a change they should just drop. |
 | "Dirty change conflicts with the pull → discard it so `--ff-only` works" | Only after Step 1.5 classifies it as ABSORBED/disposable. A UNIQUE change is the user's content — back it up to a patch and surface it; a non-owner preserves it out-of-tree (patch/branch), never silently loses it. |
 
@@ -399,6 +425,7 @@ A short summary table:
 | Drift findings | `<list, or "none">` |
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
+| HUD cache (4f) | `<"cleared — statusLine command changed" / "untouched">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
