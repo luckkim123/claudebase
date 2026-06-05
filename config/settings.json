@@ -50,6 +50,12 @@
             "command": "# SURROGATE_AUTO_REPAIR_ON_START\npython3 ~/claudebase/runtime/hooks/fix_surrogate.py --fix-current 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Pre-flight surrogate repair on session start"
+          },
+          {
+            "type": "command",
+            "command": "# HUD_ENSURE_ON_START\nbash ~/claudebase/runtime/hooks/hud-ensure.sh 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Ensuring OMC HUD customization is in sync"
           }
         ]
       }
