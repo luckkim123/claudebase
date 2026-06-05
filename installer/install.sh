@@ -75,6 +75,12 @@ fi
 
 maybe_install_omc_hud
 
+# Optional opt-in: claude-code-viewer VSCode extension → lib/viewer.sh.
+# Default No; prompts only on first install or when a remote update exists.
+# shellcheck source=lib/viewer.sh
+source "$REPO_DIR/installer/lib/viewer.sh"
+maybe_install_viewer
+
 # 8. settings-shrink guard: point this clone's git hooks at the tracked
 # installer/githooks dir so the pre-commit guard (which blocks committing a
 # CLI-shrunk config/settings.json) is active on every machine. .git/hooks alone
