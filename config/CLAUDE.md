@@ -195,59 +195,9 @@ This file loads into **every session on every machine and project**, so an Opera
 
 ## OMC (oh-my-claudecode) Orchestration
 
-`oh-my-claudecode@omc` is enabled in `enabledPlugins` and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands. **Active use level: hybrid auto-route** — when the user does NOT name a tool/skill, Claude selects the right entry point via the decision tree below. For multi-step work it **announces the routing verdict in one line before starting** (even when the verdict is "handle directly"); trivial single-step work proceeds silently. Exception: irreversible / outward-facing / large-scale work gets a 1-second confirm before starting (see tree step 4).
+`oh-my-claudecode@omc` is enabled and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands.
 
-### Auto-routing decision tree (apply when user names no tool)
-
-When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. For any multi-step request (3+ actions or multiple files), announce the chosen entry in one line ("→ going with X") and start; trivial single-step work skips the announcement. Only step 4 cases pause for confirmation.
-
-**Step 1 — Trivial?** Typo, one-liner, single-file obvious fix, or a pure question → just do it / answer directly. No routing, no skill ceremony. *(Conceptual "how do I…" questions about the tooling itself = answer, don't invoke.)* **But a task spanning 3+ actions or multiple files is NOT trivial even when each step is simple** (multi-file cleanup, refactor, analysis sweep) — it MUST announce its routing verdict in one line before starting, *including* a "handle directly" verdict. The announcement is what makes the routing decision auditable; skipping it on "it's just ops" is the exact gap this rule closes.
-
-**Step 2 — What's ambiguous: the *how* or the *what/why*?**
-- **what/why is unsettled** (direction not chosen, 2-3 design choices, "which direction is better") → diverge FIRST: `superpowers:brainstorming` (decision-heavy, interactive) or `oh-my-claudecode:deep-interview` (Socratic, ambiguity-gated). Then re-enter the tree with the clarified spec.
-- **only the *how* is fuzzy** (direction clear, scope/structure hazy — "clean up this deck") → do NOT pre-extract a spec. `oh-my-claudecode:team` scopes-then-executes in one shot; a separate spec step is double work here.
-- **spec already crisp** → skip divergence entirely, go to step 3.
-
-**Step 3 — With a crisp spec, what governs the outcome: discipline or throughput?**
-- **Discipline governs** (wrong = expensive; TDD / review gates govern quality; non-trivial code; citation-bound writing) → **superpowers** lane: `writing-plans` → `subagent-driven-development` (or `test-driven-development` + `verification-before-completion`). Citation/paper work stays here or manual — never OMC parallel (hallucination risk).
-- **Throughput governs** (many *independent* units; 3+ files; "do them at the same time") → **OMC** lane: `ultrawork` (bounded parallel edits) / `team` (needs inter-worker comms or review roles) / `autopilot` (hands-off idea→code) / `ralph` (loop until tests pass).
-
-**Step 4 — Confirm-before-start gate (1 line, Y/N).** Even when steps 1-3 pick an entry, pause for one confirmation if the work is: **irreversible** (delete/overwrite files), **outward-facing** (email, PR, anything published externally), or **large-scale** (5+ files touched, long autonomous run). Format: "It's a 20-file rename, so I'll go with ultrawork. ok?" Everyday in-place work needs no confirm.
-
-This tree supersedes the older "propose only" behavior; the proactive-proposal subsection below is kept as the fallback phrasing for step-4 confirms and for when the tree is genuinely tied.
-
-### When to propose OMC (proactive)
-
-Propose OMC at the start of a task when **two or more** of these are true:
-
-- The user describes work that touches **3+ distinct files or subsystems**.
-- The work has **clear independent subtasks** that can run in parallel (e.g., "implement A, B, C, and wire them together").
-- The user explicitly asks for **autonomous, long-running work** ("just do it", "until done", "don't ask me each step").
-- The task fits a named OMC command pattern below.
-
-Proposal format (one short sentence, then continue if user agrees):
-
-> "This work would probably be faster delegated to `/oh-my-claudecode:<command>`; shall I proceed that way?"
-
-If the user says yes — invoke the OMC command. If no, fall back to the normal Brainstorm → Plan → Execute workflow above.
-
-### When NOT to propose OMC
-
-- Single-file edit, typo, one-liner, or trivial fix.
-- The user is in **learning output style** (current goal is to teach/explain — autopilot would defeat that).
-- Reference-based writing (concept notes, paper reviews) — see Evidence Before Assertion; OMC's parallel mode increases hallucination risk on citation-bound work.
-- Tasks already inside an active `superpowers:executing-plans` flow — finish the current plan instead of switching meta-runners.
-
-### Useful OMC commands (use directly when the pattern matches)
-
-| Pattern | OMC command | Notes |
-|:---|:---|:---|
-| Full multi-step feature from natural-language brief | `/oh-my-claudecode:autopilot` | Replaces brainstorm → plan → execute when user explicitly wants hands-off. |
-| Bounded refactor / many parallel small edits | `/oh-my-claudecode:ultrawork` | Max parallel subagents. Good for "rename X in 20 files". |
-| Multi-role review (architect + QA + critic) | `/oh-my-claudecode:team` | Use before merging non-trivial PRs. |
-| Long-running iterative loop (write-test-fix) | `/oh-my-claudecode:ralph` | When success is checkable (tests pass, lints clean). |
-| Deep research into a library/topic before designing | `/oh-my-claudecode:deep-interview` | Pairs well with `context7` MCP. |
-| **Split Q&A flow and file edits into separate panes** | `/oh-my-claudecode:omc-teams` | Main = conversation/answers, worker tmux pane = file edits. For interview prep, paper reading, etc. when you don't want the flow interrupted. Operational details below. |
+**Routing is owned by the omha hook, not this file.** The per-turn `<omha-routing>` checkpoint (injected by `oh-my-heroacademia`'s `route_emit.py` from `cards/*.json`) is the single source of truth for *which lane/skill* to pick — including when to prefer `team` within the OMC lane. Do NOT duplicate a decision tree here; obey the injected `ROUTE →` card. This section keeps only the OMC operating knowledge that the routing card does not carry (omc-teams pitfalls, coexistence rules).
 
 ### omc-teams operations manual
 
