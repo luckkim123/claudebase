@@ -89,6 +89,14 @@ maybe_install_viewer
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
+# Prune stale plugin-cache versions → lib/plugin_cache.sh. Marketplace
+# auto-update fetches new versions but never deletes the old ones, so the cache
+# grows without bound (e.g. omc 4.14.1 + 4.14.4 + 4.14.5). Keep only the newest
+# SemVer dir per plugin; leave non-SemVer (git-sha) pins untouched.
+# shellcheck source=lib/plugin_cache.sh
+source "$REPO_DIR/installer/lib/plugin_cache.sh"
+prune_plugin_cache
+
 # 8. settings-shrink guard: point this clone's git hooks at the tracked
 # installer/githooks dir so the pre-commit guard (which blocks committing a
 # CLI-shrunk config/settings.json) is active on every machine. .git/hooks alone
