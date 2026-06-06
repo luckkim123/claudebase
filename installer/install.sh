@@ -81,6 +81,14 @@ maybe_install_omc_hud
 source "$REPO_DIR/installer/lib/viewer.sh"
 maybe_install_viewer
 
+# Idempotent editable (re)install of the omx-core CLI → lib/omx.sh. Re-pins the
+# editable install to the current oh-my-experiments checkout so a moved repo
+# (e.g. /workspace -> /root) self-heals here instead of leaving `omx` broken
+# with ModuleNotFoundError. Skips silently when already correctly pinned.
+# shellcheck source=lib/omx.sh
+source "$REPO_DIR/installer/lib/omx.sh"
+ensure_omx_install
+
 # 8. settings-shrink guard: point this clone's git hooks at the tracked
 # installer/githooks dir so the pre-commit guard (which blocks committing a
 # CLI-shrunk config/settings.json) is active on every machine. .git/hooks alone
