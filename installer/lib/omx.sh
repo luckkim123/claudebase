@@ -46,14 +46,33 @@ resolve_omx_source() {
   return 1
 }
 
-ensure_omx_install() {
-  # Need pip; without it we cannot manage the editable install. Warn + skip
-  # (deps.sh contract: same line every run, never exits).
-  if ! command -v pip >/dev/null 2>&1 && ! python3 -m pip --version >/dev/null 2>&1; then
-    printf '[install] WARNING: pip not found — cannot ensure omx CLI; `omx` may fail\n'
-    return
-  fi
+resolve_omx_python() {
+  # Echo a Python interpreter that satisfies omx-core's requires-python (>=3.10),
+  # or empty if none found. omx-core refuses to install under an older python
+  # (e.g. macOS ships /usr/bin/python3 = Xcode 3.9), so a bare `python3` is not
+  # enough — probe newest-first and verify the version, same warn-and-skip
+  # contract as resolve_omx_source.
+  #   1. $OMX_PYTHON                  (explicit override; machine-specific)
+  #   2. python3.13 / 3.12 / 3.11 / 3.10  (named interpreters, newest first)
+  #   3. python3                      (only if it is already >=3.10)
+  local candidates=(
+    "${OMX_PYTHON:-}"
+    python3.13 python3.12 python3.11 python3.10
+    python3
+  )
+  local p
+  for p in "${candidates[@]}"; do
+    [[ -n "$p" ]] && command -v "$p" >/dev/null 2>&1 || continue
+    # requires-python >=3.10 — accept only if the interpreter actually qualifies.
+    "$p" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 10) else 1)' \
+      >/dev/null 2>&1 || continue
+    echo "$p"
+    return 0
+  done
+  return 1
+}
 
+ensure_omx_install() {
   local src
   if ! src="$(resolve_omx_source)"; then
     printf '[install] WARNING: omx-core source not found — `omx` CLI not (re)installed\n'
@@ -62,11 +81,29 @@ ensure_omx_install() {
     return
   fi
 
+  # omx-core requires python >=3.10; a bare python3 may be too old (macOS Xcode
+  # 3.9). Pick a qualifying interpreter and use it consistently for the version
+  # probe, the pip install, and the import check. Warn + skip if none qualifies.
+  local PY
+  if ! PY="$(resolve_omx_python)"; then
+    printf '[install] WARNING: no python >=3.10 found — `omx` CLI not (re)installed\n'
+    printf '[install]   omx-core requires python >=3.10; set OMX_PYTHON=/path/to/python3.1x\n'
+    printf '[install]   or install one (e.g. `brew install python@3.12`), then re-run install.sh\n'
+    return
+  fi
+
+  # Need pip under the chosen interpreter; without it we cannot manage the
+  # editable install. Warn + skip (deps.sh contract: same line every run).
+  if ! "$PY" -m pip --version >/dev/null 2>&1; then
+    printf '[install] WARNING: `%s -m pip` not available — cannot ensure omx CLI; `omx` may fail\n' "$PY"
+    return
+  fi
+
   # Idempotent skip: already importable AND already pinned to THIS source dir.
   # direct_url.json holds the editable target as a file:// URL; compare it to
   # the resolved source so a moved checkout (stale pin) still triggers a fix.
   local pinned
-  pinned="$(python3 - "$src" <<'PY' 2>/dev/null || true
+  pinned="$("$PY" - "$src" <<'PY' 2>/dev/null || true
 import json, sys
 from importlib import metadata
 src = sys.argv[1]
@@ -89,12 +126,12 @@ PY
     return
   fi
 
-  log "omx: (re)installing editable from $src (was: ${pinned:-unknown})"
-  # --break-system-packages: this container's python3 is PEP-668 externally-
+  log "omx: (re)installing editable from $src via $PY (was: ${pinned:-unknown})"
+  # --break-system-packages: this container's python is PEP-668 externally-
   # managed; the original install used the same flag. -e keeps it editable so
   # source edits take effect without reinstall during development.
-  if python3 -m pip install -e "$src" --break-system-packages >/dev/null 2>&1; then
-    if python3 -c 'import omx_core' >/dev/null 2>&1; then
+  if "$PY" -m pip install -e "$src" --break-system-packages >/dev/null 2>&1; then
+    if "$PY" -c 'import omx_core' >/dev/null 2>&1; then
       log "omx: CLI ready (import omx_core OK)"
     else
       printf '[install] WARNING: omx reinstalled but `import omx_core` still fails — check %s\n' "$src"
