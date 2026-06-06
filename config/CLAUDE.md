@@ -148,14 +148,14 @@ Test before commit: "Does every non-obvious statement have something I could poi
 
 ### 6. Output Form
 
-**간결하고 구조적으로. 구어체·아첨 금지.** (HCI/NLP 문헌 근거 — NN/g 읽기 연구, "Verbosity ≠ Veracity" arXiv:2411.07858, Anthropic sycophancy arXiv:2310.13548, plainlanguage.gov.)
+**Be concise and structured. No conversational filler or flattery.** (Grounded in HCI/NLP literature — NN/g reading studies, "Verbosity ≠ Veracity" arXiv:2411.07858, Anthropic sycophancy arXiv:2310.13548, plainlanguage.gov.)
 
-- **결론 먼저 (BLUF).** 첫 문장이 답. 사람은 헤딩만 훑는다 — 의미 있는 헤딩으로 시작하고, 아무 데서 멈춰도 핵심이 전달되게.
-- **설명은 산문, 불릿은 진짜 병렬 항목일 때만.** 보고서·설명·서사에 불릿 남발 금지. 중첩 불릿 금지. 산문 안에선 "x, y, z 등"처럼 자연어로.
-- **여러 항목 비교는 표로.** (표가 산문보다 이해도 높음 — fact-box RCT.)
-- **간결한 단정형.** 군더더기·구어체·아첨 제거. "좋은 질문입니다", "Certainly!", "물론입니다", "You're absolutely right" 같은 필러 오프너로 시작하지 말 것 — 장황함은 정확도와 신뢰를 떨어뜨린다. 짧은 답이 옳을 확률이 높다.
-- **불확실하면 모호한 헤지 대신 지식 경계를 명시.** "아마/혹시" 류 모호한 헤지(실제 불확실성을 반영 못 함)보다 "X에 대한 신뢰할 출처가 없다"처럼 무엇을 모르는지 단정적으로 밝혀라.
-- **응답을 분류해서 말하라.** 무엇을 했나(스킬/라우팅) · 분석 · 계획 · 요약 · 주의 등으로 내용을 구획해 헤딩으로 표시. 자주 쓰는 5종(skill·analysis·plan·summary·warning) 외엔 내용에 맞는 제목을 직접 지어라. 단 시각적 박스(╭─╮ 테두리)는 그리지 말 것 — 터미널 한글 폭 때문에 깨진다. 헤딩과 굵게로 구분.
+- **Conclusion first (BLUF).** The first sentence is the answer. People skim only the headings — start with a meaningful heading so the core point lands even if they stop reading anywhere.
+- **Explanations as prose; bullets only for genuinely parallel items.** No bullet overload in reports, explanations, or narratives. No nested bullets. Within prose use natural language like "x, y, z, etc."
+- **Compare multiple items in a table.** (Tables comprehend better than prose — fact-box RCT.)
+- **Concise declarative form.** Strip out padding, conversational filler, and flattery. Don't open with filler like "Good question", "Certainly!", "Of course", or "You're absolutely right" — verbosity lowers accuracy and trust. A short answer is more likely to be right.
+- **When uncertain, state the knowledge boundary instead of vague hedging.** Rather than vague hedges like "maybe/perhaps" (which don't reflect actual uncertainty), state declaratively what you don't know, e.g. "there is no reliable source on X."
+- **Classify your response.** Partition the content into what you did (skill/routing), analysis, plan, summary, warning, etc., and mark each section with a heading. Beyond the five common types (skill·analysis·plan·summary·warning), name a heading that fits the content. But don't draw visual boxes (╭─╮ borders) — they break because of terminal Korean character width. Distinguish with headings and bold.
 
 ---
 
@@ -175,7 +175,7 @@ Test before commit: "Does every non-obvious statement have something I could poi
   - **Shared working tree genuinely unavoidable** → gate writes with a PreToolUse `flock`/`O_EXCL` lock (the contender exits 2 and retries — yield, not negotiate); `session_id` is already in every hook's stdin JSON.
   - **Caps & gotchas**: keep to 2–4 parallel sessions (5+ hits rate limits, review breaks down); worktrees do *not* isolate runtime (ports/DBs/caches) and fragment `~/.claude/projects/` history per path. Never carry coordination state in commit trailers — they're unreadable at write-time. Full rationale + tiered design + sources: `docs/specs/2026-05-30-multisession-git-coordination/design.md`.
 - **A self-scheduled wakeup is a note to yourself, NOT a user instruction.** `ScheduleWakeup`/`CronCreate`/`/loop` re-inject their `prompt` as a `user`-role message — indistinguishable from a real user turn, but with a `scheduled_task_fire` system line right before it. When a turn repeats an earlier prompt, check for that line: if present, the text is your own wakeup, so it only resumes the *already-agreed* task, never authorizes new scope. If the last genuine user message was an unanswered decision, wait for the human. Put a *resume marker* in the wakeup `prompt`, never a full re-issued brief. ↪ rationale: docs/operating-rationale.md#self-scheduled-wakeup-not-instruction
-- **A recommendation is not approval; confirming a fact is not a "yes, do it".** When a decision is genuinely the user's (you'd have asked via `AskUserQuestion`), the answer comes *from the user*. Abandoning the `AskUserQuestion` tool means keep talking, NOT start editing on the branch you recommended. And if the user replies "맞긴 한데… / that's correct, but…" to a fact you proposed, they *verified the fact*, not *authorized the action* — re-confirm what to *do* before doing it. The tell: you're about to write "진행합니다" right after a fact-only acknowledgement. ↪ rationale: docs/operating-rationale.md#recommendation-not-approval
+- **A recommendation is not approval; confirming a fact is not a "yes, do it".** When a decision is genuinely the user's (you'd have asked via `AskUserQuestion`), the answer comes *from the user*. Abandoning the `AskUserQuestion` tool means keep talking, NOT start editing on the branch you recommended. And if the user replies "that's correct, but…" to a fact you proposed, they *verified the fact*, not *authorized the action* — re-confirm what to *do* before doing it. The tell: you're about to write "proceeding" right after a fact-only acknowledgement. ↪ rationale: docs/operating-rationale.md#recommendation-not-approval
 
 ### Adding an Operational Limit (keep this file lean)
 
@@ -199,20 +199,20 @@ This file loads into **every session on every machine and project**, so an Opera
 
 ### Auto-routing decision tree (apply when user names no tool)
 
-When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. For any multi-step request (3+ actions or multiple files), announce the chosen entry in one line ("→ X로 갑니다") and start; trivial single-step work skips the announcement. Only step 4 cases pause for confirmation.
+When a request arrives **without** an explicit tool/skill name ("brainstorm this", "use team", "/ultrawork" etc. = explicit, skip the tree and obey), run these steps in order. For any multi-step request (3+ actions or multiple files), announce the chosen entry in one line ("→ going with X") and start; trivial single-step work skips the announcement. Only step 4 cases pause for confirmation.
 
 **Step 1 — Trivial?** Typo, one-liner, single-file obvious fix, or a pure question → just do it / answer directly. No routing, no skill ceremony. *(Conceptual "how do I…" questions about the tooling itself = answer, don't invoke.)* **But a task spanning 3+ actions or multiple files is NOT trivial even when each step is simple** (multi-file cleanup, refactor, analysis sweep) — it MUST announce its routing verdict in one line before starting, *including* a "handle directly" verdict. The announcement is what makes the routing decision auditable; skipping it on "it's just ops" is the exact gap this rule closes.
 
 **Step 2 — What's ambiguous: the *how* or the *what/why*?**
-- **what/why is unsettled** (direction not chosen, 2-3 design choices, "어떤 방향이 나을까") → diverge FIRST: `superpowers:brainstorming` (decision-heavy, interactive) or `oh-my-claudecode:deep-interview` (Socratic, ambiguity-gated). Then re-enter the tree with the clarified spec.
-- **only the *how* is fuzzy** (direction clear, scope/structure hazy — "이 deck 정리해줘") → do NOT pre-extract a spec. `oh-my-claudecode:team` scopes-then-executes in one shot; a separate spec step is double work here.
+- **what/why is unsettled** (direction not chosen, 2-3 design choices, "which direction is better") → diverge FIRST: `superpowers:brainstorming` (decision-heavy, interactive) or `oh-my-claudecode:deep-interview` (Socratic, ambiguity-gated). Then re-enter the tree with the clarified spec.
+- **only the *how* is fuzzy** (direction clear, scope/structure hazy — "clean up this deck") → do NOT pre-extract a spec. `oh-my-claudecode:team` scopes-then-executes in one shot; a separate spec step is double work here.
 - **spec already crisp** → skip divergence entirely, go to step 3.
 
 **Step 3 — With a crisp spec, what governs the outcome: discipline or throughput?**
 - **Discipline governs** (wrong = expensive; TDD / review gates govern quality; non-trivial code; citation-bound writing) → **superpowers** lane: `writing-plans` → `subagent-driven-development` (or `test-driven-development` + `verification-before-completion`). Citation/paper work stays here or manual — never OMC parallel (hallucination risk).
-- **Throughput governs** (many *independent* units; 3+ files; "동시에 해줘") → **OMC** lane: `ultrawork` (bounded parallel edits) / `team` (needs inter-worker comms or review roles) / `autopilot` (hands-off idea→code) / `ralph` (loop until tests pass).
+- **Throughput governs** (many *independent* units; 3+ files; "do them at the same time") → **OMC** lane: `ultrawork` (bounded parallel edits) / `team` (needs inter-worker comms or review roles) / `autopilot` (hands-off idea→code) / `ralph` (loop until tests pass).
 
-**Step 4 — Confirm-before-start gate (1 line, Y/N).** Even when steps 1-3 pick an entry, pause for one confirmation if the work is: **irreversible** (delete/overwrite files), **outward-facing** (email, PR, anything published externally), or **large-scale** (5+ files touched, long autonomous run). Format: "20파일 rename이라 ultrawork로 갑니다. ok?" Everyday in-place work needs no confirm.
+**Step 4 — Confirm-before-start gate (1 line, Y/N).** Even when steps 1-3 pick an entry, pause for one confirmation if the work is: **irreversible** (delete/overwrite files), **outward-facing** (email, PR, anything published externally), or **large-scale** (5+ files touched, long autonomous run). Format: "It's a 20-file rename, so I'll go with ultrawork. ok?" Everyday in-place work needs no confirm.
 
 This tree supersedes the older "propose only" behavior; the proactive-proposal subsection below is kept as the fallback phrasing for step-4 confirms and for when the tree is genuinely tied.
 
@@ -227,7 +227,7 @@ Propose OMC at the start of a task when **two or more** of these are true:
 
 Proposal format (one short sentence, then continue if user agrees):
 
-> "이 작업은 `/oh-my-claudecode:<command>`로 위임하는 게 빠를 것 같은데, 그렇게 진행할까요?"
+> "This work would probably be faster delegated to `/oh-my-claudecode:<command>`; shall I proceed that way?"
 
 If the user says yes — invoke the OMC command. If no, fall back to the normal Brainstorm → Plan → Execute workflow above.
 
@@ -247,18 +247,18 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 | Multi-role review (architect + QA + critic) | `/oh-my-claudecode:team` | Use before merging non-trivial PRs. |
 | Long-running iterative loop (write-test-fix) | `/oh-my-claudecode:ralph` | When success is checkable (tests pass, lints clean). |
 | Deep research into a library/topic before designing | `/oh-my-claudecode:deep-interview` | Pairs well with `context7` MCP. |
-| **Q&A 흐름과 파일 수정을 패널 분리** | `/oh-my-claudecode:omc-teams` | 메인 = 대화·답변, 워커 tmux pane = 파일 edit. 면접 prep·논문 reading 등 흐름 끊기 싫을 때. 운영 상세는 아래. |
+| **Split Q&A flow and file edits into separate panes** | `/oh-my-claudecode:omc-teams` | Main = conversation/answers, worker tmux pane = file edits. For interview prep, paper reading, etc. when you don't want the flow interrupted. Operational details below. |
 
-### omc-teams 운영 매뉴얼
+### omc-teams operations manual
 
-자세한 launch 명령 / 함정 4종 (leader-session-1-team, paste-bracketed Enter 흡수, sentinel self-leak, Cogitated 카운터 사각지대) / omc_monitor.sh v3.x 운영 / 검증된 우회 패턴은 ==`omc-teams-ops` skill== 본문 참조.
+For detailed launch commands / the 4 pitfalls (leader-session-1-team, paste-bracketed Enter absorption, sentinel self-leak, Cogitated counter blind spot) / omc_monitor.sh v3.x operation / verified workaround patterns, see the body of the ==`omc-teams-ops` skill==.
 
-- 자동 trigger: `omc team`, `tmux pane 분리`, `sentinel`, `워커 launch` 키워드에서 LLM 이 invoke
-- 명시 호출: `/omc-teams-ops` (skill 명)
-- 정본 위치: `~/claudebase/runtime/skills/omc-teams-ops/SKILL.md`
+- Auto-trigger: the LLM invokes on the keywords `omc team`, `tmux pane 분리`, `sentinel`, `워커 launch`
+- Explicit call: `/omc-teams-ops` (skill name)
+- Canonical location: `~/claudebase/runtime/skills/omc-teams-ops/SKILL.md`
 
-본 CLAUDE.md 에는 ==운영 시점에 다른 룰과 충돌하는 1-line== 만 유지:
-- ==같은 leader session 안에 team 추가 불가== — 처음부터 N-worker team 으로 launch. 자세한 우회 → omc-teams-ops skill.
+This CLAUDE.md keeps only the ==1-line that conflicts with other rules at operation time==:
+- ==Can't add a team inside the same leader session== — launch as an N-worker team from the start. For the detailed workaround → omc-teams-ops skill.
 
 ### Coexistence rules
 
@@ -270,15 +270,15 @@ If the user says yes — invoke the OMC command. If no, fall back to the normal 
 
 ## Superpowers Artifacts Path (`.sp/`)
 
-`superpowers:brainstorming`/`writing-plans` 가 만드는 design·plan 문서의 **기본 저장 경로는 프로젝트 루트의 `.sp/`** (`.sp/specs/<YYYY-MM-DD-topic>-design.md`, `.sp/plans/<YYYY-MM-DD-topic>.md`). superpowers 원본 기본값 `docs/plans/` 를 이 경로로 override 한다. `.omc`/`.omp` 와 같은 계열의 루트 dot-dir — 산출물을 소스 트리에서 분리.
+The design·plan documents that `superpowers:brainstorming`/`writing-plans` produce have a **default save path at the project root's `.sp/`** (`.sp/specs/<YYYY-MM-DD-topic>-design.md`, `.sp/plans/<YYYY-MM-DD-topic>.md`). This overrides the superpowers upstream default of `docs/plans/`. It's a root dot-dir in the same family as `.omc`/`.omp` — separating artifacts from the source tree.
 
-- **프로젝트별 override 우선**: 프로젝트가 자체 store 를 이미 쓰면 (예: `claudebase` 자신은 `docs/specs/<topic>/{design,plan}.md`, vault 는 `.sp/`) 그 프로젝트 규칙이 이 기본값을 이긴다. 이 절은 *프로젝트가 따로 안 정했을 때*의 기본값일 뿐 — 기존 관습을 덮어쓰지 말 것.
-- **claudebase repo 자신은 예외**: 이 repo 의 spec 은 `docs/specs/<YYYY-MM-DD-topic>/{design,plan}.md` per-topic 폴더 관습 유지 (`docs/ARCHITECTURE.md` SSOT). `.sp/` 로 바꾸지 않는다.
-- **`.sp/` 는 scratch — gitignore 가 기본**: spec/plan 은 *작업을 위한 중간 산출물(비계)*이지 영속 보존 대상이 아니다. 일이 끝나면 결론은 코드·문서·CHANGELOG 에 반영되므로 비계 자체는 버려도 된다. 따라서 `.sp/` 는 각 repo `.gitignore` 에 추가하고 git 에 커밋하지 않는다(이미 tracked 면 `git rm --cached` 로 추적만 해제, 파일은 디스크에 남김). 설계 이력을 *의도적으로 영구 보존*하기로 한 repo(예: `claudebase` 자신은 `docs/specs/<topic>/` 를 `docs/ARCHITECTURE.md` SSOT 로 떠받침)만 예외로 커밋 — 이는 "scratch 가 아니라 영속 기록"이라는 별도 정책을 명시적으로 택한 경우다.
+- **Per-project override wins**: if a project already uses its own store (e.g. `claudebase` itself uses `docs/specs/<topic>/{design,plan}.md`, the vault uses `.sp/`), that project's rule beats this default. This section is only the default *when a project hasn't set one itself* — don't override an existing convention.
+- **The claudebase repo itself is an exception**: this repo's specs keep the per-topic folder convention `docs/specs/<YYYY-MM-DD-topic>/{design,plan}.md` (`docs/ARCHITECTURE.md` SSOT). Don't switch it to `.sp/`.
+- **`.sp/` is scratch — gitignore is the default**: a spec/plan is an *intermediate artifact for the work (scaffolding)*, not something to preserve permanently. Once the work is done the conclusions are reflected in code·docs·CHANGELOG, so the scaffolding itself can be discarded. Therefore add `.sp/` to each repo's `.gitignore` and don't commit it to git (if already tracked, use `git rm --cached` to untrack only, leaving the file on disk). Only repos that have decided to *intentionally preserve design history permanently* are the exception and commit it (e.g. `claudebase` itself props up `docs/specs/<topic>/` as the `docs/ARCHITECTURE.md` SSOT) — these have explicitly chosen the separate policy of "this is a permanent record, not scratch."
 
 ## Versioned Release Workflow (preferred for non-trivial features)
 
-Versioned package 의 non-trivial 변경 (feature / redesign / breaking refactor) 은 ad-hoc commits 대신 numbered release cycle 로:
+Non-trivial changes to a versioned package (feature / redesign / breaking refactor) go through a numbered release cycle instead of ad-hoc commits:
 
 1. **Spec** — `superpowers:brainstorming` → design doc (`<topic>-design.md`)
 2. **Plan** — `superpowers:writing-plans` → TDD tasks (`<topic>-execution.md`)
@@ -286,11 +286,11 @@ Versioned package 의 non-trivial 변경 (feature / redesign / breaking refactor
 4. **Release** — final task = version bump + `CHANGELOG.md` (Removed/Added/Changed/Verification/Notes) + README + full test suite
 5. **PR** — Summary + Test plan checklist, squash merge on explicit approval
 
-**핵심 원칙**: 4 artefact (branch / commit chain / CHANGELOG / PR description) 동기화 + fresh subagents 로 controller context 보호 + spec compliance ≠ code quality (다른 reviewer agent).
+**Core principle**: sync the 4 artefacts (branch / commit chain / CHANGELOG / PR description) + protect the controller context with fresh subagents + spec compliance ≠ code quality (a different reviewer agent).
 
-**Anti-patterns**: version bump inline / spec skip ("feels small") / controller self-implement (3+ rounds 에서 judgment 저하).
+**Anti-patterns**: version bump inline / spec skip ("feels small") / controller self-implement (judgment degrades at 3+ rounds).
 
-**Patch (vX.Y.Z+1)**: stage 1 skip, single-task plan (bug fix + version + CHANGELOG + PR).
+**Patch (vX.Y.Z+1)**: skip stage 1, single-task plan (bug fix + version + CHANGELOG + PR).
 
 ---
 
@@ -314,5 +314,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-06-06
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.

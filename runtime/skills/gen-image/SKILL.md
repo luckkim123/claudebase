@@ -58,7 +58,7 @@ Then, every time:
 - Filename = `<slug>_<YYYYMMDD-HHMMSS>.png` (slug = first 4 prompt words, ASCII-lower, `_`-joined) — deterministic, no collisions.
 - Echo the resolved `$OUTPUT_DIR` back in one line *before* generating, so the destination is auditable.
 
-**Never** fall back to cwd or invent a new folder. A scattered, "그때그때 다른 경로" output is the exact bug this rule kills.
+**Never** fall back to cwd or invent a new folder. A scattered, "different path each time" output is the exact bug this rule kills.
 
 ### 2 — Craft the prompt (don't pass raw intent)
 

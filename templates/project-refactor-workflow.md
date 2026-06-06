@@ -1,56 +1,56 @@
 # Refactor Workflow (project rule template)
 
-> 새 프로젝트에서 다단계 리팩토링을 수행할 때 `<project>/.claude/rules/refactor-workflow.md`로 복사해 사용. 프로젝트별 빌드/테스트 명령에 맞춰 단계명·검증 절차만 조정.
+> When performing a multi-phase refactoring in a new project, copy this to `<project>/.claude/rules/refactor-workflow.md` and use it. Adjust only the phase names and verification procedures to match the project's build/test commands.
 
 ## When to load
-- 큰 리팩토링·리포 정비를 단계화할 때
-- 알고리즘·동작 영향 가능성이 있는 변경을 머지 전 검증할 때
-- 다음 phase 진행 전 직전 phase의 흔적(branch, commit, CHANGELOG)이 남아있는지 확인할 때
+- When breaking a large refactoring or repo cleanup into phases
+- When verifying, before merge, changes that could affect algorithms/behavior
+- When checking, before proceeding to the next phase, whether traces of the previous phase (branch, commit, CHANGELOG) remain
 
-## 핵심 원칙
+## Core principles
 
-**모든 변경은 추적 가능해야 한다.** 회귀가 발견됐을 때 "어느 phase에서 들어왔는지" 5분 안에 답할 수 있어야 한다. 다음 4축이 항상 동기화돼 있어야 한다.
+**Every change must be traceable.** When a regression is found, you must be able to answer "which phase introduced it" within 5 minutes. The following 4 axes must always stay in sync.
 
-1. **branch** — phase 단위 분기, 머지 후 squash로 1 commit/phase
-2. **commit message** — Conventional Commits + 본문에 변경 내역
-3. **CHANGELOG.md** — 패키지/리포 루트에 phase별 항목
-4. **PR description** — 위 3개를 GitHub에서 한눈에 볼 수 있게 요약
+1. **branch** — branch per phase, squashed to 1 commit/phase after merge
+2. **commit message** — Conventional Commits + change details in the body
+3. **CHANGELOG.md** — per-phase entries at the package/repo root
+4. **PR description** — a summary so the above 3 can be seen at a glance on GitHub
 
-위 중 하나라도 비어 있으면 추적이 깨진다.
+If any one of the above is empty, traceability breaks.
 
-## Phase 분할 기준
+## Phase split criteria
 
-| Phase 종류 | 기준 | 예 |
+| Phase type | Criterion | Example |
 |-----------|------|-----|
-| `A` (cleanup) | 동작 영향 0% — dead code/config 제거 | vendored 헤더 삭제 |
-| `B-N` (extract) | 동작 보존 split — 클래스/함수 추출, 파일 분리 | 책임 분리 리팩토링 |
-| `C-N` (substitute) | 동작 변경 — 새 알고리즘으로 교체 | 알고리즘 교체 |
+| `A` (cleanup) | 0% behavior impact — remove dead code/config | delete vendored headers |
+| `B-N` (extract) | behavior-preserving split — extract classes/functions, split files | responsibility-separation refactoring |
+| `C-N` (substitute) | behavior change — replace with a new algorithm | algorithm replacement |
 
-**Phase A는 회귀 의무 없음.** Phase B/C는 머지 전 회귀 PASS 필수.
+**Phase A has no regression obligation.** Phase B/C require a regression PASS before merge.
 
-## 한 phase의 11단계 절차
+## The 11-step procedure for one phase
 
 ```
-1. Phase scope 정의            → 한 줄로 요약 가능해야 함
-2. Branch 분기                 → refactor/phase-<id>-<short-name>
-3. (Phase A 첫 회) Archive 태그 → archive/<repo>-pre-refactor-YYYY-MM-DD at <baseline-sha>
-4. (Phase B/C 첫 회) Regression 인프라 → scripts/regression_*.{sh,py}
-5. 코드 수정                    → 작은 commit 여러 개 OK (squash로 합쳐짐)
-6. 빌드 PASS 확인              → 한 줄 요약 (시간/패키지 수)
-7. (Phase B/C) Baseline 측정    → main HEAD 빌드 → 결과 녹화
-8. (Phase B/C) Candidate 측정   → 현재 branch 빌드 → 결과 녹화
-9. (Phase B/C) 비교 & 판정      → 임계 통과 + 시각/수치 비교
-10. CHANGELOG.md 갱신          → 본문 양식 아래 참조
-11. Commit + PR + squash merge → 머지 후 main이 다음 phase의 baseline
+1. Define phase scope          → must be summarizable in one line
+2. Branch off                  → refactor/phase-<id>-<short-name>
+3. (Phase A, first time) Archive tag → archive/<repo>-pre-refactor-YYYY-MM-DD at <baseline-sha>
+4. (Phase B/C, first time) Regression infra → scripts/regression_*.{sh,py}
+5. Code changes                → multiple small commits OK (combined via squash)
+6. Confirm build PASS          → one-line summary (time / package count)
+7. (Phase B/C) Measure baseline → build main HEAD → record results
+8. (Phase B/C) Measure candidate → build current branch → record results
+9. (Phase B/C) Compare & judge  → threshold pass + visual/numeric comparison
+10. Update CHANGELOG.md        → see body format below
+11. Commit + PR + squash merge → after merge, main becomes the next phase's baseline
 ```
 
-## CHANGELOG 항목 양식
+## CHANGELOG entry format
 
 ```markdown
 ## [Unreleased] — Phase <id>: <short title> (refactor)
 
 ### Changed
-- `<file>` <before>줄 → <after>줄 (<delta>, <one-line summary>)
+- `<file>` <before> lines → <after> lines (<delta>, <one-line summary>)
 
 ### Added
 - `<new file>` — <purpose>
@@ -59,49 +59,49 @@
 - `<deleted thing>` — <reason>
 
 ### Verification
-- 빌드 PASS (<time>)
+- build PASS (<time>)
 - baseline vs candidate <metric>: <value>
 
 ### Notes
-- <next phase로 미룬 항목>
-- <한계, 운용 시 주의>
+- <item deferred to the next phase>
+- <limitations, operational caveats>
 ```
 
-## Commit 메시지 양식
+## Commit message format
 
 ```
 refactor(<scope>): phase <id> — <one-line summary>
 
-<2-4 줄 본문: 무엇을·왜·결과>
+<2-4 line body: what · why · result>
 
-- 파일 A: <변화>
-- LOC 또는 검증 수치 1줄
+- File A: <change>
+- 1 line of LOC or verification numbers
 ```
 
-## 안티패턴
+## Anti-patterns
 
-- ❌ 한 PR에 여러 phase 묶기 — 회귀 추적·롤백 비용↑
-- ❌ CHANGELOG 나중에 일괄 작성 — 잊거나 부정확
-- ❌ 회귀 스크립트 삭제 — 다음 phase 비용 누적
-- ❌ baseline 측정 생략하고 candidate만 — 노이즈·회귀 구분 불가
-- ❌ main에 직접 push — 브랜치 보호 + linear history 위반
+- ❌ Bundling multiple phases into one PR — raises regression-tracking/rollback cost
+- ❌ Writing the CHANGELOG all at once later — forgotten or inaccurate
+- ❌ Deleting the regression script — cost accumulates onto the next phase
+- ❌ Skipping baseline measurement and measuring only the candidate — cannot distinguish noise from regression
+- ❌ Pushing directly to main — violates branch protection + linear history
 
-## PR 본문 템플릿
+## PR body template
 
 ```
 ## Summary
-- <한 줄 요약>
+- <one-line summary>
 
 ## Changes
-- <bullet 3-5개>
+- <3-5 bullets>
 
 ## Verification
-- [ ] 빌드 PASS
-- [ ] (Phase B/C) Regression baseline vs candidate 측정 완료
-- [ ] (Phase B/C) 임계 통과 + plot 시각 비교
-- [ ] CHANGELOG.md 갱신
-- [ ] CLAUDE.md/README 영향 없음 (또는 같이 갱신)
+- [ ] build PASS
+- [ ] (Phase B/C) Regression baseline vs candidate measurement done
+- [ ] (Phase B/C) threshold pass + plot visual comparison
+- [ ] CHANGELOG.md updated
+- [ ] no impact on CLAUDE.md/README (or updated together)
 
 ## Next Phase
-- <다음 phase의 scope 한 줄>
+- <one line of the next phase's scope>
 ```

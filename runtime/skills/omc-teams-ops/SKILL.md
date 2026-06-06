@@ -1,6 +1,6 @@
 ---
 name: omc-teams-ops
-description: omc-teams (tmux pane 분리 워커) launch/운영/디버깅 매뉴얼. 함정 6+ 종 (leader-session-1-team, paste-bracketed Enter 흡수, sentinel self-leak, dispatcher self-leak, heuristic false-positive, Cogitated 카운터 사각지대) + omc_monitor.sh v3.x 운영 + 검증된 우회 패턴. omc team launch 직전, sentinel/dispatch 디버깅, monitor 멈춤 진단 시 invoke. 본문은 증상-원인-해결 결정 트리로 정리; 함정의 chronological 출처는 git log 참조.
+description: omc-teams (tmux pane-separated workers) launch/operations/debugging manual. 6+ pitfalls (leader-session-1-team, paste-bracketed Enter absorption, sentinel self-leak, dispatcher self-leak, heuristic false-positive, Cogitated counter blind spot) + omc_monitor.sh v3.x operations + verified workaround patterns. Invoke right before an omc team launch, when debugging sentinel/dispatch, or when diagnosing a stalled monitor. The body is organized as a symptom-cause-fix decision tree; for the chronological origin of each pitfall see the git log.
 triggers:
   - "omc team"
   - "omc-teams"
@@ -17,299 +17,299 @@ triggers:
 
 # omc-teams-ops
 
-`omc-teams` 로 tmux pane 분리 워커를 띄울 때의 운영 매뉴얼. 본문은 **증상 → 진단 → 해결** 트리로 구성. 함정 6+ 종이 시간순으로 누적됐던 것을 *단계별로 묶어* 긴급 상황에서 즉시 navigate 가능하게 만들었다.
+Operations manual for launching tmux pane-separated workers with `omc-teams`. The body is structured as a **symptom -> diagnosis -> fix** tree. The 6+ pitfalls that accumulated chronologically are *grouped by stage* so you can navigate to them immediately in an emergency.
 
-## 0. 현재 상태와 omha 와의 역할 분담
+## 0. Current status and division of roles with omha
 
-- **omc-teams CLI 자체는 살아있음** — `omc team`, `omc team api ...`, `omc team shutdown` 등 본문이 의존하는 명령은 모두 omc 플러그인 본체 (이 글 작성 시점 v4.14+) 가 제공한다.
-- **이 SKILL 의 범위**: omc-teams 의 *운영 함정과 우회 패턴*. omha 가 흡수한 것은 routing/skill registry 쪽 (예전의 `routing-verdict-reminder.py`, `omc-reference` 카탈로그) 이지 team 운영 자체는 그대로 omc 가 owner.
-- **drift 신호** (다음 중 하나라도 발생하면 본문의 명령 형식이 stale 일 가능성, omc 플러그인 changelog 확인):
-  - `omc team` 호출 시 `unknown command` 또는 `flag --no-decompose deprecated`
-  - `omc team api read-task` 응답에 `data.task.status` 키 부재
-  - `omc team api create-task` 가 plain text 만 반환 (현행은 JSON 응답)
-- 위 SSOT 분리: monitor 스크립트 (`omc_monitor.sh` 등) 와 wrapper 스크립트들은 이 repo (claudebase) 의 `installer/scripts/` 에 정본. omc 플러그인 본체와 별도로 evolve.
-
----
-
-## 1. Use case 판정 (invoke 전 5 초)
-
-**사용 O**
-- 사용자의 Q&A·대화 흐름 (메인 패널) 과 파일 수정 (워커 패널) 을 *시각적으로* 분리해야 할 때. 면접 prep, 강의 자료 수정, 긴 문서 review.
-
-**사용 X**
-- 단일 surgical edit 1-3 줄 — 메인에서 Edit 이 빠름.
-- spec 모호 — `/team` 으로 먼저 스코핑.
-- reference-bound writing — citation hallucination 위험.
+- **The omc-teams CLI itself is alive** — all the commands the body relies on (`omc team`, `omc team api ...`, `omc team shutdown`, etc.) are provided by the omc plugin core (v4.14+ at the time this was written).
+- **Scope of this SKILL**: the *operational pitfalls and workaround patterns* of omc-teams. What omha absorbed is the routing/skill registry side (the former `routing-verdict-reminder.py`, the `omc-reference` catalog), not team operation itself, which omc still owns.
+- **drift signals** (if any of the following occurs, the command formats in the body may be stale — check the omc plugin changelog):
+  - `unknown command` or `flag --no-decompose deprecated` when calling `omc team`
+  - `data.task.status` key absent in the `omc team api read-task` response
+  - `omc team api create-task` returns plain text only (the current behavior is a JSON response)
+- SSOT separation: the monitor scripts (`omc_monitor.sh` etc.) and the wrapper scripts are canonical in `installer/scripts/` of this repo (claudebase). They evolve separately from the omc plugin core.
 
 ---
 
-## 2. 증상별 진단 트리
+## 1. Use-case judgment (5 seconds before invoke)
 
-| 증상 (사용자가 보는 것) | 원인 위치 | 본문 섹션 |
+**Use it when**
+- You need to *visually* separate the user's Q&A/conversation flow (main panel) from file edits (worker panel). Interview prep, lecture material edits, long document review.
+
+**Do NOT use it when**
+- A single surgical edit of 1-3 lines — Edit from main is faster.
+- The spec is ambiguous — scope it first with `/team`.
+- Reference-bound writing — risk of citation hallucination.
+
+---
+
+## 2. Symptom-by-symptom diagnostic tree
+
+| Symptom (what the user sees) | Cause location | Body section |
 |---|---|---|
-| "Leader session already owns active team" 에러 | Launch 단계 / one_team_per_leader | §3.1 |
-| 워커 launch 후 prompt 가 paste 만 되고 실행 안 됨 | Dispatch / Enter 흡수 | §4.1 |
-| 사용자가 worker pane 에 직접 입력했는데 메인의 Enter 가 무시됨 | Dispatch / paste-bracketed | §4.2 |
-| monitor 가 false ALERT-CONFIRM 발사 (워커는 정상 진행) | Monitor / sentinel self-leak 또는 dispatcher self-leak | §5.1, §5.2 |
-| plan 작성 중 "확인 필요" 같은 한국어 prose 로 false alert | Monitor / heuristic | §5.3 |
-| 워커가 10+ 분 thinking 인데 monitor 가 stale 알람 안 줌 | Monitor / Cogitated 카운터 사각지대 | §5.4 |
-| 워커 launch 직후 빈 화면, paste 도 없음 | Launch / TUI init 실패 또는 API 429 | §3.2 |
-| `omc team api` 응답이 JSON 으로 안 풀림 | Operations / stdout/stderr 섞임 | §6.1 |
-| 같은 cwd 에 두 번째 team launch 가 silent fail | Launch / cwd 단위 single-team | §3.3 |
+| "Leader session already owns active team" error | Launch stage / one_team_per_leader | §3.1 |
+| After worker launch the prompt is only pasted and does not execute | Dispatch / Enter absorption | §4.1 |
+| User typed directly into the worker pane but main's Enter is ignored | Dispatch / paste-bracketed | §4.2 |
+| Monitor fires a false ALERT-CONFIRM (worker is progressing normally) | Monitor / sentinel self-leak or dispatcher self-leak | §5.1, §5.2 |
+| False alert from Korean prose like "확인 필요" while a plan is being written | Monitor / heuristic | §5.3 |
+| Worker has been thinking 10+ min but monitor gives no stale alarm | Monitor / Cogitated counter blind spot | §5.4 |
+| Blank screen right after worker launch, no paste either | Launch / TUI init failure or API 429 | §3.2 |
+| `omc team api` response does not parse as JSON | Operations / mixed stdout/stderr | §6.1 |
+| A second team launch in the same cwd silently fails | Launch / per-cwd single-team | §3.3 |
 
 ---
 
-## 3. Launch 단계 함정
+## 3. Launch-stage pitfalls
 
-### 3.1 같은 leader session 안에 team 추가 불가
+### 3.1 Cannot add a team within the same leader session
 
-**증상**: `omc team 1:claude ...` 첫 launch 후, 같은 session 에서 두 번째 `omc team 1:claude ...` 시도 → `Leader session already owns active team`.
+**Symptom**: after the first `omc team 1:claude ...` launch, a second `omc team 1:claude ...` attempt in the same session -> `Leader session already owns active team`.
 
-**원인**: `omc team` CLI 의 `governance.one_team_per_leader_session: true` 하드코드. `--new-window`, `OMC_ONE_TEAM_PER_LEADER=0`, `OMC_TEAM_NAME=...` 모두 우회 실패 — 확인됨. `omc team api` 에 `add-worker` 명령 없음.
+**Cause**: the `governance.one_team_per_leader_session: true` hardcode in the `omc team` CLI. `--new-window`, `OMC_ONE_TEAM_PER_LEADER=0`, `OMC_TEAM_NAME=...` all fail to work around it — confirmed. `omc team api` has no `add-worker` command.
 
-**결정적 함의**: 같은 session 도중 worker *동적 추가 불가*. 처음부터 N-worker 로 launch 해야 한다.
+**Decisive implication**: workers *cannot be added dynamically* mid-session. You must launch as an N-worker team from the start.
 
-#### 해결 패턴 1 — 기존 team shutdown + N-worker 재launch (가장 깔끔)
+#### Fix pattern 1 — shut down the existing team + re-launch as N-worker (cleanest)
 
 ```bash
-# (1) in_progress task 있으면 force shutdown
+# (1) Force shutdown if there is an in_progress task
 omc team shutdown <team-name> --force
-# (2) Stale state 정리 (force shutdown 후 디렉토리 잔존)
+# (2) Clean up stale state (directory remains after a force shutdown)
 rm -rf .omc/state/team/<team-name>
-# (3) N-worker 로 재 launch
-omc team N:claude "<공통 role + 각 worker 역할 분리>" --no-decompose --cwd <workdir>
+# (3) Re-launch as N-worker
+omc team N:claude "<shared role + role separation per worker>" --no-decompose --cwd <workdir>
 ```
 
-**주의 (검증됨)**:
-- `--force` shutdown 은 leader session pane 안의 worker process 도 함께 죽임.
-- omc 가 관리 안 하는 수동 pane (tmux split-window) 은 자동으로 안 죽지만 leader process 변경으로 *orphan* 상태 가능 — `tmux kill-pane -t %<id>` 으로 사전 정리 권장.
-- 디스크 산출물 (`.worker/dispatch_log.md`, `sections/*.tex` 등) 은 shutdown 영향 받지 않음 — `.omc/state/team/...` 만 사라진다. 재 launch 후 dispatch_log 재사용 OK.
+**Caveats (verified)**:
+- A `--force` shutdown also kills the worker processes inside the leader session panes.
+- A manual pane not managed by omc (tmux split-window) is not killed automatically, but can become an *orphan* due to the leader process change — pre-clean it with `tmux kill-pane -t %<id>` (recommended).
+- Disk artifacts (`.worker/dispatch_log.md`, `sections/*.tex`, etc.) are unaffected by shutdown — only `.omc/state/team/...` disappears. Reusing dispatch_log after a re-launch is OK.
 
-#### 해결 패턴 2 — tmux split-window 직접 (omc 우회, 임시 보조 worker)
+#### Fix pattern 2 — direct tmux split-window (bypassing omc, temporary auxiliary worker)
 
-omc team 의 N-worker launch 가 불편한 비정형 상황 (예: 1 worker 띄운 상태에서 임시 1 worker 추가):
+For irregular situations where the N-worker launch of omc team is inconvenient (e.g., adding a temporary 1 worker while 1 worker is already up):
 
 ```bash
-# (1) 기존 W1 pane 옆에 vertical split — -v 필수 (-h 면 main 좁아짐)
+# (1) vertical split next to the existing W1 pane — -v required (-h would narrow main)
 tmux split-window -t %1 -v -c <workdir>
-# (2) 새 pane id 확인
+# (2) Check the new pane id
 tmux list-panes -a
-# (3) 새 pane 에 claude TUI
+# (3) claude TUI in the new pane
 tmux send-keys -t %3 "claude --dangerously-skip-permissions" && sleep 1 && tmux send-keys -t %3 Enter
-# (4) 8-15 초 init 후 확인
+# (4) Confirm after 8-15 s of init
 sleep 10 && tmux capture-pane -p -t %3
-# (5) Pane label 부여
+# (5) Assign a pane label
 bash ~/claudebase/installer/scripts/omc_pane_label.sh apply \
   '0.0=[MAIN] ...' '0.1=[W1] ...' '0.2=[W2 manual] ...'
-# (6) Task nudge: §4.1 의 2-step Enter 우회 적용
+# (6) Task nudge: apply the 2-step Enter workaround from §4.1
 ```
 
-**제약 (omc 안 거치므로)**:
-- ❌ `omc team api list-tasks` 안 됨
-- ❌ `omc_monitor.sh` 의 status polling 안 됨 — *pane-only mode* (`team="-" task_id="-"` + deliverable) 만 가능
-- ❌ Lease / heartbeat 자동 관리 안 됨 — capture-pane 으로 직접 감시
-- ✅ 산출물은 file-based queue (`.worker/research_inbox.md`) 로 메인과 통신
-- ✅ Force shutdown 영향 받지 않음 (별도 process)
+**Constraints (since omc is bypassed)**:
+- ❌ `omc team api list-tasks` does not work
+- ❌ Status polling by `omc_monitor.sh` does not work — only *pane-only mode* (`team="-" task_id="-"` + deliverable) is possible
+- ❌ Lease / heartbeat are not auto-managed — watch directly with capture-pane
+- ✅ Artifacts communicate with main via a file-based queue (`.worker/research_inbox.md`)
+- ✅ Unaffected by force shutdown (separate process)
 
-**권장 use case**: 임시 보조 worker (1 query 후 종료), 또는 omc state 망가져 재 launch 곤란할 때 응급조치. 영구 worker 는 패턴 1 권장.
+**Recommended use case**: a temporary auxiliary worker (terminates after 1 query), or emergency action when omc state is broken and re-launch is hard. For a permanent worker, pattern 1 is recommended.
 
-#### 해결 패턴 3 — 처음부터 N-worker team (이상적)
+#### Fix pattern 3 — N-worker team from the start (ideal)
 
-세션 시작 시점에 "2 worker 필요할 수도" 예측되면:
+When you can predict at session start that "we might need 2 workers":
 
 ```bash
 omc team 2:claude --no-decompose \
-  "Shared role description; W1 = <편집 전담 SOP>; W2 = <자료조사 전담 SOP>" \
+  "Shared role description; W1 = <editing-only SOP>; W2 = <research-only SOP>" \
   --cwd <workdir>
 ```
 
-`--no-decompose` flag 가 task 를 worker 수만큼 자동 분해 안 하게 막음 (둘 다 같은 standby 컨텍스트). 이후 `omc team api create-task` 로 각 worker 에 task assign.
+The `--no-decompose` flag prevents the task from being auto-split into as many parts as there are workers (both share the same standby context). Then assign a task to each worker with `omc team api create-task`.
 
-**2 worker 둘 다 같은 cwd**: omc team 제약 — 모든 worker 가 single cwd 공유. 다른 cwd 필요하면 별도 처리.
+**Both workers share the same cwd**: an omc team constraint — all workers share a single cwd. If you need different cwds, handle that separately.
 
-### 3.2 Launch 직후 워커 상태 검증 — 매 launch 의무
+### 3.2 Verify worker status right after launch — mandatory at every launch
 
-`omc team launch` 가 launch text 를 task 1 으로 자동 등록 + worker pane 에 inbox-read nudge paste 까지 함. **그러나 Enter 입력 + Claude TUI init 둘 다 보장 X**. "전에는 잘 됐으니 이번에도" 가정하면 워커가 prompt 에서 paste 만 된 채 멈춤 — 사용자가 직접 발견.
+`omc team launch` auto-registers the launch text as task 1 and even pastes an inbox-read nudge into the worker pane. **But it guarantees neither Enter input nor Claude TUI init.** If you assume "it worked before so it will work this time," the worker freezes with the prompt only pasted — the user discovers it themselves.
 
-**표준 검증 절차 (매 launch 직후)**:
+**Standard verification procedure (right after every launch)**:
 
-1. **Launch 직후**: `tmux list-panes -t 0 -F "#{pane_index} cwd=#{pane_current_path}"` 로 새 pane id 확인 (*pane index 재배치 함정* — 새 worker 추가 시 기존 pane index 가 shift).
-2. **20-30 초 후**: `tmux capture-pane -pt <pane-id> -S -25` 로 워커 정독:
-   - 빈 화면 (Claude TUI init 미완료) → 30 초 더 대기 후 재 capture
-   - paste 됐지만 Enter 없음 → §4.1 2-step Enter 우회 적용
-   - `[API 429]` → rate limited. 5-10 분 대기 또는 다른 워커 셧다운 후 재 launch
-   - "Reading the inbox now ..." 등 정상 실행 → OK, monitor 띄움
-3. **30 초 후에도 빈 화면 + paste 도 없음** → process 실패. shutdown + 재 launch.
+1. **Right after launch**: confirm the new pane id with `tmux list-panes -t 0 -F "#{pane_index} cwd=#{pane_current_path}"` (*pane index reshuffle pitfall* — existing pane indices shift when a new worker is added).
+2. **After 20-30 s**: read the worker carefully with `tmux capture-pane -pt <pane-id> -S -25`:
+   - blank screen (Claude TUI init incomplete) -> wait 30 s more, then re-capture
+   - pasted but no Enter -> apply the §4.1 2-step Enter workaround
+   - `[API 429]` -> rate limited. Wait 5-10 min, or shut down another worker and re-launch
+   - normal execution like "Reading the inbox now ..." -> OK, bring up the monitor
+3. **Still blank with no paste after 30 s** -> process failure. Shutdown + re-launch.
 
-### 3.3 워커 동시 launch 위험 — sequential 권장
+### 3.3 Risk of launching workers simultaneously — sequential is recommended
 
-여러 워커 동시 launch (A 직후 바로 B) 는 §3.2 검증을 *둘 다* 통과해야 안전. 검증된 깨짐 케이스:
+Launching multiple workers simultaneously (B right after A) is only safe if §3.2 verification passes for *both*. Verified breakage cases:
 
-- **API 429**: 메인 사용 + 새 워커 두 개 동시 init = Anthropic API 부하. 429 가 보이면 워커 process 살아있어도 메시지 응답 X → 메인은 "Enter 안 눌렸나" 로 오해.
-- **TUI init 지연 불균등**: 두 워커 동시 부팅 → 한쪽 20 초, 다른 쪽 60 초. 빠른 쪽 기준 검증만 하면 늦은 쪽 누락.
+- **API 429**: main usage + two new workers initializing at once = Anthropic API load. If you see 429, the worker processes are alive but do not respond -> main misreads it as "did Enter not get pressed?"
+- **Uneven TUI init delay**: two workers booting at once -> one takes 20 s, the other 60 s. Verifying based on the fast one misses the slow one.
 
-**권장**:
-- **Sequential**: 워커 A launch → 검증 통과 → task 1 in_progress 확인 → 워커 B launch. 2-3 분 overhead 있으나 안정.
-- **병렬 필요 시**: 둘 다 §3.2 검증을 *각각* 적용. 429 발견 시 한 워커 셧다운 후 sequential 로 전환.
+**Recommendation**:
+- **Sequential**: launch worker A -> verification passes -> confirm task 1 in_progress -> launch worker B. There is a 2-3 min overhead but it is stable.
+- **When parallelism is needed**: apply §3.2 verification to *each* of the two. If you find a 429, shut down one worker and switch to sequential.
 
-### 3.4 같은 cwd 두 번째 team launch — silent fail
+### 3.4 Second team launch in the same cwd — silent fail
 
-같은 cwd 에서 두 번째 `omc team ...` 시도하면 *silent fail* (help 출력만 떨어짐). omc 가 cwd 단위 single-team 가정. 격리 필요시 두 번째 워커만 다른 cwd 또는 `--cwd <target>` 으로 옮기는 우회.
+If you attempt a second `omc team ...` in the same cwd, it *silently fails* (only the help output is emitted). omc assumes a per-cwd single-team. If isolation is needed, work around it by moving only the second worker to a different cwd or with `--cwd <target>`.
 
-### 3.5 Team name slug — ASCII 시작 강제
+### 3.5 Team name slug — ASCII start enforced
 
-`omc team` 은 task description 첫 단어 수개로 slug 만듦 (영문만). 한글 시작 description 은 의미 없는 slug. → description 시작을 ASCII 영문으로 (예: "Section 5.4 LQR compression worker"). `--team-name` 같은 명시 옵션 omc CLI 에 *존재하지 않음* (시도 시 help silent fail).
+`omc team` builds the slug from the first few words of the task description (English only). A description that starts with Korean produces a meaningless slug. -> Start the description with ASCII English (e.g., "Section 5.4 LQR compression worker"). An explicit option like `--team-name` does *not exist* in the omc CLI (attempting it produces a silent help fail).
 
 ---
 
-## 4. Dispatch / Enter 단계 함정
+## 4. Dispatch / Enter-stage pitfalls
 
-### 4.1 Dispatch Enter 미전송 — 2-step 우회 패턴
+### 4.1 Dispatch Enter not transmitted — 2-step workaround pattern
 
-**증상**: `tmux send-keys -t <pane> "<text>" C-m` 한 콜에 보내면 한글·긴 문자열 paste 도중 prompt focus 흔들려 C-m 이 buffer 안에 *흡수*. paste 만 되고 실행 안 됨.
+**Symptom**: when you send `tmux send-keys -t <pane> "<text>" C-m` in a single call, the prompt focus wobbles during the paste of a Korean/long string and the C-m gets *absorbed* into the buffer. It only pastes and does not execute.
 
-**우회**:
+**Workaround**:
 ```bash
-tmux send-keys -t <pane-id> "<task description>"   # text 만
+tmux send-keys -t <pane-id> "<task description>"   # text only
 sleep 2
-tmux send-keys -t <pane-id> C-m                    # Enter 별도
+tmux send-keys -t <pane-id> C-m                    # Enter separately
 ```
 
-1차 후 `tmux capture-pane -pt <pane-id> -S -20` 로 prompt 확인. 입력만 됐으면 step 2 만 재시도. 자동화 실패 시 fallback 으로 사용자에게 "워커 패널에서 Enter 한 번 부탁" 안내.
+After step 1, check the prompt with `tmux capture-pane -pt <pane-id> -S -20`. If only the input went in, retry only step 2. If automation fails, fall back to asking the user "please press Enter once in the worker panel."
 
-### 4.2 사용자 입력 + 메인 send-keys 충돌 — Claude TUI paste-bracketed mode 흡수
+### 4.2 User input + main send-keys collision — Claude TUI paste-bracketed mode absorption
 
-**증상**: 메인이 dispatch nudge 보낸 후 사용자가 worker pane 에 직접 키보드 입력 ("OK proceed — apply..."). 그런데 Enter 안 누르고 메인으로 돌아옴. 메인이 `tmux send-keys -t %1 C-m` 으로 Enter 시도 → **모두 흡수**. 사용자 입력이 ❯ prompt 에 박혀 worker 진행 안 됨.
+**Symptom**: after main sends a dispatch nudge, the user types directly into the worker pane ("OK proceed — apply..."). But they return to main without pressing Enter. Main attempts Enter with `tmux send-keys -t %1 C-m` -> **all absorbed**. The user input is stuck in the ❯ prompt and the worker does not progress.
 
-**원인**: Claude TUI 의 ❯ prompt 는 paste-bracketed mode. 사용자 키보드 (OS keyboard event) 입력 후 paste-buffer 가 "open" 상태 유지. 외부 tmux send-keys (pseudo-tty escape sequence) 들어오면 paste 내용의 일부로 흡수. C-m / Enter / Ctrl-keys 전부 paste sequence 안 character 로 처리. 사용자가 직접 키보드로 Enter (OS event) 또는 `C-c` interrupt 로 paste-buffer reset 해야 풀림.
+**Cause**: the ❯ prompt of the Claude TUI is in paste-bracketed mode. After the user's keyboard (OS keyboard event) input, the paste-buffer stays "open." When an external tmux send-keys (pseudo-tty escape sequence) comes in, it gets absorbed as part of the paste content. C-m / Enter / Ctrl-keys are all handled as characters within the paste sequence. It only releases when the user presses Enter directly via the keyboard (OS event), or resets the paste-buffer with a `C-c` interrupt.
 
-**시도해본 우회 (모두 실패 확인)**: `C-m`, `Enter` literal, `set-option -g assume-paste-time 0`, pane-level option (미지원), `C-a C-k C-u` line clear. 3-Strike Rule 발동.
+**Workarounds tried (all confirmed to fail)**: `C-m`, `Enter` literal, `set-option -g assume-paste-time 0`, pane-level option (unsupported), `C-a C-k C-u` line clear. The 3-Strike Rule kicked in.
 
-#### 해결 패턴 1 — 운영 룰 (사용자 측, 가장 안전)
+#### Fix pattern 1 — operational rule (user side, safest)
 
-메인이 dispatch 한 후 사용자는 worker pane 직접 만지지 말 것. 확인 메시지를 직접 입력하고 싶다면:
-- ✅ 옵션 A: 메인에 자연어로 ("OK 적용해줘"). 메인이 send-keys 처리.
-- ✅ 옵션 B: 사용자가 직접 입력 + 그 자리에서 Enter 까지 누름 (한 동작 완결).
-- ❌ 사용자가 입력만 하고 Enter 안 누르고 메인에 "Enter 눌러줘" 요청 → 막힘.
+After main dispatches, the user must not touch the worker pane directly. If they want to type a confirmation message themselves:
+- ✅ Option A: tell main in natural language ("OK, apply it"). Main handles send-keys.
+- ✅ Option B: the user types directly and presses Enter right then (one complete action).
+- ❌ User types only, does not press Enter, and asks main to "press Enter" -> blocked.
 
-#### 해결 패턴 2 — Recovery (메인 측, 막힌 후)
+#### Fix pattern 2 — recovery (main side, after it is blocked)
 
-이미 막힌 경우:
-1. **사용자에게 직접 Enter 부탁** — 가장 빠르고 확실. 사용자 input 그대로 보존.
-2. 또는 메인이 `tmux send-keys -t <pane> C-c` 송출 → paste-buffer interrupt → prompt reset → 새로 dispatch nudge 재송출. **단점**: 사용자 input 잃음.
-3. ❌ "Space + Enter" 패턴은 사용자 input 복구 안 됨 — paste-mode 가 space 받으면 풀려서 prompt 가 "space 만 submit" 처리. Claude TUI 는 empty/whitespace message 무시하고 prompt clear 만 함. 사용자 input 사라짐. "prompt 청소 효과" 만, input 복구는 패턴 1 뿐.
+If already blocked:
+1. **Ask the user to press Enter directly** — fastest and most certain. Preserves the user input as-is.
+2. Or main sends `tmux send-keys -t <pane> C-c` -> paste-buffer interrupt -> prompt reset -> re-send a fresh dispatch nudge. **Downside**: the user input is lost.
+3. ❌ The "Space + Enter" pattern does not recover the user input — when paste-mode receives a space it releases, so the prompt treats it as "submit space only." The Claude TUI ignores empty/whitespace messages and only clears the prompt. The user input disappears. It only has a "prompt-cleanup effect"; the only way to recover the input is pattern 1.
 
-#### 해결 패턴 3 — 예방 (worker launch 시점)
+#### Fix pattern 3 — prevention (at worker launch)
 
-Worker launch 메시지에 "Dispatch confirm 은 사용자 직접 입력 X — 메인이 send-keys 로 처리" 룰 명시. 사용자가 무심코 pane attach 해도 메인 채팅으로 redirect.
+In the worker launch message, state the rule "Dispatch confirm must NOT be typed by the user directly — main handles it via send-keys." Even if the user attaches to the pane absent-mindedly, redirect them to the main chat.
 
-**왜 §4.1 과 다른가**: §4.1 은 메인 단독 dispatch (text + Enter) 가 깨지는 케이스 — sleep 으로 분리해서 해결. §4.2 는 사용자 입력 + 메인 Enter 충돌 — sleep 무관, paste-bracketed mode 자체. 운영 룰로 회피가 표준.
+**Why it differs from §4.1**: §4.1 is the case where main's solo dispatch (text + Enter) breaks — solved by separating with sleep. §4.2 is a collision of user input + main's Enter — sleep is irrelevant; it is paste-bracketed mode itself. Avoiding it via an operational rule is the standard.
 
-### 4.3 Dispatcher self-leak — confirm 메시지 본문에 sentinel literal 박기
+### 4.3 Dispatcher self-leak — embedding a sentinel literal in the body of the confirm message
 
-**증상**: 메인이 워커에 "OK proceed — apply changes. Build failure = STOP + diagnose + `[[WORKER_STOPPED]]`" 같이 confirm-OK 메시지 본문에 sentinel literal 박음 (worker 교육 의도). 그 메시지가 worker pane 의 prompt 라인에 paste 됨 → monitor 재시작 직후 iter=1 pane capture 에서 매칭 → ALERT-CONFIRM 즉시 발사. 워커는 정상 apply 중인데 monitor 가 confirm-pending 오인.
+**Symptom**: main embeds a sentinel literal in the body of a confirm-OK message to the worker, like "OK proceed — apply changes. Build failure = STOP + diagnose + `[[WORKER_STOPPED]]`" (intending to teach the worker). That message gets pasted into the prompt line of the worker pane -> on the iter=1 pane capture right after a monitor restart it matches -> ALERT-CONFIRM fires immediately. The worker is applying normally but the monitor mistakes it for confirm-pending.
 
-**원인 (2 가지 결합)**:
-1. Monitor 의 tail window 가 30 줄 — pane bottom 5 줄에 paste 된 메시지 항상 캡처.
-2. iter=1 즉시 매칭 — monitor 재시작 직후 첫 polling 에서 "방금 paste 된 sentinel 토큰" 을 fresh emission 으로 오인.
+**Cause (two things combined)**:
+1. The monitor's tail window is 30 lines — a message pasted into the bottom 5 lines of the pane is always captured.
+2. iter=1 immediate matching — on the first polling right after a monitor restart, the "just-pasted sentinel token" is mistaken for a fresh emission.
 
-#### 해결 패턴 1 — Dispatcher 룰 (가장 중요)
+#### Fix pattern 1 — dispatcher rule (most important)
 
-Confirm 메시지 / dispatch instruction 본문에 sentinel literal 박지 말 것. 워커에게 "X 상황에 sentinel 박아라" 교육하려면:
-- ✅ ASCII art 분해: ``Build failure = STOP + diagnose + `[`+`[`+`WORKER_STOPPED`+`]`+`]` ``
-- ✅ 우회 표현: "Build failure = STOP + diagnose + WORKER_STOPPED sentinel"
+Do not embed a sentinel literal in the body of a confirm message / dispatch instruction. To teach the worker "embed the sentinel in situation X":
+- ✅ ASCII art decomposition: ``Build failure = STOP + diagnose + `[`+`[`+`WORKER_STOPPED`+`]`+`]` ``
+- ✅ Roundabout phrasing: "Build failure = STOP + diagnose + WORKER_STOPPED sentinel"
 - ❌ Literal sentinel: "Build failure = STOP + diagnose + [[WORKER_STOPPED]]"
 
-#### 해결 패턴 2 — Monitor 측 자동 보강 (omc_monitor.sh v3.3)
+#### Fix pattern 2 — automatic reinforcement on the monitor side (omc_monitor.sh v3.3)
 
-자동 보강 — dispatcher 가 실수로 literal 박아도 false-positive 차단:
-- `tail_window`: 30 → 15 줄 (워커 자체 sentinel emit 은 bottom 5 줄 안)
-- `iter=1 skip`: 첫 polling 에서 sentinel/heuristic 모두 스킵, iter=2 부터 매칭 (scrollback drift 한 cycle 대기)
+Automatic reinforcement — blocks the false-positive even if the dispatcher accidentally embeds a literal:
+- `tail_window`: 30 -> 15 lines (the worker's own sentinel emit is within the bottom 5 lines)
+- `iter=1 skip`: skip both sentinel/heuristic on the first polling, match from iter=2 (wait one cycle for scrollback drift)
 
-#### 해결 패턴 3 — 워커 정상 apply 중에 monitor 재시작 안 하기
+#### Fix pattern 3 — do not restart the monitor while the worker is applying normally
 
-가능하면 monitor 한 instance 가 task 전체 lifecycle (dry-run → confirm → apply → done) 을 한 번에 watch. 재시작은 stale alert / fail alert 받았을 때만. confirm 보낸 직후 새 monitor 재시작 = scrollback 충돌 위험.
+If possible, have a single monitor instance watch the whole task lifecycle (dry-run -> confirm -> apply -> done) in one go. Restart only when you receive a stale alert / fail alert. Restarting a new monitor right after sending a confirm = risk of scrollback collision.
 
 ---
 
-## 5. Monitor 단계 함정
+## 5. Monitor-stage pitfalls
 
-### 5.0 Sentinel-emit 룰 — confirm-pending 결정론화 (기본 운영)
+### 5.0 Sentinel-emit rule — making confirm-pending deterministic (default operation)
 
-Monitor 의 confirm-pending 감지가 자연어 heuristic ("STOP — awaiting", "Decisions needed") 만 쓰면 worker 메시지 wording 에 따라 깨짐. 해결: worker dispatch 시점에 명시적 sentinel 출력 룰 박기.
+If the monitor's confirm-pending detection only uses natural-language heuristics ("STOP — awaiting", "Decisions needed"), it breaks depending on the worker message wording. Fix: embed an explicit sentinel-output rule at the worker dispatch point.
 
-**Dispatch task description 마지막에 다음 sentinel 룰 항상 포함**:
+**Always include the following sentinel rule at the end of the dispatch task description**:
 
 ```markdown
-## Monitor sentinel 룰 (필수) — square bracket 형식이 canonical
+## Monitor sentinel rule (required) — the square bracket format is canonical
 
-다음 상태 도달 시 exact literal sentinel 한 줄 출력 — monitor 가 결정론적으로 잡음. 자연어 묘사로 대체 X:
+When the following states are reached, output an exact-literal sentinel on one line — the monitor catches it deterministically. Do NOT replace with a natural-language description:
 
-- **Dry-run / confirm-pending (G1 plan 완료, main confirm 대기)**: `[[CONFIRM_PENDING]]`
-- **Worker stop (lease 만료, race, fatal error)**: `[[WORKER_STOPPED]] reason: <한 줄>`
-- **Worker blocked (외부 의존성, 사용자 자료 필요)**: `[[WORKER_BLOCKED]] need: <한 줄>`
+- **Dry-run / confirm-pending (G1 plan done, awaiting main confirm)**: `[[CONFIRM_PENDING]]`
+- **Worker stop (lease expiry, race, fatal error)**: `[[WORKER_STOPPED]] reason: <one line>`
+- **Worker blocked (external dependency, user material needed)**: `[[WORKER_BLOCKED]] need: <one line>`
 
-sentinel 은 본문에 한 번만. 설명·plan 은 sentinel 앞 또는 뒤 줄에. monitor 는 grep 으로 즉시 alert (heuristic 매칭 대비 false positive 0).
+The sentinel appears only once in the body. Put the explanation/plan on the line before or after the sentinel. The monitor alerts immediately via grep (false positive 0 vs heuristic matching).
 ```
 
-**Backward compat**: angle-bracket 형식 (`<<AWAITING_MAIN_CONFIRM>>` 등) 은 기존 워커 호환용. omc_monitor.sh v3.1+ 가 angle + square 둘 다 OR 매칭. **신규 dispatch 는 square bracket 만**.
+**Backward compat**: the angle-bracket format (`<<AWAITING_MAIN_CONFIRM>>`, etc.) is for compatibility with existing workers. omc_monitor.sh v3.1+ OR-matches both angle and square. **New dispatches use square bracket only.**
 
-**Monitor 측**: `SENTINEL_PATTERN` 매칭이 primary, 자연어 `CONFIRM_PATTERNS` 는 fallback (sentinel 미도입 worker 호환). exit code 4 = ALERT-CONFIRM.
+**Monitor side**: `SENTINEL_PATTERN` matching is primary, the natural-language `CONFIRM_PATTERNS` is a fallback (for compatibility with workers that have not adopted the sentinel). exit code 4 = ALERT-CONFIRM.
 
-**왜 더 안정**: wording 의존성 제거 / 한·영 mix wording OK (sentinel 은 ASCII fixed) / False positive 0 / Polling 15 초로 단축 가능 (`POLL_INTERVAL=15` env var).
+**Why it is more stable**: removes wording dependency / KO-EN mixed wording is OK (the sentinel is ASCII fixed) / false positive 0 / Polling can be shortened to 15 s (`POLL_INTERVAL=15` env var).
 
 ### 5.1 Sentinel self-leak — angle bracket self-confusion
 
-**증상**: dispatch task 본문에 "완료 시 `<<AWAITING_MAIN_CONFIRM>>` 출력" 같이 메타-instruction 박으면, 워커가 본문 작성할 때 sentinel 문자열을 literal 로 박지 않으려고 *자체 회피*: `< < AWAITING_MAIN_CONFIRM > >` (공백 삽입) 또는 빈 `<>` 만 남김. figure 보고 메시지 끝에 빈 `<>` 누적 발견.
+**Symptom**: if you embed a meta-instruction like "output `<<AWAITING_MAIN_CONFIRM>>` on completion" in the dispatch task body, when the worker writes the body it *self-avoids* embedding the sentinel string literally: `< < AWAITING_MAIN_CONFIRM > >` (inserting spaces) or leaves only an empty `<>`. You find empty `<>` accumulating at the end of figure-report messages.
 
-**원인**: 워커가 "monitor 가 내 출력에서 sentinel 찾으니 본문 설명용 텍스트에서 실제 sentinel 박으면 false positive 날 것" 으로 *과잉 추론* → 자기 출력에서 sentinel 토큰을 중간 비운 빈 bracket 으로 회피. 메인 dispatch 가 "literal 박는 방법" 명시 안 해서 발생.
+**Cause**: the worker *over-reasons* that "since the monitor looks for the sentinel in my output, embedding the actual sentinel in descriptive body text will cause a false positive" -> in its own output, it avoids the sentinel token with an emptied-out empty bracket. It happens because main's dispatch did not specify "how to embed the literal."
 
-#### 해결 패턴 1 — Dispatcher 측 변형 표기
+#### Fix pattern 1 — variant notation on the dispatcher side
 
-dispatch 본문에서 sentinel 을 *설명* 할 때는 ASCII art 로 분해해서 박을 것 — 워커가 자기 출력에서 동일 표기 따라 하지 않게:
+When *describing* the sentinel in the dispatch body, decompose it with ASCII art so the worker does not copy the same notation in its own output:
 
 ```markdown
-## Monitor sentinel 룰
+## Monitor sentinel rule
 
-완료 시 다음 토큰을 한 줄에 붙여서 출력 (5개 토큰 연결):
+On completion, output the following tokens concatenated on one line (5 tokens joined):
   `<` + `<` + `AWAITING_MAIN_CONFIRM` + `>` + `>`
 
-실제 출력은 위 5개를 공백 없이 이어붙인 12자 문자열.
+The actual output is the above 5 joined without spaces, a 12-character string.
 ```
 
-#### 해결 패턴 2 — Sentinel 을 square bracket 으로
+#### Fix pattern 2 — make the sentinel a square bracket
 
-더 안전: `[[CONFIRM_PENDING]]` / `[[WORKER_STOPPED]]` / `[[WORKER_BLOCKED]]` 운용. angle 보다 markdown/HTML 파서 충돌 적고, "불완전 형태" (`<>`) 같은 partial leak 발생 안 함 (`[]` 빈 형태는 monitor regex 와 명백히 다름).
+Safer: operate with `[[CONFIRM_PENDING]]` / `[[WORKER_STOPPED]]` / `[[WORKER_BLOCKED]]`. They collide less with markdown/HTML parsers than angle, and partial leaks like "incomplete forms" (`<>`) do not occur (an empty `[]` form is clearly different from the monitor regex).
 
-Monitor 양쪽 sentinel 모두 인식 (v3.1+ backward compat).
+The monitor recognizes both sentinels (v3.1+ backward compat).
 
-#### 해결 패턴 3 — Sentinel 생략 (간단한 경우)
+#### Fix pattern 3 — omit the sentinel (simple cases)
 
-워커가 figure/file 생성 후 곧바로 사용자 검토 요청하는 단순 워크플로우 (image generator 등) 는 sentinel 자체 생략 가능. 메인이 워커 출력 직접 받아 사용자께 보고만 하면 됨. sentinel 은 multi-SOP gate 처럼 메인 확인이 명시적 동기화 지점일 때만.
+A simple workflow where the worker generates a figure/file and then immediately requests user review (image generator, etc.) can omit the sentinel itself. Main just receives the worker output directly and reports to the user. The sentinel is only for cases like a multi-SOP gate where main confirmation is an explicit synchronization point.
 
-**Default 룰**:
-- 단순 generator/editor 워커 → sentinel 생략, 한 줄 보고만
-- Multi-SOP gate 가 있는 워커 → square bracket sentinel 박기
-- 기존 angle bracket sentinel 박은 워커 → 그대로 두기 (monitor 양쪽 인식)
+**Default rules**:
+- Simple generator/editor worker -> omit the sentinel, just a one-line report
+- Worker with a multi-SOP gate -> embed the square bracket sentinel
+- Worker that already embeds an angle bracket sentinel -> leave it as-is (the monitor recognizes both)
 
 ### 5.2 Dispatcher self-leak
 
-§4.3 와 동일 패턴 — 메인이 sentinel literal 을 dispatch 메시지에 박아 monitor false-positive 유발. dispatcher 측 회피 + monitor v3.3 의 tail_window 축소 + iter=1 skip 으로 보강. §4.3 본문 참조.
+Same pattern as §4.3 — main embeds a sentinel literal in a dispatch message, triggering a monitor false-positive. Reinforced by dispatcher-side avoidance + the reduced tail_window and iter=1 skip of monitor v3.3. See §4.3.
 
-### 5.3 Heuristic false-positive — 워커 plan 본문의 "결정 필요" prose
+### 5.3 Heuristic false-positive — "결정 필요" prose in the worker's plan body
 
-**증상**: 워커가 plan.md 작성 중 본문에 "slide 38 정량 결과 출처 불명 → 사용자 결정 필요" 같이 *설명용 텍스트* 로 "확인 필요" / "결정 필요" 박았는데, monitor v3.0 의 `CONFIRM_PATTERNS` 한국어 매칭 ("확인 필요", "승인 대기", "G2 진행 전.*필요") 이 즉시 매칭 → ALERT-CONFIRM (exit 4). 워커는 plan 작성 *진행 중* 이었고 confirm-pending 아님.
+**Symptom**: while writing plan.md, the worker embeds "확인 필요" / "결정 필요" in the body as *descriptive text*, like "slide 38 quantitative result source unknown -> user decision needed (사용자 결정 필요)," but the Korean matching of monitor v3.0's `CONFIRM_PATTERNS` ("확인 필요", "승인 대기", "G2 진행 전.*필요") matches immediately -> ALERT-CONFIRM (exit 4). The worker was *in the middle of writing the plan* and was not confirm-pending.
 
-**원인**: 한국어 "확인 필요" / "결정 필요" 는 plan/analysis 본문에 자연스럽게 등장하는 descriptive label. heuristic 이 *intent (synchronization point)* 와 *description (annotation)* 둘 다 잡아서 false-positive.
+**Cause**: the Korean "확인 필요" / "결정 필요" are descriptive labels that naturally appear in a plan/analysis body. The heuristic catches both *intent (synchronization point)* and *description (annotation)*, producing a false-positive.
 
-#### 해결 (omc_monitor.sh v3.2)
+#### Fix (omc_monitor.sh v3.2)
 
-1. **`CONFIRM_PATTERNS` 에서 bare 한국어 어구 제거** — "확인 필요" / "결정 필요" / "G2 진행 전.*필요" / "승인 대기" 모두 빠짐. 영문 "please confirm" / "shall I proceed" 같은 명시적 imperative 만 유지. 이모지 sync marker (`✅ / ❌`, `Apply.*\?[[:space:]]*✅`) 보존.
-2. **`MONITOR_NO_HEURISTIC=1` env var** — heuristic 완전 끄고 sentinel + deliverable + stale 만. plan-writing 워커처럼 prose false-positive 빈번 시:
+1. **Remove the bare Korean phrases from `CONFIRM_PATTERNS`** — "확인 필요" / "결정 필요" / "G2 진행 전.*필요" / "승인 대기" all dropped. Keep only explicit imperatives like the English "please confirm" / "shall I proceed." Preserve emoji sync markers (`✅ / ❌`, `Apply.*\?[[:space:]]*✅`).
+2. **`MONITOR_NO_HEURISTIC=1` env var** — turns off the heuristic entirely, leaving only sentinel + deliverable + stale. When prose false-positives are frequent, as with a plan-writing worker:
    ```bash
    MONITOR_NO_HEURISTIC=1 bash omc_monitor.sh - - %18 600 /workdir section3_plan.md
    ```
-3. **Deliverable-only watcher 대안** — pane 추적 끄고 파일 mtime 만 polling:
+3. **Deliverable-only watcher alternative** — turn off pane tracking and poll only the file mtime:
    ```bash
    DELIVERABLE=/workdir/plan.md START=$(date +%s)
    while true; do
@@ -320,63 +320,63 @@ Monitor 양쪽 sentinel 모두 인식 (v3.1+ backward compat).
    done
    ```
 
-**운영 룰**:
-- Plan-writing / analysis 워커 → `MONITOR_NO_HEURISTIC=1` 또는 deliverable-only watcher
-- Multi-SOP gate 워커 → sentinel 박는 워커라 heuristic 없이 sentinel 만 봐도 OK → `MONITOR_NO_HEURISTIC=1`
-- Heuristic 활성 (default) → 영문 imperative + 이모지 marker 만 잡음
-- 사용자 친 "확인 필요" 어구로 confirm 요청하고 싶으면 → 이모지 (`✅ / ❌`) 또는 영문 "please confirm" 명시
+**Operational rules**:
+- Plan-writing / analysis worker -> `MONITOR_NO_HEURISTIC=1` or deliverable-only watcher
+- Multi-SOP gate worker -> it embeds the sentinel, so watching only the sentinel without the heuristic is OK -> `MONITOR_NO_HEURISTIC=1`
+- Heuristic enabled (default) -> catches only English imperatives + emoji markers
+- If you want to request confirm with a "확인 필요" phrase the user typed -> specify an emoji (`✅ / ❌`) or the English "please confirm"
 
-### 5.4 Cogitated 카운터 사각지대 — 3-signal monitor 가 못 잡는 케이스
+### 5.4 Cogitated counter blind spot — a case the 3-signal monitor cannot catch
 
-**증상**: 워커가 같은 ledger 파일을 메인과 동시 수정 → "File must be read first" Edit 에러 → 10+ 분 thinking 으로 복구 모색. Claude TUI 는 thinking 동안 pane 에 `✻ Cogitated for XmYs ↓ token` 라인을 분 단위로 갱신 → pane content hash 매 분 변함 → stale 카운터 reset → ALERT-STALE 안 발사. 사용자가 "뭔가 멈춘 거 같은데?" 직접 발견해야 알게 됨.
+**Symptom**: the worker edits the same ledger file as main simultaneously -> "File must be read first" Edit error -> 10+ min of thinking trying to recover. During thinking the Claude TUI refreshes the `✻ Cogitated for XmYs ↓ token` line in the pane every minute -> the pane content hash changes every minute -> the stale counter resets -> ALERT-STALE does not fire. The user only learns of it by discovering "something seems stuck?" themselves.
 
-**검증된 사례**: W1 워커가 dispatch_log.md Edit 실패 → 10 분 31 초 thinking → 사용자 "멈추지마." trigger → 자체 회복. monitor 는 status=in_progress 만 보고 stale 알림 zero.
+**Verified case**: the W1 worker failed an Edit on dispatch_log.md -> 10 min 31 s of thinking -> the user's "Don't stop." trigger -> self-recovery. The monitor only saw status=in_progress and gave zero stale alerts.
 
-**보완 패턴 옵션**:
-1. **Pane hash 추출 시 thinking 라인 제외** — `grep -v 'Cogitated\|Embellishing\|Precipitating'` 후 hash. 변경 없이 hash 같으면 진짜 freeze.
-2. **Task version 단독 polling** (pane hash 무시) — omc task version 은 워커가 실질적 progress 만들 때만 증가. pane false-positive 회피.
-3. **Thinking 시간 자체를 stale signal 로** — Cogitated XmYs 추출, 10 분 초과 시 alert. ALERT-LONG-THINK 형태로 정보성.
+**Reinforcement pattern options**:
+1. **Exclude the thinking line when extracting the pane hash** — `grep -v 'Cogitated\|Embellishing\|Precipitating'` then hash. If the hash is the same with no change, it is a real freeze.
+2. **Poll the task version alone** (ignore the pane hash) — the omc task version increments only when the worker makes substantive progress. Avoids pane false-positives.
+3. **Use the thinking time itself as a stale signal** — extract Cogitated XmYs, alert when it exceeds 10 min. An informational ALERT-LONG-THINK form.
 
-**운영 룰**:
-- 메인이 워커 dispatch 직후엔 ledger 파일을 안 만지는 룰 강화 — 동시 수정 race 회피.
-- Monitor 잠잠한데 워커 진행 의심스러우면 사용자가 직접 capture-pane 으로 확인 후 nudge — 자동화 한계 인지.
-- Thinking 5 분 초과 발견 시 monitor 로그에 정보 출력 (stale alert 와 별도 신호) 권장.
+**Operational rules**:
+- Strengthen the rule that main does not touch the ledger file right after dispatching a worker — avoids the simultaneous-edit race.
+- When the monitor is quiet but you suspect worker progress, the user checks directly with capture-pane and then nudges — recognize the limit of automation.
+- When you find thinking exceeding 5 min, it is recommended to emit info to the monitor log (a signal separate from a stale alert).
 
-### 5.5 Monitor v2 — 5-signal 사각지대 보강
+### 5.5 Monitor v2 — reinforcing the 5-signal blind spots
 
-3-signal monitor 가 못 잡는 함정 3 종을 v2 (`omc_monitor.sh`) 가 보강:
+v2 (`omc_monitor.sh`) reinforces 3 pitfalls that the 3-signal monitor cannot catch:
 
-1. **Dry-run confirm-pending idle** — 워커가 "Awaiting main confirm" 으로 의도적 정지. status 는 in_progress 지만 사용자 입력 대기 중, stale 카운터 hash 변경으로 reset. deliverable 파일 endpoint monitor 는 영원히 대기.
-2. **User typed but no Enter** — §4.2 와 동일 root cause. 메인이 send-keys 로 Enter 보내도 무시.
-3. **Pre-existing deliverable false-DONE** — dry-run 에서 cp 로 clean copy 생성하면 deliverable glob 매칭은 되지만 진짜 patch 아직 진행 중. mtime 비교 (mtime > monitor_start_epoch) 로 해결.
+1. **Dry-run confirm-pending idle** — the worker intentionally stops with "Awaiting main confirm." status is in_progress but it is awaiting user input, and the stale counter resets due to a hash change. A deliverable-file endpoint monitor waits forever.
+2. **User typed but no Enter** — same root cause as §4.2. Even if main sends Enter via send-keys, it is ignored.
+3. **Pre-existing deliverable false-DONE** — if the dry-run creates a clean copy via cp, the deliverable glob matches but the real patch is still in progress. Solved by mtime comparison (mtime > monitor_start_epoch).
 
-**v2 신규 alert 2 종 + 1 endpoint 보강**:
-- **ALERT-CONFIRM (exit 4)** — pane content 에 "Awaiting main confirm" / "Decisions needed" / "STOPPING" / `✅ / ❌` 패턴 감지.
-- **ALERT-TYPED-NOOP (exit 5)** — `❯ <text>` 가 prompt 에 입력만 되고 Enter 미전송. 높은 우선순위 (Enter 만 보내면 풀림).
-- **ALERT-DONE 보강** — deliverable mtime 이 monitor_start_epoch 보다 새로워야 발사. cp 직후 untouched copy 무시.
+**v2's 2 new alerts + 1 endpoint reinforcement**:
+- **ALERT-CONFIRM (exit 4)** — detects the patterns "Awaiting main confirm" / "Decisions needed" / "STOPPING" / `✅ / ❌` in pane content.
+- **ALERT-TYPED-NOOP (exit 5)** — `❯ <text>` is typed into the prompt but Enter is not transmitted. High priority (it releases as soon as you send Enter).
+- **ALERT-DONE reinforcement** — fires only if the deliverable mtime is newer than monitor_start_epoch. Ignores an untouched copy right after cp.
 
-**호출 형식** (pane-only 모드 포함):
+**Call format** (including pane-only mode):
 ```bash
 bash ~/claudebase/installer/scripts/omc_monitor.sh \
   <team|-> <task_id|-> <pane> [stale_sec=300] [cwd=PWD] [deliverable_glob]
 ```
 
-team_name/task_id 둘 다 `-` 두면 omc API polling 스킵, pane content 만 polling.
+Setting both team_name/task_id to `-` skips omc API polling and polls only pane content.
 
-**Endpoint 선택 룰**: G2/G3 multi-step SOP 있는 작업은 최종 산출물 (report.md 등) 을 endpoint 로 — verify_report.json 이나 edited.pptx 같은 중간 파일은 false-DONE 위험. 최종 deliverable 이 마지막 step 에서만 작성되는 파일이어야 함.
+**Endpoint selection rule**: for work with a G2/G3 multi-step SOP, use the final artifact (report.md, etc.) as the endpoint — intermediate files like verify_report.json or edited.pptx risk a false-DONE. The final deliverable must be a file written only at the last step.
 
-### 5.6 개선 monitor 구현 — 3-signal 동시 감시
+### 5.6 Improved monitor implementation — 3-signal simultaneous watch
 
-`status` (정상/실패 종료) + `task version` (heartbeat proxy) + `pane content hash` (워커 활동) 셋 동시 polling:
+Poll three at once: `status` (normal/failure exit) + `task version` (heartbeat proxy) + `pane content hash` (worker activity):
 
 ```bash
-# zsh 호환성 주의: $status, $hash 는 zsh read-only 예약 변수 — 절대 사용 X
-# (사용 시 'read-only variable' 에러로 monitor 즉시 exit 1)
+# zsh compatibility note: $status, $hash are zsh read-only reserved variables — NEVER use them
+# (using them causes a 'read-only variable' error and the monitor exits 1 immediately)
 #
-# Stale 카운트는 'in_progress' 상태에서만 누적 — pending/completed/failed/빈 status 는 reset
-# (이 보호 없으면 completed 후 잔존 polling 1 회에서 pane idle → 잘못된 stale alert 발사)
+# Stale count accumulates only in the 'in_progress' state — pending/completed/failed/empty status reset it
+# (without this guard, the leftover polling cycle after completed sees pane idle -> fires a wrong stale alert)
 
-TEAM=...; ID=...; PANE=...; STALE_THRESHOLD=300   # 5 분 (3 분은 long-thinking false-positive)
+TEAM=...; ID=...; PANE=...; STALE_THRESHOLD=300   # 5 min (3 min causes long-thinking false-positives)
 
 prev_version=""
 prev_hash=""
@@ -390,9 +390,9 @@ while true; do
   case "$task_status" in
     completed) echo "[ALERT-DONE] task=$ID completed at $(date +%H:%M:%S)"; exit 0 ;;
     failed)    echo "[ALERT-FAIL] task=$ID failed at $(date +%H:%M:%S)";    exit 1 ;;
-    pending)   stale_count=0; sleep 30; continue ;;   # 워커 claim 전, stale 아님
-    in_progress) ;;                                    # 아래 stale 체크
-    *)         stale_count=0; sleep 30; continue ;;   # 빈 응답 / 알 수 없는 상태
+    pending)   stale_count=0; sleep 30; continue ;;   # before worker claim, not stale
+    in_progress) ;;                                    # stale check below
+    *)         stale_count=0; sleep 30; continue ;;   # empty response / unknown state
   esac
 
   pane_hash=$(tmux capture-pane -pt "$PANE" -p 2>/dev/null | md5sum | cut -d' ' -f1)
@@ -410,65 +410,65 @@ while true; do
 done
 ```
 
-**Stale 카운트 룰** (false-positive 방지):
-- `pending`: 워커 claim 전 — 정상 대기. reset.
-- `in_progress`: stale 체크 대상 — version + pane hash 둘 다 변화 없어야 누적.
-- `completed`/`failed`: 즉시 exit.
-- 빈 응답: API 일시 오류 — reset (다음 polling 재확인).
+**Stale count rules** (false-positive prevention):
+- `pending`: before the worker claims — normal waiting. Reset.
+- `in_progress`: subject to the stale check — accumulates only if both version + pane hash are unchanged.
+- `completed`/`failed`: immediate exit.
+- empty response: transient API error — reset (re-check on the next polling).
 
-**Threshold**: 180 초 (3 분) 는 long-thinking (Cogitated 1m+) 흔한 워커에서 false-positive 빈번. **300 초 (5 분) 가 실전 안전**. 단순 작업만 monitor 시 180 도 OK.
+**Threshold**: 180 s (3 min) produces frequent false-positives on workers where long-thinking (Cogitated 1m+) is common. **300 s (5 min) is safe in practice.** When monitoring only simple work, 180 is OK.
 
-### 5.7 Monitor 실행 모드 — 셸 스크립트 파일 사용 의무
+### 5.7 Monitor execution mode — mandatory use of a shell script file
 
-위 monitor 를 `Bash run_in_background: true` 의 인라인 eval 로 띄우면 zsh `eval` 의 큰 코드 + python3 here-doc quoting 충돌로 *silent 죽음* 가능. 해결:
+If you bring up the above monitor as an inline eval of `Bash run_in_background: true`, the large code in zsh `eval` plus python3 here-doc quoting conflicts can cause a *silent death*. Fix:
 
-1. **셸 스크립트 파일로 분리** — `~/claudebase/installer/scripts/omc_monitor.sh` 가 영구 보존 위치. 임시 디버깅용으로만 `/tmp/omc_monitor.sh` 사용.
-2. Bash background 호출: `bash ~/claudebase/installer/scripts/omc_monitor.sh <team> <id> <pane> [stale_sec] [cwd]`.
-3. 스크립트 내부 매 polling 결과를 `echo "[POLL ... status=... version=... stale=...]"` 로 log → 디버깅·진행 가시성 동시 확보.
+1. **Split into a shell script file** — `~/claudebase/installer/scripts/omc_monitor.sh` is the permanent location. Use `/tmp/omc_monitor.sh` only for temporary debugging.
+2. Bash background call: `bash ~/claudebase/installer/scripts/omc_monitor.sh <team> <id> <pane> [stale_sec] [cwd]`.
+3. Log each polling result inside the script with `echo "[POLL ... status=... version=... stale=...]"` -> securing both debugging and progress visibility.
 
-**필수 요소**:
-- `#!/bin/bash` shebang (zsh 충돌 회피)
-- arg 4 + optional 2 (team / id / pane / stale_sec / cwd)
-- status 분기 (completed / failed / pending / in_progress / 빈응답)
+**Required elements**:
+- `#!/bin/bash` shebang (avoids the zsh conflict)
+- 4 args + optional 2 (team / id / pane / stale_sec / cwd)
+- status branching (completed / failed / pending / in_progress / empty response)
 - iteration counter + log echo
-- 종료 코드: 0=done / 1=fail / 2=stale / 3=arg 오류
+- exit codes: 0=done / 1=fail / 2=stale / 3=arg error
 
-**인라인 OK 케이스**: 단순 monitor (status only, log 없음) 는 인라인 작동. 3-signal + log 같이 복잡해지면 셸 파일 분리 안전.
+**Inline-OK case**: a simple monitor (status only, no log) works inline. Once it gets complex like 3-signal + log, splitting into a shell file is safe.
 
-**종료 경로 3 개**: `completed` → 정상, `failed` → 실패, `STALE_THRESHOLD` 정체 → stale alert. 셋 다 push 알림이라 사각지대 0.
+**3 exit paths**: `completed` -> normal, `failed` -> failure, `STALE_THRESHOLD` stall -> stale alert. All three are push notifications, so the blind spot is 0.
 
-**Stale 처리 표준**: stale alert 받으면 메인이 (1) `tmux capture-pane` 으로 워커 현재 상태 확인, (2) nudge 메시지 + §4.1 2-step Enter 로 깨움, (3) 깨어나면 새 monitor 재시작, (4) 안 깨어나면 사용자에게 "shutdown 후 재 dispatch" 옵션 제안.
+**Stale handling standard**: when you receive a stale alert, main (1) checks the worker's current state with `tmux capture-pane`, (2) wakes it with a nudge message + the §4.1 2-step Enter, (3) restarts a new monitor once it wakes, (4) if it does not wake, proposes the "shutdown then re-dispatch" option to the user.
 
-**언제 단순 vs 개선**: 단순 작업 (한 파일 surgical edit, 빌드 1 회) 은 단순 monitor 충분. Multi-SOP (parsing → restructure → build → verify → report 같은 5+ step) 은 SOP 간 freeze 위험 → 개선 monitor 권장.
+**When simple vs improved**: simple work (a single-file surgical edit, one build) is fine with a simple monitor. A multi-SOP (5+ steps like parsing -> restructure -> build -> verify -> report) risks freezing between SOPs -> the improved monitor is recommended.
 
 ---
 
-## 6. Operations — 표준 절차
+## 6. Operations — standard procedures
 
-### 6.1 표준 진단 절차 — 매 사용자 발언 전 의무
+### 6.1 Standard diagnostic procedure — mandatory before every user statement
 
-워커 상태를 발언/결정 근거로 쓰기 전:
+Before using worker status as the basis for a statement/decision:
 ```bash
 cd <working dir>
 bash ~/claudebase/installer/scripts/omc_status.sh
 ```
-한 화면에 모든 team task 상태 + tmux pane state 정리. 이 명령 결과를 보고 발언. "W4 가 멈춰있는 거 같다" 같은 직관 발언 금지 — `omc_status.sh` 결과로만 판단.
+It organizes all team task statuses + tmux pane state on one screen. Make your statement based on the result of this command. No intuitive statements like "W4 seems stuck" — judge only by the `omc_status.sh` result.
 
-**stdout/stderr 섞임 함정**: `omc team api ...` 첫 줄에 "[team] canonicalized duplicate worker entries: worker-1" 같은 비-JSON 라인이 stdout 으로 떨어짐. 단순 `... | python -m json.tool` 깨짐. 회피: `grep '^{' | head -1` 로 첫 JSON 라인만 추출.
+**Mixed stdout/stderr pitfall**: a non-JSON line like "[team] canonicalized duplicate worker entries: worker-1" falls to stdout on the first line of `omc team api ...`. A simple `... | python -m json.tool` breaks. Workaround: extract only the first JSON line with `grep '^{' | head -1`.
 
-### 6.2 Task 생성 — wrapper 사용 의무
+### 6.2 Task creation — mandatory use of the wrapper
 
-`omc team api create-task` 직접 호출 금지. 대신:
+Do not call `omc team api create-task` directly. Instead:
 ```bash
 bash ~/claudebase/installer/scripts/omc_create_task.sh <team_name> "<subject>" <description_file_or_->
 ```
-Wrapper 가 — (1) JSON 안전 인코딩, (2) stderr 섞임 필터, (3) ok=false 응답 감지, (4) 중복 호출 방지 — 모두 처리. 성공 시 task_id stdout, 실패 시 stderr + exit 1.
+The wrapper handles all of — (1) JSON-safe encoding, (2) filtering mixed stderr, (3) detecting an ok=false response, (4) preventing duplicate calls. On success the task_id goes to stdout; on failure, stderr + exit 1.
 
-### 6.3 Pane label 자동 부여 — 매 launch 후 표준 절차
+### 6.3 Automatic pane label assignment — standard procedure after every launch
 
-Claude Code TUI 가 pane_title 을 현재 task description 으로 동적 갱신. 메인이 `tmux select-pane -T '[W1] ...'` 로 수동 부여한 라벨은 워커 다음 작업 시작 시 덮어써짐.
+The Claude Code TUI dynamically updates pane_title to the current task description. A label manually assigned by main with `tmux select-pane -T '[W1] ...'` is overwritten when the worker starts the next task.
 
-해결: tmux `pane-border-format` 에 pane_index 기준 hardcoded 라벨 + Claude 동적 title 병기. 자동화:
+Fix: combine a hardcoded label based on pane_index in tmux `pane-border-format` with Claude's dynamic title. Automation:
 
 ```bash
 bash ~/claudebase/installer/scripts/omc_pane_label.sh apply \
@@ -478,49 +478,49 @@ bash ~/claudebase/installer/scripts/omc_pane_label.sh apply \
   '3=[W3] Reviewer'
 ```
 
-결과: 각 pane 위 border 에 `[W1] PPT Editor | ✳ Execute worker inbox task...` 형태. 좌측 영구 라벨, 우측 Claude 동적 정보.
+Result: each pane's top border shows the form `[W1] PPT Editor | ✳ Execute worker inbox task...`. Permanent label on the left, Claude's dynamic info on the right.
 
-**TUI 자체 pane title override 차단 (v3+)**: omc_pane_label.sh v3+ 가 `tmux set -g allow-set-title off` 까지 함께 적용 → tmux 가 OSC title escape 자체를 ignore. pane_title 영구 고정, watchdog 불필요. (`clear` 호출 시 자동 복원)
+**Blocking the TUI's own pane title override (v3+)**: omc_pane_label.sh v3+ also applies `tmux set -g allow-set-title off` -> tmux ignores the OSC title escape itself. pane_title is permanently fixed, no watchdog needed. (auto-restored on a `clear` call)
 
-**Pane index 재배치 함정과 결합**: 새 워커 launch 시 기존 pane index 가 재배치되는 경우 잦음 — apply 호출 *전* `tmux list-panes -a` 로 현재 매핑 재확인 필수.
+**Combined with the pane index reshuffle pitfall**: existing pane indices are often reshuffled when a new worker launches — re-confirm the current mapping with `tmux list-panes -a` *before* the apply call (mandatory).
 
-기타 명령:
-- `bash omc_pane_label.sh show` — 현재 라벨 + pane 상태 확인
-- `bash omc_pane_label.sh clear` — 라벨 + tmux pane-border-status 모두 리셋
+Other commands:
+- `bash omc_pane_label.sh show` — check the current labels + pane state
+- `bash omc_pane_label.sh clear` — reset both the labels and the tmux pane-border-status
 
-### 6.4 Task lifecycle 함정 — standby 를 task 로 보내지 말 것
+### 6.4 Task lifecycle pitfall — do not send the standby as a task
 
-`omc team 1:claude "<standby 컨텍스트>"` 로 launch 하면 그 컨텍스트 자체가 task 1 로 등록됨. 워커는 환경 검증만 하고 task completed 처리 → 다음 dispatch 가 안 들어옴.
+If you launch with `omc team 1:claude "<standby context>"`, that context itself is registered as task 1. The worker only verifies the environment and marks the task completed -> the next dispatch does not come in.
 
-**올바른 운영**: launch 시엔 역할·SOP 만 전달, *실제 변경 명세* 는 `omc team api add-task` 로 새 task 추가. 워커는 task queue 비어도 process alive 유지 (idle 대기).
+**Correct operation**: at launch, pass only the role/SOP, and add the *actual change spec* as a new task with `omc team api add-task`. The worker keeps the process alive even when the task queue is empty (idle waiting).
 
-### 6.5 Batch dispatch 룰
+### 6.5 Batch dispatch rule
 
-Q&A 한 건마다 dispatch 하지 말고 변경 메모 **3-5 건 누적 후 한 번에 dispatch**. 이유:
-- 변경 명세 + tmux paste + Enter 우회 + 빌드 검증 — 매번 overhead.
-- 워커는 한 번의 task 에서 여러 파일 surgical edit 후 단일 빌드 검증이 더 안전 (회귀 발견 통합).
-- 메인 패널에서 누적 메모를 카운터로 관리, 적정 시점에 "지금 워커로 dispatch 할까요?" 사용자 확인 후 진행.
+Do not dispatch per single Q&A item; **accumulate 3-5 change notes and dispatch at once**. Reasons:
+- change spec + tmux paste + Enter workaround + build verification — overhead every time.
+- It is safer for the worker to do surgical edits on multiple files in a single task and then a single build verification (consolidated regression discovery).
+- Manage accumulated notes as a counter in the main panel, and at the appropriate time proceed after a user confirmation of "shall I dispatch to the worker now?"
 
-### 6.6 Auto-monitor 패턴 — 모든 task 생성에 완료 알림 묶기 (의무)
+### 6.6 Auto-monitor pattern — bundle a completion alert with every task creation (mandatory)
 
-매 task 생성마다 polling 스크립트를 `Bash run_in_background: true` 로 같이 띄움 → 워커 완료 시 메인 패널이 push 알림. 사용자가 "끝났니?" 묻지 않아도 됨.
+For every task creation, also bring up a polling script with `Bash run_in_background: true` -> when the worker completes, the main panel gets a push alert. The user does not have to ask "is it done?"
 
-**Idle worker 도 monitor 띄울 것**: Team launch / task complete 직후 worker idle 진입 시점에도 *pane-only monitor (sentinel + stale)* 띄워야 함. 이유: 사용자가 워커 pane 에 직접 입력 (§4.2) / 워커 자발적 "exit" 시도 (worker self-shutdown 함정) 발생 → 메인이 monitor 없으면 stuck 발견 못함. Idle monitor:
+**Bring up a monitor for an idle worker too**: even at the point an idle worker enters idle right after a team launch / task complete, you must bring up a *pane-only monitor (sentinel + stale)*. Reason: the user types directly into the worker pane (§4.2) / the worker voluntarily attempts "exit" (worker self-shutdown pitfall) -> without a monitor, main cannot detect the stuck state. Idle monitor:
 ```bash
 MONITOR_NO_HEURISTIC=1 bash ~/claudebase/installer/scripts/omc_monitor.sh \
   - - <pane-id> 1500 <workdir> - 2>&1 &
 ```
-- team/task_id `-` = pane-only mode (omc API polling 스킵)
-- deliverable `-` = idle watching, ALERT-DONE 안 발사. Sentinel emit 또는 stale 1500s 후 ALERT-STALE.
-- 새 task 들어오면 idle monitor 종료 + task-specific monitor (team + task_id + deliverable) 로 재시작.
+- team/task_id `-` = pane-only mode (skips omc API polling)
+- deliverable `-` = idle watching, does not fire ALERT-DONE. ALERT-STALE after a sentinel emit or 1500s of stale.
+- When a new task comes in, terminate the idle monitor + restart with a task-specific monitor (team + task_id + deliverable).
 
-**Task 생성 = monitor 대상 — 두 경로 모두**:
-- **경로 A: 새 team launch** — `omc team N:claude "<text>"` 의 launch text 자체가 task 1 로 자동 등록. "team launch ≠ dispatch" 로 분리 인지하면 회귀 발생.
-- **경로 B: 기존 team 에 task 추가** — `omc team api create-task` 응답에서 `task_id` 캡처 후 monitor.
+**Task creation = monitor target — both paths**:
+- **Path A: new team launch** — the launch text of `omc team N:claude "<text>"` is auto-registered as task 1. If you do not separate this as "team launch ≠ dispatch," a regression occurs.
+- **Path B: add a task to an existing team** — capture `task_id` from the `omc team api create-task` response, then monitor.
 
-**표준 절차 (3 step, 두 경로 동일)**:
-1. **Task 생성**: 경로 A (team launch) 또는 경로 B (`create-task`). 응답에서 `task_id` 확인.
-2. **워커 nudge** (경로 B 만 필요 — 경로 A 는 launch 시 자동 paste): `tmux send-keys -t <pane-id> "Task <id> ..."` → `sleep 2` → `tmux send-keys -t <pane-id> C-m` (§4.1 우회).
+**Standard procedure (3 steps, same for both paths)**:
+1. **Create the task**: path A (team launch) or path B (`create-task`). Confirm `task_id` from the response.
+2. **Worker nudge** (needed only for path B — path A auto-pastes at launch): `tmux send-keys -t <pane-id> "Task <id> ..."` -> `sleep 2` -> `tmux send-keys -t <pane-id> C-m` (§4.1 workaround).
 3. **Background monitor** (`Bash run_in_background: true`):
    ```bash
    until [ "$(omc team api read-task --input '{"team_name":"<team>","task_id":"<id>"}' --json 2>/dev/null \
@@ -530,68 +530,68 @@ MONITOR_NO_HEURISTIC=1 bash ~/claudebase/installer/scripts/omc_monitor.sh \
    echo "[ALERT] Task <id> (<short subject>) completed at $(date '+%H:%M:%S')"
    ```
 
-Polling 간격: 30 초 표준. 길면 응답성 저하, 짧으면 `omc team api` overhead 누적. 워커 작업 2 분 미만 예상이면 15 초.
+Polling interval: 30 s standard. Too long degrades responsiveness; too short accumulates `omc team api` overhead. If the worker's task is expected to be under 2 min, use 15 s.
 
-**대안**: `Monitor` 도구로 동일 스크립트 띄우면 stdout line 마다 push — 중간 progress 보고 필요할 때. 단순 종료 알림만 필요하면 `Bash run_in_background` 가 가볍고 표준.
+**Alternative**: bringing up the same script with the `Monitor` tool pushes per stdout line — for when you need intermediate progress reports. If you only need a simple completion alert, `Bash run_in_background` is lighter and standard.
 
-알림 수신 후: 메인 자동 알림 → 그 시점에 워커 회신 (변경 요약, 빌드 결과, 시각 검증 의견) 확인 + 다음 Q&A 진행 여부 판단.
+After receiving the alert: main's automatic alert -> at that point check the worker's reply (change summary, build result, visual verification opinion) + decide whether to proceed to the next Q&A.
 
-### 6.7 Worker pool 자동 선택 — 사용자 매번 결정 X
+### 6.7 Automatic worker pool selection — the user does not decide every time
 
-여러 워커 (team) 가 떠 있을 때 사용자가 매 dispatch 마다 "어느 워커?" 결정하지 않아도 됨. 자체 절차:
+When multiple workers (teams) are up, the user does not have to decide "which worker?" on every dispatch. Self-procedure:
 
-1. 모든 워커 team 의 task 상태 확인 (`omc team api list-tasks` per team, `in_progress` count 핵심).
-2. **Idle 워커** (in_progress=0) 만 후보 선별.
-3. 둘 다 idle → **workspace state 워커 default** (state 가 `./.omc/` 안에 있는 쪽이 운영 깔끔).
-4. 한쪽만 idle → 그 쪽 dispatch.
-5. 둘 다 busy → 사용자에게 "큐잉 vs 대기" 한 번 확인 (드물게 발생).
+1. Check the task status of all worker teams (`omc team api list-tasks` per team, the `in_progress` count is key).
+2. Shortlist only **idle workers** (in_progress=0) as candidates.
+3. Both idle -> **default to the workspace-state worker** (the one whose state is inside `./.omc/` is cleaner to operate).
+4. Only one idle -> dispatch to that one.
+5. Both busy -> confirm "queue vs wait" with the user once (rarely happens).
 
-**같은 파일 conflict 회피**: 같은 .tex/.py/파일을 두 워커가 동시 만지지 말 것. busy 워커는 자동 후보 제외에 흡수됨. 독립 파일이면 동시 dispatch OK.
+**Avoiding same-file conflicts**: do not let two workers touch the same .tex/.py/file simultaneously. A busy worker is absorbed into the automatic candidate exclusion. If the files are independent, simultaneous dispatch is OK.
 
-### 6.8 워커 state 경로 trade-off
+### 6.8 Worker state path trade-off
 
-team launch 시점 cwd 에 따라 state 디렉토리 위치 결정:
-- **Cwd = 작업 디렉토리** → state in `<workdir>/.omc/state/team/<slug>` — 운영 깔끔 (모든 명령 같은 cwd), 기본 권장.
-- **Cwd = /tmp** (또는 다른 곳) + `--cwd <target>` → state in `/tmp/.omc/state/team/<slug>` — 같은 디렉토리에 두 team launch 시 격리용. 단점: api 명령마다 `cd <state-cwd>` 필요.
+The state directory location is determined by the cwd at team launch:
+- **Cwd = work directory** -> state in `<workdir>/.omc/state/team/<slug>` — clean to operate (all commands in the same cwd), the default recommendation.
+- **Cwd = /tmp** (or elsewhere) + `--cwd <target>` -> state in `/tmp/.omc/state/team/<slug>` — for isolation when launching two teams in the same directory. Downside: every api command needs `cd <state-cwd>`.
 
-같은 cwd 두 번째 team launch 는 §3.4 의 silent fail.
+A second team launch in the same cwd is the silent fail of §3.4.
 
-### 6.9 omc state wipe — orphan-cleanup self-invoke 함정
+### 6.9 omc state wipe — orphan-cleanup self-invoke pitfall
 
-**증상**: 워커가 lease expiry 시 자기 task / team 전체 삭제. 회복 불가. 디스크 산출물은 살아남음.
+**Symptom**: the worker deletes its own task / the whole team on lease expiry. Unrecoverable. Disk artifacts survive.
 
-**회피**: 워커 SOP 에 "orphan-cleanup is leader-only — never self-invoke. On lease expiry, send-message + idle." 명시.
+**Avoidance**: state in the worker SOP "orphan-cleanup is leader-only — never self-invoke. On lease expiry, send-message + idle."
 
-### 6.10 누적 함정 4종 + 표준 진단 (요약)
+### 6.10 Accumulated 4 pitfalls + standard diagnosis (summary)
 
-이번 류의 모든 함정은 결국 — (1) 메인이 잘못된 상태 인식, (2) 사용자 정정, 의 cycle 로 노출됨. 4 카테고리:
+All pitfalls of this kind are ultimately exposed through the cycle of — (1) main has the wrong status perception, (2) the user corrects it. 4 categories:
 
-1. **omc CLI stdout/stderr 섞임** — §6.1 참조.
-2. **omc state wipe (orphan-cleanup self-invoke)** — §6.9 참조.
-3. **Claude TUI pane title 동적 override** — §6.3 참조 (v3 의 `allow-set-title off` 가 fix).
-4. **Monitor stale-aware 의 thinking-카운터 사각지대** — §5.4 참조.
+1. **omc CLI mixed stdout/stderr** — see §6.1.
+2. **omc state wipe (orphan-cleanup self-invoke)** — see §6.9.
+3. **Claude TUI pane title dynamic override** — see §6.3 (the v3 `allow-set-title off` is the fix).
+4. **Monitor stale-aware thinking-counter blind spot** — see §5.4.
 
 ---
 
-## 7. 의존 자원 (claudebase 정본)
+## 7. Dependent resources (claudebase canonical)
 
-본문이 의존하는 스크립트 — 모두 `~/claudebase/installer/scripts/` (= claudebase 의 `installer/scripts/`) 에 정본:
+The scripts the body depends on — all canonical in `~/claudebase/installer/scripts/` (= claudebase's `installer/scripts/`):
 
-| 스크립트 | 역할 | 정본 sub-version 확인 |
+| Script | Role | Canonical sub-version check |
 |---|---|---|
-| `omc_monitor.sh` | v3.x (sentinel + heuristic + stale, pane-only mode) | 파일 header `# Version: ...` 확인 |
-| `omc_pane_label.sh` | v3+ (allow-set-title off 적용) | `bash omc_pane_label.sh --version` 또는 파일 header |
-| `omc_status.sh` | team task + tmux pane 상태 통합 출력 | 단일 버전 |
-| `omc_create_task.sh` | create-task wrapper (JSON 안전 + stderr 필터) | 단일 버전 |
+| `omc_monitor.sh` | v3.x (sentinel + heuristic + stale, pane-only mode) | check the file header `# Version: ...` |
+| `omc_pane_label.sh` | v3+ (applies allow-set-title off) | `bash omc_pane_label.sh --version` or the file header |
+| `omc_status.sh` | combined output of team task + tmux pane state | single version |
+| `omc_create_task.sh` | create-task wrapper (JSON-safe + stderr filter) | single version |
 
-omc 플러그인 본체 (`omc team`, `omc team api ...`) 는 별도 evolve — `omc update --check` 로 lag 확인.
+The omc plugin core (`omc team`, `omc team api ...`) evolves separately — check lag with `omc update --check`.
 
-본문이 참조하는 절대경로 `~/claudebase/...` 는 사용자 친화적 명시. 다른 위치에 clone 한 경우 `$CLAUDEBASE_ROOT/installer/scripts/` 로 읽으면 됨 (default `~/claudebase`).
+The absolute path `~/claudebase/...` referenced in the body is given for user-friendliness. If you cloned to a different location, read from `$CLAUDEBASE_ROOT/installer/scripts/` (default `~/claudebase`).
 
 ---
 
 ## Related
 
-- `omc-reference` skill (omha 또는 omc 플러그인 본체 제공) — OMC agent catalog / tools / pipeline
-- `~/claudebase/installer/scripts/` — 본문 의존 스크립트 정본
-- 본문 변경 history: `git log -- runtime/skills/omc-teams-ops/SKILL.md`
+- `omc-reference` skill (provided by omha or the omc plugin core) — OMC agent catalog / tools / pipeline
+- `~/claudebase/installer/scripts/` — canonical scripts the body depends on
+- Change history of the body: `git log -- runtime/skills/omc-teams-ops/SKILL.md`
