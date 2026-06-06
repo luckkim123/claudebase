@@ -19,7 +19,7 @@
     "learning-output-style@claude-plugins-official",
     "oh-my-claudecode@omc",
     "oh-my-docs@heroacademia",
-    "oh-my-experiments@omx",
+    "oh-my-experiments@heroacademia",
     "oh-my-heroacademia@heroacademia",
     "oh-my-project@heroacademia",
     "oh-my-scholar@heroacademia",
@@ -27,7 +27,7 @@
     "pyright-lsp@claude-plugins-official",
     "superpowers@claude-plugins-official"
   ],
-  "requiredMarketplaces": ["axlabs", "heroacademia", "omc", "omx"],
+  "requiredMarketplaces": ["axlabs", "heroacademia", "omc"],
   "requiredHudLayout": ["line1", "main"],
   "requiredScalars": ["language", "effortLevel", "remoteControlAtStartup", "skipWorkflowUsageWarning"]
 }

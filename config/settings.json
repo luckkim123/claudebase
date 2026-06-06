@@ -80,7 +80,7 @@
     "superpowers@claude-plugins-official": true,
     "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
-    "oh-my-experiments@omx": true,
+    "oh-my-experiments@heroacademia": true,
     "oh-my-docs@heroacademia": true,
     "oh-my-scholar@heroacademia": true,
     "oh-my-project@heroacademia": true,
@@ -91,25 +91,29 @@
       "source": {
         "source": "github",
         "repo": "seulee26/mckinsey-pptx"
-      }
+      },
+      "autoUpdate": true
     },
     "omc": {
       "source": {
         "source": "github",
         "repo": "Yeachan-Heo/oh-my-claudecode"
-      }
+      },
+      "autoUpdate": true
     },
     "heroacademia": {
       "source": {
         "source": "git",
         "url": "https://github.com/luckkim123/oh-my-heroacademia.git"
-      }
+      },
+      "autoUpdate": true
     },
-    "omx": {
+    "claude-plugins-official": {
       "source": {
         "source": "github",
-        "repo": "luckkim123/oh-my-experiments"
-      }
+        "repo": "anthropics/claude-plugins-official"
+      },
+      "autoUpdate": true
     }
   },
   "language": "한국",
