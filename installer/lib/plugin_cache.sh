@@ -30,9 +30,56 @@ _is_semver() {
   [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]
 }
 
+prune_orphan_marketplace_cache() {
+  # Remove cache/<marketplace>/ dirs whose marketplace is no longer registered
+  # in known_marketplaces.json (e.g. after `claude plugin marketplace remove`).
+  # The CLI deletes the marketplace clone but NOT its download cache, leaving an
+  # orphan (cache/omx/ lingered after omx was removed). Whole-marketplace
+  # deletion, so guard hard:
+  #   * If known_marketplaces.json is missing/unreadable, do NOTHING (we cannot
+  #     tell live from orphan — never guess at this granularity).
+  #   * Only top-level cache/<dir> entries absent from the known set are removed.
+  local cache_root="$HOME/.claude/plugins/cache"
+  local known="$HOME/.claude/plugins/known_marketplaces.json"
+  [[ -d "$cache_root" ]] || return
+  [[ -f "$known" ]] || { debug "plugin-cache: no known_marketplaces.json — skip orphan prune"; return; }
+
+  # Space-padded list of registered marketplace names for a literal membership test.
+  local registered
+  registered="$(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(" " + " ".join(d.keys()) + " ")
+except Exception:
+    sys.exit(1)
+' "$known" 2>/dev/null)" || { debug "plugin-cache: known_marketplaces.json unreadable — skip orphan prune"; return; }
+  # A parseable-but-empty registry would orphan EVERYTHING — refuse that.
+  [[ -n "${registered// /}" ]] || { debug "plugin-cache: empty marketplace registry — skip orphan prune"; return; }
+
+  local mkt_dir name removed=0
+  for mkt_dir in "$cache_root"/*/; do
+    [[ -d "$mkt_dir" ]] || continue
+    name="$(basename "$mkt_dir")"
+    [[ "$registered" == *" $name "* ]] && continue   # still registered -> keep
+    if [[ ${DRY_RUN:-0} -eq 1 ]]; then
+      log "[dry-run] would remove orphan marketplace cache: $name (not in known_marketplaces.json)"
+    else
+      rm -rf "${mkt_dir%/}" && removed=$((removed + 1))
+      debug "plugin-cache: removed orphan marketplace cache: $name"
+    fi
+  done
+  [[ ${DRY_RUN:-0} -ne 1 && $removed -gt 0 ]] && log "plugin-cache: removed $removed orphan marketplace cache(s)"
+  return 0
+}
+
 prune_plugin_cache() {
   local cache_root="$HOME/.claude/plugins/cache"
   [[ -d "$cache_root" ]] || { debug "plugin-cache: no $cache_root (skip)"; return; }
+
+  # First drop whole caches for marketplaces that no longer exist, then trim
+  # stale SemVer versions within the surviving ones.
+  prune_orphan_marketplace_cache
 
   local removed=0 kept=0 plugin_dir
   # <cache>/<marketplace>/<plugin>/ holds the version dirs.
