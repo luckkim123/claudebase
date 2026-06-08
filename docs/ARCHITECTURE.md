@@ -123,7 +123,6 @@ User-scope skills live under `runtime/skills/` and are auto-symlinked.
 | `changelog` | Record session decisions, experiments, lessons; commit the session changes | `/changelog` |
 | `gen-image` | Generate one image with Google nano banana (Gemini 2.5 Flash Image) | "그려줘", "draw", "generate image" |
 | `memory-update` | Compact and organize auto-memory files | `/memory-update` |
-| `omc-teams-ops` | omc-teams launch / debug manual (sentinel, pane labels, monitor) | "omc team", "sentinel" |
 | `readme-project` | Generate a project README by analyzing the codebase | `/readme-project` |
 | `sync-claudebase` | Sync this repo across machines (pull, drift-check, install, verify) | "settings sync", "plugin drift" |
 

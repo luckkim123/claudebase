@@ -197,18 +197,9 @@ This file loads into **every session on every machine and project**, so an Opera
 
 `oh-my-claudecode@omc` is enabled and provides multi-agent orchestration via `/oh-my-claudecode:*` slash commands.
 
-**Routing is owned by the omha hook, not this file.** The per-turn `<omha-routing>` checkpoint (injected by `oh-my-heroacademia`'s `route_emit.py` from `cards/*.json`) is the single source of truth for *which lane/skill* to pick — including when to prefer `team` within the OMC lane. Do NOT duplicate a decision tree here; obey the injected `ROUTE →` card. This section keeps only the OMC operating knowledge that the routing card does not carry (omc-teams pitfalls, coexistence rules).
+**Routing is owned by the omha hook, not this file.** The per-turn `<omha-routing>` checkpoint (injected by `oh-my-heroacademia`'s `route_emit.py` from `cards/*.json`) is the single source of truth for *which lane/skill* to pick — including when to prefer `team` within the OMC lane. Do NOT duplicate a decision tree here; obey the injected `ROUTE →` card. This section keeps only the OMC operating knowledge that the routing card does not carry (coexistence rules).
 
-### omc-teams operations manual
-
-For detailed launch commands / the 4 pitfalls (leader-session-1-team, paste-bracketed Enter absorption, sentinel self-leak, Cogitated counter blind spot) / omc_monitor.sh v3.x operation / verified workaround patterns, see the body of the ==`omc-teams-ops` skill==.
-
-- Auto-trigger: the LLM invokes on the keywords `omc team`, `tmux pane 분리`, `sentinel`, `워커 launch`
-- Explicit call: `/omc-teams-ops` (skill name)
-- Canonical location: `~/claudebase/runtime/skills/omc-teams-ops/SKILL.md`
-
-This CLAUDE.md keeps only the ==1-line that conflicts with other rules at operation time==:
-- ==Can't add a team inside the same leader session== — launch as an N-worker team from the start. For the detailed workaround → omc-teams-ops skill.
+> **Note**: the legacy `omc-teams` (tmux pane-separated CLI workers) runtime, its `omc-teams-ops` ops skill, and its `omc_monitor`/`omc_status`/`omc_pane_label`/`omc_create_task` scripts were removed — native `/team` (Claude Code agents) supersedes them for our use. Recover from git history if a tmux-pane workflow is ever needed again.
 
 ### Coexistence rules
 
