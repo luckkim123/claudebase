@@ -317,6 +317,40 @@ def _session_failure_count(cwd: str, session_id) -> int:
             + _count_log_records(os.path.join(log_dir, _RETRY_LOG), session_id))
 
 
+def _last_blocked_streak(cwd: str, session_id) -> int | None:
+    """The `streak` from the most recent retry-log record we actually BLOCKED on
+    for this session, or None if we have never blocked this session.
+
+    This is the memory the loop guard ([5], 2026-06-12 deadlock fix) needs to
+    tell two re-fire cases apart — both arrive with `stop_hook_active=True`, so
+    that flag alone cannot distinguish them:
+      * model OBEYED the prose-stop instruction (REASON_RETRY step 3) -> it did
+        NOT re-call the tool -> no new empty marker at the tail -> the streak is
+        UNCHANGED from when we last blocked. Releasing the stop here is correct.
+      * model re-called the tool and it failed AGAIN -> a new empty marker -> the
+        streak GREW past what we last blocked on. Keep blocking (-> abandon at 3).
+    Best-effort: any read problem -> None (treated as 'no prior block')."""
+    if not session_id:
+        return None
+    path = os.path.join(cwd or ".", ".omc", "logs", _RETRY_LOG)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    last = None
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("session_id") == session_id and rec.get("blocked") is True:
+            s = rec.get("streak")
+            if isinstance(s, int):
+                last = s
+    return last
+
+
 def _log(cwd: str, record: dict) -> None:
     """Best-effort telemetry. Never raises."""
     try:
@@ -373,17 +407,54 @@ def main() -> int:
     else:
         reason, mode = REASON_RETRY, "retry"
 
-    # Loop guard: `stop_hook_active` is True only when THIS Stop is the re-fire
-    # caused by our own previous block. If we already blocked once for the
-    # current streak and the model STILL produced an empty call (streak grew),
-    # blocking again on every re-fire would wedge the session in our own loop.
-    # So: at the abandon stage, intervene at most once — if we are already
-    # firing, let the stop through. The retry stage is naturally self-limiting
-    # because a successful retry breaks the streak (-> streak 0 -> allow), and
-    # a failed retry escalates the streak to 3+ -> the abandon branch.
+    # Loop guard ([5], 2026-06-12 deadlock fix). `stop_hook_active` is True only
+    # when THIS Stop is the re-fire caused by our own previous block. On a re-fire
+    # there are exactly two model behaviours, and we must release the stop for one
+    # of them or the session deadlocks:
+    #
+    #   (A) the model OBEYED REASON_RETRY step 3 ("if there's an obvious
+    #       recommendation, do NOT call the tool — state it in prose and STOP").
+    #       It wrote prose and did NOT re-call AskUserQuestion. So NO new empty
+    #       marker reached the tail and the streak is UNCHANGED from the value we
+    #       last blocked on. The old guard only released the *abandon* stage, so a
+    #       streak that stayed at 1-2 blocked forever — the model followed the
+    #       instruction yet never satisfied the release condition. RELEASE here.
+    #
+    #   (B) the model re-called the tool and it failed AGAIN. A new empty marker
+    #       hit the tail and the streak GREW past what we last blocked on. That is
+    #       a genuine continued loop: keep blocking so it escalates to abandon at
+    #       3. This is the path test_retry_stage_keeps_blocking_when_streak_grew
+    #       and the streak 2->3 abandon escalation depend on — do NOT break it.
+    #
+    # We tell (A) from (B) with the streak we last BLOCKED on (from our own log):
+    # current streak <= last-blocked streak  => did not grow  => (A) release.
+    # current streak >  last-blocked streak  => grew          => (B) keep blocking.
+    # No prior block for this session (None) => this is the FIRST block for this
+    # streak even though some other hook re-fired the Stop => block once.
     blocked = True
-    if already_firing and mode == "abandon":
-        blocked = False
+    if already_firing:
+        # abandon stage stays log-independent: a model at streak 3+ that re-fires
+        # our own block has already proven it cannot emit the call, so cap at one
+        # block whether or not a prior streak was logged. (Pre-2026-06-12 guard;
+        # kept so the abandon cap never depends on session_id/log availability.)
+        if mode == "abandon":
+            blocked = False
+        elif not session_id:
+            # retry stage with NO session_id: the streak memory is keyed by
+            # session_id, so we cannot tell the prose-stop case from a grown
+            # streak on this re-fire. Release rather than risk the deadlock — the
+            # abandon cap (streak 3+) still fires log-independently, so a true
+            # runaway is unaffected. (Stop-hook stdin normally carries session_id;
+            # this is defensive for the case it does not.)
+            blocked = False
+        else:
+            # retry stage ([5] deadlock fix): release iff the streak did NOT grow
+            # past what we last blocked on — i.e. the model obeyed the prose-stop
+            # instruction instead of re-calling the tool. A grown streak is a
+            # genuine continued loop and must keep blocking toward abandon.
+            last_blocked = _last_blocked_streak(cwd, session_id)
+            if last_blocked is not None and streak <= last_blocked:
+                blocked = False  # (A) model stopped in prose; streak did not grow
 
     _log(
         cwd,
