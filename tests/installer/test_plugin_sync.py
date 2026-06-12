@@ -116,6 +116,164 @@ def test_drift_respects_local_enabledPlugins(settings, installed):
     assert "stray-plugin@somewhere" not in drift_names
 
 
+# ─── marketplace-migration drift (suffix-blind CLI uninstall guard) ──────────
+#
+# When a plugin migrates marketplaces (e.g. oh-my-experiments@omx → @heroacademia),
+# a machine set up BEFORE the migration carries the stale @omx install as drift
+# while @heroacademia is the enabled one. `claude plugin uninstall <name>@omx` is
+# suffix-blind — it matches on the bare plugin name and removes the @heroacademia
+# entry instead, breaking a healthy plugin. These tests pin the guard: a drift
+# whose BASE name is still enabled under a different marketplace must NOT go
+# through the CLI uninstall path.
+
+
+def test_base_name_strips_marketplace_suffix():
+    assert ps.base_name("oh-my-experiments@omx") == "oh-my-experiments"
+    assert ps.base_name("oh-my-experiments@heroacademia") == "oh-my-experiments"
+    assert ps.base_name("no-suffix") == "no-suffix"
+
+
+def test_drift_collides_when_base_enabled_under_other_marketplace():
+    """@omx drift collides because @heroacademia (same base) is enabled."""
+    settings = {"enabledPlugins": {"oh-my-experiments@heroacademia": True}}
+    assert ps.drift_collides_with_enabled(
+        "oh-my-experiments@omx", settings, local_enabled={}
+    )
+
+
+def test_drift_does_not_collide_when_base_not_enabled_elsewhere():
+    """A genuinely orphaned drift (no same-base enabled) does NOT collide."""
+    settings = {"enabledPlugins": {"superpowers@claude-plugins-official": True}}
+    assert not ps.drift_collides_with_enabled(
+        "stray-plugin@somewhere", settings, local_enabled={}
+    )
+
+
+def test_drift_collision_respects_local_enabled():
+    """A same-base plugin enabled only in settings.local.json still counts."""
+    settings = {"enabledPlugins": {}}
+    local = {"oh-my-experiments@heroacademia": True}
+    assert ps.drift_collides_with_enabled(
+        "oh-my-experiments@omx", settings, local_enabled=local
+    )
+
+
+def test_apply_prune_colliding_drift_avoids_cli_uninstall(monkeypatch):
+    """A colliding drift must be removed WITHOUT calling `claude plugin uninstall`
+    (which would clobber the same-base enabled plugin). It is excised directly
+    from installed_plugins.json instead."""
+    settings = {"enabledPlugins": {"oh-my-experiments@heroacademia": True}}
+    calls = []
+    monkeypatch.setattr(
+        ps.subprocess, "run",
+        lambda *a, **k: calls.append(a[0]) or _FakeProc(0),
+    )
+    excised = []
+    monkeypatch.setattr(
+        ps, "excise_installed_plugin",
+        lambda plugin: excised.append(plugin) or True,
+    )
+    decisions = [Decision(plugin="oh-my-experiments@omx", action=Action.DRIFT,
+                          current_scope="user")]
+    log = ps.apply(decisions, dry_run=False, prune=True, settings=settings)
+    joined = "\n".join(log)
+    assert excised == ["oh-my-experiments@omx"]
+    assert not any("uninstall" in c for c in calls), \
+        f"CLI uninstall must be skipped for colliding drift, got: {calls}"
+    assert "oh-my-experiments@omx" in joined
+
+
+def test_apply_prune_noncolliding_drift_uses_cli_uninstall(monkeypatch):
+    """A non-colliding (genuinely orphan) drift still uses the normal CLI path."""
+    settings = {"enabledPlugins": {"superpowers@claude-plugins-official": True}}
+    calls = []
+    monkeypatch.setattr(
+        ps.subprocess, "run",
+        lambda *a, **k: calls.append(a[0]) or _FakeProc(0),
+    )
+    decisions = [Decision(plugin="stray-plugin@somewhere", action=Action.DRIFT,
+                          current_scope="user")]
+    log = ps.apply(decisions, dry_run=False, prune=True, settings=settings)
+    assert any("uninstall" in c for c in calls), \
+        "non-colliding drift should use the CLI uninstall path"
+
+
+def test_apply_colliding_drift_auto_heals_without_prune(monkeypatch):
+    """THE migration-safety contract: a recipient who knows nothing of the
+    marketplace migration runs a PLAIN install.sh (prune=False) and the stale
+    @omx drift is auto-excised anyway, because it collides with the enabled
+    @heroacademia. A genuine orphan in the same run stays warn-only."""
+    settings = {"enabledPlugins": {"oh-my-experiments@heroacademia": True}}
+    excised = []
+    monkeypatch.setattr(
+        ps, "excise_installed_plugin",
+        lambda plugin: excised.append(plugin) or True,
+    )
+    monkeypatch.setattr(
+        ps.subprocess, "run",
+        lambda *a, **k: pytest.fail("no CLI call expected for collision auto-heal"),
+    )
+    decisions = [
+        Decision(plugin="oh-my-experiments@omx", action=Action.DRIFT, current_scope="user"),
+        Decision(plugin="stray-plugin@somewhere", action=Action.DRIFT, current_scope="user"),
+    ]
+    log = ps.apply(decisions, dry_run=False, prune=False, settings=settings)
+    joined = "\n".join(log)
+    # collision → auto-healed even without --prune
+    assert excised == ["oh-my-experiments@omx"]
+    assert "auto-healed" in joined
+    # genuine orphan → still warn-only (not excised, not uninstalled)
+    assert "drift (kept): stray-plugin@somewhere" in joined
+    # summary reflects 1 removed (the collision) + 1 kept (the orphan)
+    assert "1 removed" in joined
+    assert "1 drift-kept" in joined
+
+
+def test_migration_drift_auto_heals_end_to_end_via_plan_and_apply(monkeypatch):
+    """Integration: a stale @old install whose @new twin is enabled ONLY in
+    settings.local.json must self-heal through the real plan_actions→apply flow
+    (not just the unit-level collision function). Closes the M2 coverage gap."""
+    settings = {"enabledPlugins": {}}
+    local_enabled = {"oh-my-experiments@heroacademia": True}
+    installed = {"plugins": {
+        "oh-my-experiments@omx": [{"scope": "user"}],
+        "oh-my-experiments@heroacademia": [{"scope": "user"}],
+    }}
+    metadata = {}
+    decisions = ps.plan_actions(settings, installed, metadata, platform="macos",
+                                local_enabled=local_enabled)
+    drift = [d for d in decisions if d.action is Action.DRIFT]
+    assert [d.plugin for d in drift] == ["oh-my-experiments@omx"], \
+        "only the stale @omx should be drift; the local-enabled @heroacademia is not"
+    excised = []
+    monkeypatch.setattr(ps, "excise_installed_plugin",
+                        lambda p: excised.append(p) or True)
+    monkeypatch.setattr(ps.subprocess, "run",
+                        lambda *a, **k: pytest.fail("no CLI call for collision heal"))
+    log = ps.apply(decisions, dry_run=False, prune=False,
+                   settings=settings, local_enabled=local_enabled)
+    assert excised == ["oh-my-experiments@omx"]
+    assert "auto-healed" in "\n".join(log)
+
+
+def test_failed_excise_counts_as_failed_not_removed(monkeypatch):
+    """A failed excise must NOT report as `removed` (else a stuck heal reads as a
+    regression on the next sync). It is counted under `failed` instead."""
+    settings = {"enabledPlugins": {"oh-my-experiments@heroacademia": True}}
+    monkeypatch.setattr(ps, "excise_installed_plugin", lambda p: False)
+    decisions = [Decision(plugin="oh-my-experiments@omx", action=Action.DRIFT,
+                          current_scope="user")]
+    summary = ps.apply(decisions, dry_run=False, prune=False, settings=settings)[-1]
+    assert "0 removed" in summary
+    assert "1 failed" in summary
+
+
+class _FakeProc:
+    def __init__(self, rc):
+        self.returncode = rc
+        self.stdout = ""
+
+
 # ─── plan_actions: full pass ────────────────────────────────────────────────
 
 

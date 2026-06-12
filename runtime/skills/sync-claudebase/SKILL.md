@@ -185,6 +185,7 @@ Each entry = a plugin user-installed on this machine but not in the common pool.
 - If `settings.local.json` doesn't exist OR doesn't list the plugin → **ask user**: "Plugin X is installed but not registered. Per-machine (add to settings.local.json), promote to common (edit repo settings.json), or uninstall (re-run install.sh with `--prune-plugins`)?"
 - Default recommendation: per-machine. Promote to common only when the user confirms the same plugin is wanted on every machine they use (CLAUDE.md "Plugin reconciliation" rule).
 - install.sh defaults to **warn-only** for reverse drift — kept plugins log `plugin drift (kept): ...`. Removal needs the explicit `--prune-plugins` flag, so a pool-trim on machine A never silently uninstalls on machine B.
+- **Exception — marketplace-migration drift auto-heals on a plain run.** One reverse-drift class is *not* warn-only: a stale plugin whose **base name is still enabled under a different marketplace** (e.g. `oh-my-experiments@omx` left over after the plugin moved to `@heroacademia`). `plugin_sync.py` detects this collision and **auto-excises the stale entry even without `--prune-plugins`**, logging `plugin auto-healed (migration drift): ...`. This is deliberate: such drift is an unambiguous migration leftover (not a user-chosen machine extra), and a recipient who knows nothing of the migration must self-heal from a plain `install.sh`. The excise edits `installed_plugins.json` directly + trashes the cache — it never calls `claude plugin uninstall <name>@<old>`, which is suffix-blind and would clobber the enabled `<name>@<new>` (see Red flags). A genuine orphan (no same-base enabled) still stays warn-only.
 
 **4d. mcp.json secrets clean**
 
@@ -330,7 +331,7 @@ Run install.sh **a second time** and check:
 
 - `mcp.json` line says `unchanged (skip)`, NOT `rendered:` (otherwise: idempotency regression — go to step 7)
 - Symlink lines all say `already linked` in verbose mode (otherwise: relink churn)
-- Plugin sync line: `0 fixed, 0 removed, 0 failed`. The `kept` count may be non-zero — that's expected when reverse drift exists and `--prune-plugins` was not passed (warn-only is the default).
+- Plugin sync line: `0 fixed, 0 removed, 0 failed`. The `kept` count may be non-zero — that's expected when reverse drift exists and `--prune-plugins` was not passed (warn-only is the default). **One legitimate exception on the *first* pass:** `removed` is non-zero with a `plugin auto-healed (migration drift): ...` line when a marketplace-migration collision self-healed (see step 4c exception). That is a one-time heal — the *second* pass (this step) must show `0 removed` again; a `removed` that never drops to 0 across passes is a real regression → step 7.
 - Zero new directories under `~/.claude/.backup-*` from the past minute. Use a portable ISO timestamp — `bfs` (the find on recent macOS) rejects `"1 minute ago"`:
   ```bash
   REF=$(date -u -v-1M +'%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
@@ -388,6 +389,7 @@ For each new template:
 | "OMC drift detected, I'll just run `omc update`" | Non-idempotent — it rewrites CLAUDE.md and re-syncs the plugin mid-session. Step 4f requires user confirmation, same as 4e. Detect-then-ask, never auto-apply. |
 | "Tree is dirty → stop, the user must decide" | Not always. A tracked file (esp. `config/CLAUDE.md`) is often dirtied by another session writing a learning, and the change may already be in `origin`. Run Step 1.5 triage first: ABSORBED → patch-backup + discard; UNIQUE → *then* stop and ask. Blanket-stopping leaves a non-owner wedged on a change they should just drop. |
 | "Dirty change conflicts with the pull → discard it so `--ff-only` works" | Only after Step 1.5 classifies it as ABSORBED/disposable. A UNIQUE change is the user's content — back it up to a patch and surface it; a non-owner preserves it out-of-tree (patch/branch), never silently loses it. |
+| "There's a `@old-marketplace` drift — I'll just `claude plugin uninstall <name>@old` to clear it" | `claude plugin uninstall` is **suffix-blind**: it matches the bare plugin name and removes whatever entry it finds — so `uninstall oh-my-experiments@omx` deletes the *enabled* `oh-my-experiments@heroacademia` from `config/settings.json` instead, breaking a healthy plugin (observed 2026-06-12). For a migration-collision drift (same base enabled under another marketplace) let `plugin_sync.py` auto-heal it (it excises `installed_plugins.json` directly), or excise by hand — never the CLI uninstall. If you ever do run it, diff `config/settings.json` immediately and `git checkout --` any wrongful enabled-plugin deletion. |
 
 ## Outputs the user expects after a run
 
