@@ -2,6 +2,28 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-06-12 — tool-call rationale: issue lineage + fixed AskUserQuestion variant
+
+A user surfaced four GitHub issues (`anthropics/claude-code` #5219 / #895,
+`anthropics/claude-agent-sdk-python` #113, `gsd-build/get-shit-done` #743) and
+asked for an analysis, plus an update to the claudebase defenses that already
+cover this. Investigation confirmed all four are variants of one root cause
+already documented here (the model emitting tool-call JSON that violates the
+schema), but the existing rationale was missing the authoritative paper trail:
+the *oldest* report, the *official* Anthropic triage quote, the cross-tool
+type-mismatch family, and — importantly — the one variant that was a real CLI
+bug and has since been *fixed*, which the prior "no CLI fix" framing obscured.
+
+### Added
+- `docs/operating-rationale.md#complete-tool-payloads` — new **Issue lineage + official triage** paragraph: names the oldest open report (#895, 2025-04), quotes collaborator `ltawfik`'s explicit "model-side … CLI validation correctly catches this … self-correct on retry" verdict from #5219, notes the identical SDK cross-file (#113, closed stale), and lists the cross-tool type-mismatch family (Read #30197 / Edit #31379 / TodoWrite #30955 / Skill #30893 / AskUserQuestion gsd #743) so they're treated as one family, not separate bugs.
+- `docs/operating-rationale.md#complete-tool-payloads` — new **"One variant WAS a real CLI bug and IS fixed"** paragraph: the AskUserQuestion auto-allow bug (interactive tools silently auto-allowed when listed in a skill's `allowed-tools`, returning empty answers → model guesses) was fixed in **Claude Code 2.1.69**. Gives a two-pronged triage — missing-field/wrong-type = model-side (`/compact`); empty-but-accepted = the fixed auto-allow bug (update CC).
+- `docs/operating-rationale.md#no-leaked-toolcall-markup` — Triggers list gained item **(g) third-party API proxies**: multiple #895 reporters saw the failure *only* through non-official gateways; have users confirm against the first-party endpoint before chasing a model/CLI cause.
+
+### Notes
+- Docs-only change to an existing rationale file; no rules added to `config/CLAUDE.md` (the two governing rules — *Complete tool payloads*, *Don't leak tool-call markup* — and their three Stop/PreToolUse guard hooks already existed and were unchanged). This is evidence boosting, not a new defense.
+- Scope check passed for a distributed repo: the tool-call emission failure is a universal model/CLI phenomenon, not a workspace-specific quirk, so it belongs in claudebase rather than a project store.
+- No issue numbers already cited in the file were duplicated; all 7 newly added (#895, #5219, #113, #30197, #31379, #30955, #30893, gsd #743) were absent before.
+
 ## [Unreleased] — 2026-06-05 — sync skill: dirty-tree triage + non-owner path
 
 A live sync run hit a gap: the working tree was dirty (`config/CLAUDE.md`, the
