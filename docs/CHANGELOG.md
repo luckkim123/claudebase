@@ -2,6 +2,43 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-06-17 — drop 5 redundant official plugins (superseded by OMC / superpowers / gh)
+
+Removed 5 official plugins that were never used (`pluginUsage: 0`) and whose
+capabilities are already covered by higher-tier tools in the stack: OMC's
+agents, superpowers, and the `gh` CLI. Trimmed `enabledPlugins` 19 → 14.
+
+### Removed
+- `enabledPlugins` (config/settings.json) — dropped `feature-dev`, `pr-review-toolkit`, `code-simplifier`, `commit-commands`, `code-review` (all `@claude-plugins-official`). feature-dev/pr-review-toolkit/code-simplifier overlap OMC's `architect`/`code-reviewer`/`security-reviewer`/`code-simplifier` agents; commit-commands overlaps OMC `git-master` + `gh`; code-review (the `/code-review ultra` entry point) dropped per explicit user decision.
+- `requiredPlugins` (config/settings.critical.json) — same 5 removed from the shrink-guard manifest so `settings_verify.py` stays green (verified `exit=0`).
+
+### Notes
+- Kept: `axlabs-mckinsey-pptx` (McKinsey-template decks — omd does not cover this), `oh-my-experiments@heroacademia` (may use), `context7` + both LSP plugins (auto-invoked backends).
+
+## [Unreleased] — 2026-06-17 — viewer install: register via .vsix (was invisible) + Cursor-`code` guard
+
+The `claude-code-viewer` extension installed by `lib/viewer.sh` was never loading
+in VSCode. Two root causes, both found during a live install debug session: the
+old path **copied the built tree into `~/.vscode/extensions/<id>/` but never
+registered it in VSCode's `extensions.json` cache**, so the extension was on disk
+yet invisible to VSCode; and the hardcoded install-dir id `luckkim123.claude-
+code-viewer-0.1.0` **mismatched the repo's real `package.json` publisher**
+(`local-dev`), which the manual copy path can't reconcile. Separately, the `code`
+on PATH was **Cursor's CLI (v3.x), not VSCode's**, so the viewer would have
+landed where VSCode can't see it.
+
+### Changed
+- `installer/lib/viewer.sh` — install path switched from "copy built tree into the extensions dir" to **package a real `.vsix` (`npx @vscode/vsce package --no-dependencies`) and install via `code --install-extension --force`**. VSCode now owns the `extensions.json` registration and the install-dir name (`<publisher>.<name>-<version>` = `local-dev.claude-code-viewer-0.1.0`), so the extension actually loads. Verified end-to-end on a clean install + idempotent second run (silent `up to date`).
+- `installer/lib/viewer.sh` — `VIEWER_EXT_ID` corrected from `luckkim123.claude-code-viewer-0.1.0` to **`local-dev.claude-code-viewer`** (the repo's true `<publisher>.<name>`); install-state is now detected via `code --list-extensions` (VSCode's own truth) instead of a guessed dir.
+- `installer/lib/viewer.sh` — new `_viewer_resolve_code` guard: a `code` on PATH is trusted only if `code --version` reports a **1.x VSCode** version; a Cursor `code` (3.x) is ignored and the standard `/Applications/Visual Studio Code.app` CLI is probed as fallback. Tooling check now also requires `npx`.
+- `installer/lib/viewer.sh` — the built-from SHA is tracked at a **fixed sidecar** (`~/.vscode/extensions/.claude-code-viewer.installed-sha`) instead of inside the ext dir, since VSCode (not us) now names that dir.
+
+### Added
+- `runtime/skills/sync-claudebase/SKILL.md` (step 5) — **heads-up that the viewer opt-in prompt fires during install.sh**: tells the user the prompt exists (so an interactive sync isn't reflexively answered No), notes it's skipped silently non-interactively, and documents the `INSTALL_VIEWER=1` override + the real-VSCode-`code` requirement.
+
+### Notes
+- Scope check (distributed repo): viewer install is already opt-in / personal-dev-tool gated, so this only fixes a broken mechanism that ships to all machines — no per-machine quirk added. The Cursor-vs-VSCode `code` ambiguity is a general macOS hazard, not workspace-specific.
+
 ## [Unreleased] — 2026-06-12 — tool-call rationale: issue lineage + fixed AskUserQuestion variant
 
 A user surfaced four GitHub issues (`anthropics/claude-code` #5219 / #895,

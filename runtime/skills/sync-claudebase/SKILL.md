@@ -325,6 +325,18 @@ cd ~/claudebase && installer/install.sh --verbose
 
 Idempotent — safe to run unconditionally. Capture full output for step 6.
 
+**Heads-up — the viewer opt-in prompt fires here.** install.sh calls
+`maybe_install_viewer` (lib/viewer.sh) during this step. On a machine where the
+`claude-code-viewer` VSCode extension is *not* installed it prints an opt-in
+prompt (default **No**); where it's installed and a newer remote exists it asks
+to update. **Tell the user this prompt exists** so an interactive sync doesn't
+get answered No by reflex when they actually want it — and note it is **skipped
+silently in a non-interactive run** (piped stdin / CI), so a non-interactive
+sync never installs the viewer. To install it non-interactively, re-run with
+`INSTALL_VIEWER=1 installer/install.sh`. The viewer needs `git`, `npm`, `npx`,
+and a **real VSCode `code` CLI** (a Cursor `code` on PATH is detected and
+ignored — install path is `npx @vscode/vsce package` → `code --install-extension`).
+
 ### 6. Post-install verification (CRITICAL — this is the step I previously skipped)
 
 Run install.sh **a second time** and check:
