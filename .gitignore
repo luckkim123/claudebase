@@ -4,6 +4,7 @@ secrets/*.env
 !secrets/secrets.example.env
 
 # Local overrides (machine-specific) — but keep templated examples committed
+# (covers ~/.claude/CLAUDE.local.md — per-machine personal memo, never synced)
 *.local.json
 *.local.*
 !templates/*.example.*
