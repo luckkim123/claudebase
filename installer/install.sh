@@ -28,6 +28,12 @@ check_runtime_deps
 # shellcheck source=lib/log.sh
 source "$REPO_DIR/installer/lib/log.sh"
 
+# Opt-in convenience-tool install (INSTALL_TOOLS=1): tmux + clipboard helper so
+# tmux.conf's mouse-copy works out of the box. No-op without the env var, so the
+# default path stays warn-only + idempotent. Needs log/debug/run, hence here
+# (after log.sh) rather than next to check_runtime_deps above.
+ensure_convenience_tools
+
 # Linking primitives + stages 1+2+2b extracted to lib/link.sh (P3-T3).
 # shellcheck source=lib/link.sh
 source "$REPO_DIR/installer/lib/link.sh"

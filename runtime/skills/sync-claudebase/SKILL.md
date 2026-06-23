@@ -115,7 +115,7 @@ For each new commit (`git show --stat <sha>`), classify which subsystem it touch
 | `config/settings.json` | `enabledPlugins` may have shifted. Step 4b/4c will catch it. |
 | `config/mcp.template.json` | New `${VAR}` may need adding to `secrets.env`. Step 4d will catch unresolved placeholders. |
 | `templates/*` | Template only — not auto-applied. Holds for step 9 (adoption decision). |
-| `shell/tmux.conf` | Reload step needed: `tmux source-file ~/.tmux.conf` after install. |
+| `shell/tmux.conf` | Reload step needed: `tmux source-file ~/.tmux.conf` after install. If `tmux`/clipboard tool is missing, step 5's `INSTALL_TOOLS=1` installs it. |
 | `runtime/skills/*` | New skill added — re-running installer/install.sh symlinks it. Mention to user so they re-launch the session to pick it up. |
 
 ### 3. Pull
@@ -320,10 +320,25 @@ the user didn't choose. Detect-then-ask keeps the choice explicit.
 ### 5. Run installer
 
 ```bash
-cd ~/claudebase && installer/install.sh --verbose
+cd ~/claudebase && INSTALL_TOOLS=1 installer/install.sh --verbose
 ```
 
 Idempotent — safe to run unconditionally. Capture full output for step 6.
+
+**Why `INSTALL_TOOLS=1` (convenience-tool opt-in).** With this env var set,
+install.sh best-effort installs the two convenience tools `tmux.conf`'s
+mouse-copy depends on — `tmux` itself and a clipboard helper (Linux X11 →
+`xclip`, Wayland → `wl-clipboard`; macOS `pbcopy` is built-in so nothing is
+installed). Without a clipboard tool, tmux.conf's `$COPY_CMD` copy-pipe expands
+to nothing and drag/`y` selections never reach the system clipboard — the exact
+"tmux copy doesn't work" symptom. It is **opt-in, idempotent, and
+non-interactive-safe**: an already-present tool is a silent skip (so a second
+run still prints zero action lines — step 6's contract holds), and when sudo
+would be needed but no passwordless sudo is available, it falls back to the same
+warn-only hint as `jq`/`gemini` (never a blocking sudo prompt). So include it
+by default in an interactive sync; **omit it** (plain `installer/install.sh
+--verbose`) only if you specifically want the pure warn-only behavior. `jq` and
+`gemini` stay warn-only regardless — they are not uniformly apt-installable.
 
 **Heads-up — the viewer opt-in prompt fires here.** install.sh calls
 `maybe_install_viewer` (lib/viewer.sh) during this step. On a machine where the

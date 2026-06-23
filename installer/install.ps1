@@ -48,11 +48,26 @@ function Check-RuntimeDeps {
 }
 Check-RuntimeDeps
 
+# Opt-in convenience-tool install (INSTALL_TOOLS=1) — mirror of deps.sh's
+# ensure_convenience_tools. DIVERGENCE (intentional): on Unix this installs
+# tmux + a clipboard helper so tmux.conf's mouse-copy works. Neither applies on
+# Windows — there is no native tmux, and clipboard access is already built in
+# (PowerShell Set-Clipboard / clip.exe / Get-Clipboard), which shell/tmux.conf's
+# $COPY_CMD never runs here anyway (.tmux.conf is a Unix artifact). So this is a
+# documented no-op kept for parity; if a Windows tmux convenience tool is ever
+# wanted, add it here.
+function Ensure-ConvenienceTools {
+    if ($env:INSTALL_TOOLS -ne '1') { return }
+    Debug "convenience tools: no Windows-native tmux/clipboard install needed (skip)"
+}
+
 function Debug([string]$msg) { if ($Verbose) { Write-Host "[debug]   $msg" } }
 function Run([scriptblock]$block) {
     if ($DryRun) { Write-Host "[dry-run] $($block.ToString().Trim())" }
     else { & $block }
 }
+# Called after Debug is defined (it relies on it).
+Ensure-ConvenienceTools
 
 function Already-Linked([string]$target, [string]$src) {
     if (-not (Test-Path -LiteralPath $target)) { return $false }
