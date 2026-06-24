@@ -211,8 +211,8 @@ This file loads into **every session on every machine and project**, so an Opera
 
 - **HUD statusline**: OMC owns it. Configuration lives in `omcHud` block of `~/.claude/settings.json`. To switch presets in-session: `/oh-my-claudecode:hud minimal|focused|full`.
 - **Do not** propose OMC's `team` or `autopilot` for tasks inside this `claudebase` repo itself — meta-changes to the settings that orchestrate OMC should stay surgical and reviewed line-by-line.
-- **Subagent dispatch precedence**: `superpowers:subagent-driven-development` is preferred when a written plan already exists (it enforces reviewer agents per task). OMC `/team` is preferred when no plan exists and the user wants the team to scope-then-execute.
-- **Consider a dedicated reviewer/critic worker on a `/team` (consider, don't force).** Unlike `subagent-driven-development`, `/team` does **not** auto-enforce a per-task reviewer — so when a worker produces work, nothing inside the team adversarially checks it unless you add that role yourself. When a team runs, *weigh* adding one worker whose only job is to monitor/critique the other workers' output (a generator–critic / LLM-as-judge split — the same "authoring and review are separate passes, never self-approve" rule the OMC block already states, applied at the team layer). This trades ~roughly-doubled tokens for higher quality. It is **not mandatory**: skip it for cheap, low-risk, or clearly-correct work (a 1–3 line edit, a mechanical rename). Reach for it when the work is correctness-sensitive or hard to undo (logic/algorithm changes, security-relevant edits, irreversible ops, multi-file refactors). The tell that you need it: a worker would otherwise be the only judge of its own output. When the reviewer is worth the token cost, **surface the trade-off to the user and let them decide** rather than silently doubling spend.
+- **Subagent dispatch precedence**: OMC is the **default executor** for multi-task plan execution (`/team`, or `autopilot`/`ralph` for autonomous loops). Escalate to `superpowers:subagent-driven-development` **only** when the work is correctness-sensitive enough to need a fresh implementer + a mandatory spec-compliance *and* code-quality reviewer **per task** — that per-task implementer+reviewer pairing is sp's one structurally-unique guarantee OMC cannot replicate (OMC verifies post-hoc or per-stage, never per-task-before-the-next). So: written plan + ordinary multi-task work → OMC `/team`; written plan + per-task review genuinely required (logic/algorithm/security/irreversible) → `subagent-driven-development`.
+- **Consider a dedicated reviewer/critic worker on a `/team` (consider, don't force).** Unlike `subagent-driven-development`, `/team` does **not** auto-enforce a per-task reviewer — so when a worker produces work, nothing inside the team adversarially checks it unless you add that role yourself. When a team runs, *weigh* adding one worker whose only job is to monitor/critique the other workers' output (a generator–critic / LLM-as-judge split — the same "authoring and review are separate passes, never self-approve" rule the OMC block already states, applied at the team layer). This trades ~roughly-doubled tokens for higher quality. It is **not mandatory**: skip it for cheap, low-risk, or clearly-correct work (a 1–3 line edit, a mechanical rename). Reach for it when the work is correctness-sensitive or hard to undo (logic/algorithm changes, security-relevant edits, irreversible ops, multi-file refactors). The tell that you need it: a worker would otherwise be the only judge of its own output. When the reviewer is worth the token cost, **surface the trade-off to the user and let them decide** rather than silently doubling spend. **Because OMC is now the default executor for non-trivial multi-task work, when correctness is sensitive prefer escalating to `subagent-driven-development` (which enforces the per-task reviewer structurally) over hand-assembling a critic worker on `/team` — the critic worker is the fallback for when sp's plan-execution model doesn't fit the work.**
 
 ---
 
@@ -228,9 +228,9 @@ The design·plan documents that `superpowers:brainstorming`/`writing-plans` prod
 
 Non-trivial changes to a versioned package (feature / redesign / breaking refactor) go through a numbered release cycle instead of ad-hoc commits:
 
-1. **Spec** — `superpowers:brainstorming` → design doc (`<topic>-design.md`)
-2. **Plan** — `superpowers:writing-plans` → TDD tasks (`<topic>-execution.md`)
-3. **Execute** — `superpowers:subagent-driven-development` (fresh implementer + spec-compliance reviewer + code-quality reviewer per task)
+1. **Spec** — `superpowers:brainstorming` (or `oh-my-claudecode:deep-interview` / `ralplan`) → design doc (`<topic>-design.md`)
+2. **Plan** — `superpowers:writing-plans` (or `oh-my-claudecode:ralplan` for consensus planning) → TDD tasks (`<topic>-execution.md`)
+3. **Execute** — `superpowers:subagent-driven-development` (fresh implementer + spec-compliance reviewer + code-quality reviewer per task) — keep sp here: the per-task implementer+reviewer pairing is the one mechanism OMC cannot replicate, and release-grade work is exactly where it earns its keep
 4. **Release** — final task = version bump + `CHANGELOG.md` (Removed/Added/Changed/Verification/Notes) + README + full test suite
 5. **PR** — Summary + Test plan checklist, squash merge on explicit approval
 
@@ -262,5 +262,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-06-06
+**Last Updated**: 2026-06-24
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
