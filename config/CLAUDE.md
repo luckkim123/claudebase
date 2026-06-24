@@ -96,11 +96,16 @@ This file is symlinked to `~/.claude/CLAUDE.md` by the installer. Project-level 
 **Minimum code/content that solves the problem. Nothing speculative.**
 
 - No features beyond what was asked.
-- No abstractions for single-use code.
+- No abstractions for single-use code: no interface with one implementation, no factory for one product, no config for a value that never changes.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
-- If you write 200 lines and 50 would do, rewrite.
+- If you write 200 lines and 50 would do, rewrite. Deletion over addition; boring over clever — clever is what someone decodes at 3am.
 - Minimize test scripts and temporary file creation.
+- **Climb the laziness ladder — stop at the first rung that holds.** (1) Does this need to exist? Speculative → skip, say so in one line. (2) Already in this codebase? Reuse the existing helper/util/type — re-implementing what's a few files over is the most common slop. (3) Stdlib does it? Use it. (4) Native platform feature? `<input type="date">` over a picker lib, CSS over JS, DB constraint over app code. (5) Already-installed dependency? Use it — never add one for what a few lines do. (6) One line? One line. (7) Only then: minimum code that works. The ladder runs *after* you understand the problem, never instead of it.
+- **Bug fix = root cause, not symptom.** Before editing, grep every caller of the function you're about to touch. One guard in the shared function is a smaller diff than a guard in every caller — and patching only the path the ticket names leaves every sibling caller broken.
+- **Mark deliberate simplifications so they read as intent, not ignorance.** A shortcut with a known ceiling gets a comment naming the ceiling and the upgrade path (e.g. `// simplified: global lock; per-account locks if throughput matters`).
+- **Track those simplifications as debt, don't let them rot silently.** Each `simplified:` comment is a ledger entry — a known ceiling someone may need to lift later. When you touch code near one, check whether its ceiling is now the bottleneck; if it is, lift it or flag it, don't paper over it. A simplification that's still right stays; one whose assumption no longer holds is debt come due.
+- **Hardware needs a calibration knob a minimal model can't see.** A real clock drifts, a real sensor reads off, a PCA9685 runs a few percent fast. Don't simplify away the tuning knob — the physical world needs it even when the code looks complete.
 
 Test: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
