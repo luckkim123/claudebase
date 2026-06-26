@@ -174,5 +174,6 @@
         "sessionSummary"
       ]
     }
-  }
+  },
+  "tui": "fullscreen"
 }
