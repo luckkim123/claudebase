@@ -16,6 +16,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# AGENT_ROUTING_GUARD\npython3 ~/claudebase/runtime/hooks/agent-routing-guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
