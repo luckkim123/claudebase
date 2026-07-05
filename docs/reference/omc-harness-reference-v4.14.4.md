@@ -1,5 +1,10 @@
 # OMC Harness Reference — reverse-engineered for OMX/oms/omd
 
+> **SUPERSEDED (2026-07-05).** Replaced by the 19-section verified bundle
+> [`omc-deep-analysis-v4.15.2/`](omc-deep-analysis-v4.15.2/INDEX.md) (pinned `d41f1730`, adversarially
+> citation-checked, includes per-harness gap analyses). Kept as history — do not update this file;
+> stale claims in it are enumerated in `omc-deep-analysis-v4.15.2/18-delta-engineering.md`.
+
 > **Purpose.** A version-pinned snapshot of *how oh-my-claudecode (OMC) builds a harness*, produced by
 > reverse-engineering OMC to inform sibling harnesses (OMX = oh-my-experiments, and future oms/omd updates).
 > When OMC updates, diff against this snapshot and update the dependent cards/skills (see §7 checklist).
