@@ -18,13 +18,19 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "installer" / "scripts" / "patch_omc_statedir.sh"
 HELPER = REPO / "runtime" / "omc-patches" / "_claudebase-omc-ascent.cjs"
 
-ANCHOR = "    const root = worktreeRoot || getWorktreeRoot() || process.cwd();"
+ANCHOR = "    const root = resolveStateAnchorRoot(worktreeRoot);"
 
 # Real ESM shape: "type":"module" package, duplicate anchor in two functions.
+# As of OMC 4.15.2 upstream refactored the old inline
+# `worktreeRoot || getWorktreeRoot() || process.cwd()` fallback into a call
+# through resolveStateAnchorRoot(worktreeRoot); getWorktreeRoot() itself is
+# still used (by getProjectIdentifier's OMC_STATE_DIR branch, via getGitTopLevel
+# in real OMC, simplified here) so the anchor's surrounding shape stays similar.
 STUB_JS = f'''\
 import {{ join }} from 'path';
 
 function getWorktreeRoot() {{ return null; }}
+function resolveStateAnchorRoot(worktreeRoot) {{ return worktreeRoot || getWorktreeRoot() || process.cwd(); }}
 
 const OmcPaths = {{ ROOT: '.omc' }};
 
@@ -52,17 +58,18 @@ export function getOmcRoot(worktreeRoot) {{
 # The OMC_STATE_DIR branch uses `root2` so the patch must NOT touch it. No
 # `import`/`export` — it is CJS, so the patch must use require(), not the ESM
 # createRequire shim.
-BRIDGE_ANCHOR = "  const root = worktreeRoot || getWorktreeRoot() || process.cwd();"
+BRIDGE_ANCHOR = "  const root = resolveStateAnchorRoot(worktreeRoot);"
 STUB_BRIDGE = f'''\
 "use strict";
 const import_path11 = require("path");
 function getWorktreeRoot() {{ return null; }}
+function resolveStateAnchorRoot(worktreeRoot) {{ return worktreeRoot || getWorktreeRoot() || process.cwd(); }}
 const OmcPaths = {{ ROOT: ".omc" }};
 
 function getOmcRoot(worktreeRoot) {{
   const customDir = process.env.OMC_STATE_DIR;
   if (customDir) {{
-  const root2 = worktreeRoot || getWorktreeRoot() || process.cwd();
+  const root2 = resolveStateAnchorRoot(worktreeRoot);
     return (0, import_path11.join)(customDir, String(root2).length);
   }}
 {BRIDGE_ANCHOR}
@@ -107,22 +114,20 @@ def test_patch_applies_and_helper_copied(tmp_path):
     assert r.returncode == 0, r.stderr
     js = (dist_of(cfg) / "worktree-paths.js").read_text()
     assert "_cbRequire" in js
-    # Point D: the rewritten line ascends on BOTH the worktreeRoot argument
-    # (don't-trust-arg) and process.cwd() (worktreeRoot===undefined path).
-    assert "ascendToMarker(worktreeRoot)" in js
-    assert "ascendToMarker(process.cwd())" in js
+    # Point D: a single ascendToMarker call covers both the don't-trust-arg
+    # case and the worktreeRoot===undefined case (worktreeRoot || process.cwd()).
+    assert "ascendToMarker(worktreeRoot || process.cwd())" in js
     assert (dist_of(cfg) / "_claudebase-omc-ascent.cjs").exists()
 
 
 def test_only_getomcroot_fallback_is_patched(tmp_path):
     # The anchor appears 3x; only the getOmcRoot fallback (before the .omc
-    # return) must be rewritten. The rewritten line carries exactly one of each
-    # ascent form, so the other two anchor occurrences stay untouched.
+    # return) must be rewritten. The rewritten line carries exactly one ascent
+    # call, so the other two anchor occurrences stay untouched.
     cfg = make_mock_omc(tmp_path)
     run_patch(cfg)
     js = (dist_of(cfg) / "worktree-paths.js").read_text()
-    assert js.count("ascendToMarker(worktreeRoot)") == 1
-    assert js.count("ascendToMarker(process.cwd())") == 1
+    assert js.count("ascendToMarker(worktreeRoot || process.cwd())") == 1
 
 
 def test_resolvetoworktreeroot_stays_stock(tmp_path):
@@ -134,9 +139,9 @@ def test_resolvetoworktreeroot_stays_stock(tmp_path):
     cfg = make_mock_omc(tmp_path)
     run_patch(cfg)
     js = (dist_of(cfg) / "worktree-paths.js").read_text()
-    # The stub has no resolveToWorktreeRoot, so the only ascent calls must be
-    # the two inside the getOmcRoot rewrite — never a third on a `return
-    # getWorktreeRoot(process.cwd())` line.
+    # The stub has no resolveToWorktreeRoot, so the only ascent call must be
+    # the one inside the getOmcRoot rewrite — never one chained off a
+    # `getWorktreeRoot(process.cwd())` line.
     assert "getWorktreeRoot(process.cwd()) || _cbRequire" not in js
 
 
@@ -221,9 +226,10 @@ def test_ascent_ignores_untrusted_worktreeroot_argument(tmp_path):
     # getOmcRoot(resolveToWorktreeRoot(cwd)), and in a non-git tree
     # resolveToWorktreeRoot returns the session SUBFOLDER unchanged. Point A's
     # `worktreeRoot || ... || ascend` short-circuited on that truthy subfolder
-    # and never ascended. Point D puts ascendToMarker(worktreeRoot) FIRST, so
-    # even when handed the subfolder as the argument, state converges to the
-    # CLAUDE.md root. Pass the subfolder explicitly to prove it.
+    # and never ascended. Point D puts ascendToMarker(worktreeRoot ||
+    # process.cwd()) FIRST, so even when handed the subfolder as the argument,
+    # state converges to the CLAUDE.md root. Pass the subfolder explicitly to
+    # prove it.
     cfg = make_mock_omc(tmp_path)
     assert HELPER.exists()
     run_patch(cfg)
@@ -255,15 +261,14 @@ def test_bridge_bundle_is_patched(tmp_path):
     run_patch(cfg)
     bridge = bridge_of(cfg) / "mcp-server.cjs"
     js = bridge.read_text()
-    assert "ascendToMarker(worktreeRoot)" in js
-    assert "ascendToMarker(process.cwd())" in js
+    assert "ascendToMarker(worktreeRoot || process.cwd())" in js
     # CJS bridge uses plain require(), NOT the ESM createRequire shim.
     assert "_cbRequire" not in js
     assert "require('./_claudebase-omc-ascent.cjs')" in js
     # Helper copied next to the bridge so the require resolves.
     assert (bridge_of(cfg) / "_claudebase-omc-ascent.cjs").exists()
     # The OMC_STATE_DIR branch (root2) must stay untouched.
-    assert "const root2 = worktreeRoot || getWorktreeRoot() || process.cwd();" in js
+    assert "const root2 = resolveStateAnchorRoot(worktreeRoot);" in js
     chk = subprocess.run(["node", "--check", str(bridge)], capture_output=True, text=True)
     assert chk.returncode == 0, chk.stderr
 
@@ -275,7 +280,7 @@ def test_bridge_idempotent(tmp_path):
     before = bridge.read_text()
     run_patch(cfg)
     assert bridge.read_text() == before  # no double-patch
-    assert before.count("ascendToMarker(worktreeRoot)") == 1
+    assert before.count("ascendToMarker(worktreeRoot || process.cwd())") == 1
 
 
 def test_bridge_getomcroot_converges_via_require(tmp_path):

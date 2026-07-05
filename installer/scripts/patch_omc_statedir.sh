@@ -7,8 +7,11 @@
 #   A. Inject a createRequire shim near the top so the ESM file can sync-load
 #      a CJS helper (dynamic import() is async — unusable in sync getOmcRoot).
 #   B. Rewrite ONLY the getOmcRoot default fallback line (the anchor line that
-#      is immediately followed by `return join(root, OmcPaths.ROOT)`). The new
-#      line does NOT trust the worktreeRoot ARGUMENT: it puts
+#      is immediately followed by `return join(root, OmcPaths.ROOT)` — as of
+#      2026-07-05 this reads `const root = resolveStateAnchorRoot(worktreeRoot);`,
+#      upstream having refactored the old inline
+#      `worktreeRoot || getWorktreeRoot() || process.cwd()` into that helper
+#      call). The new line does NOT trust the worktreeRoot ARGUMENT: it puts
 #      ascendToMarker(worktreeRoot) FIRST, so even when the HUD hands getOmcRoot
 #      a non-git session subfolder as worktreeRoot, state still converges to the
 #      marker-bearing ancestor. The same anchor also appears in
@@ -66,12 +69,27 @@ if ! command -v node >/dev/null 2>&1; then
   exit 0
 fi
 
-ANCHOR='    const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
-# Point D: ascendToMarker(worktreeRoot) goes FIRST so getOmcRoot does not trust
-# the (possibly non-git subfolder) worktreeRoot argument the HUD hands it. The
-# trailing ascendToMarker(process.cwd()) covers the worktreeRoot===undefined
-# call path. resolveToWorktreeRoot stays stock → no #576 boundary conflict.
-REPLACEMENT="    const root = _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot) || worktreeRoot || getWorktreeRoot() || _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
+# Anchor updated 2026-07-05: upstream OMC refactored getOmcRoot's default
+# fallback from the inline `worktreeRoot || getWorktreeRoot() || process.cwd()`
+# to a call through resolveStateAnchorRoot(worktreeRoot) (getWorktreeRoot()
+# itself was also renamed/repurposed — getGitTopLevel() is now the no-climb
+# primitive). resolveStateAnchorRoot already encapsulates the git-climb logic,
+# so the patch just needs to ascend for a marker BEFORE trusting its result.
+#
+# Single ascendToMarker(worktreeRoot || process.cwd()) call, NOT two separate
+# ascendToMarker(worktreeRoot) / ascendToMarker(process.cwd()) calls as in the
+# pre-4.15.2 anchor: resolveStateAnchorRoot(worktreeRoot) with worktreeRoot
+# falsy now falls all the way through to process.cwd() itself (no-git-repo
+# case), so it is ALWAYS truthy and would short-circuit the `||` chain before
+# a trailing ascendToMarker(process.cwd()) ever ran — silently disabling the
+# no-arg call path. Resolving worktreeRoot to process.cwd() up front avoids
+# that trap entirely.
+ANCHOR='    const root = resolveStateAnchorRoot(worktreeRoot);'
+# Point D: ascendToMarker goes FIRST so getOmcRoot does not trust the (possibly
+# non-git subfolder) worktreeRoot argument the HUD hands it — nor short-circuit
+# on resolveStateAnchorRoot's own cwd fallback. resolveToWorktreeRoot stays
+# stock → no #576 boundary conflict.
+REPLACEMENT="    const root = _cbRequire('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot || process.cwd()) || resolveStateAnchorRoot(worktreeRoot) || process.cwd();"
 RETURN_LINE='    return join(root, OmcPaths.ROOT);'
 
 patched=0
@@ -134,11 +152,11 @@ while IFS= read -r wp; do
 
   ok=1
   grep -q '_cbRequire' "$wp" || ok=0
-  # Point D pins BOTH ascent forms: ascendToMarker(worktreeRoot) (don't-trust-arg)
-  # AND ascendToMarker(process.cwd()) (worktreeRoot===undefined path). Requiring
-  # both rejects a stale point-A line (which had only the process.cwd() form).
-  grep -q "ascendToMarker(worktreeRoot)" "$wp" || ok=0
-  grep -q "ascendToMarker(process.cwd())" "$wp" || ok=0
+  # Point D pins the single ascent call: ascendToMarker(worktreeRoot ||
+  # process.cwd()) covers BOTH the don't-trust-arg case and the
+  # worktreeRoot===undefined case in one call (see REPLACEMENT comment above
+  # for why two separate ascendToMarker calls silently broke on 4.15.2+).
+  grep -q "ascendToMarker(worktreeRoot || process.cwd())" "$wp" || ok=0
   if [[ "$ok" == "1" ]] && node --check "$wp" 2>/dev/null; then
     rm -f "$wp.bak"
     patched=$((patched + 1))
@@ -162,10 +180,13 @@ done < <(find "$OMC_ROOT" -path '*/dist/lib/worktree-paths.js' -type f 2>/dev/nu
 #     with a flexible NN.
 #   - The OMC_STATE_DIR branch uses `root2` (not `root`), so the bare `root`
 #     anchor + this return lookahead pins only the default fallback.
+#   - Same anchor refactor as the ESM file (2026-07-05): the default fallback
+#     now reads through resolveStateAnchorRoot(worktreeRoot), inlined by
+#     esbuild into this bundle under the same name.
 # NOTE: an already-running MCP server holds the old code in memory; the patch
 # takes effect when that server next restarts (new session / OMC reload).
-BRIDGE_ANCHOR='  const root = worktreeRoot || getWorktreeRoot() || process.cwd();'
-BRIDGE_REPL="  const root = require('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot) || worktreeRoot || getWorktreeRoot() || require('./_claudebase-omc-ascent.cjs').ascendToMarker(process.cwd()) || process.cwd();"
+BRIDGE_ANCHOR='  const root = resolveStateAnchorRoot(worktreeRoot);'
+BRIDGE_REPL="  const root = require('./_claudebase-omc-ascent.cjs').ascendToMarker(worktreeRoot || process.cwd()) || resolveStateAnchorRoot(worktreeRoot) || process.cwd();"
 
 while IFS= read -r bp; do
   [[ -f "$bp" ]] || continue
@@ -175,8 +196,8 @@ while IFS= read -r bp; do
     cp "$HELPER_SRC" "$bdir/_claudebase-omc-ascent.cjs"
   fi
 
-  # Idempotency: the bridge marks itself with the same ascent calls.
-  if grep -q "ascendToMarker(worktreeRoot)" "$bp" 2>/dev/null; then
+  # Idempotency: the bridge marks itself with the same ascent call.
+  if grep -q "ascendToMarker(worktreeRoot || process.cwd())" "$bp" 2>/dev/null; then
     skipped=$((skipped + 1))
     continue
   fi
@@ -208,8 +229,7 @@ while IFS= read -r bp; do
   ' "$bp" > "$bp.tmp" && mv "$bp.tmp" "$bp"
 
   ok=1
-  grep -q "ascendToMarker(worktreeRoot)" "$bp" || ok=0
-  grep -q "ascendToMarker(process.cwd())" "$bp" || ok=0
+  grep -q "ascendToMarker(worktreeRoot || process.cwd())" "$bp" || ok=0
   if [[ "$ok" == "1" ]] && node --check "$bp" 2>/dev/null; then
     rm -f "$bp.bak"
     patched=$((patched + 1))
