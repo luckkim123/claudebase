@@ -22,6 +22,7 @@ Route code to `executor` (use `model=opus` for complex work). Uncertain SDK usag
 <model_routing>
 `haiku` (quick lookups), `sonnet` (standard), `opus` (architecture, deep analysis).
 Direct writes OK for: `~/.claude/**`, `.omc/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`.
+Workflow tool (`agent()`/`parallel()`/`pipeline()`) and other multi-agent fan-outs: default `opts.model` to `sonnet` (Sonnet 5) unless the session judges a specific stage needs `opus` (architecture/synthesis/adversarial-verify judgment) or `haiku` (pure lookup/transform). Do not blanket-inherit the parent session's model across a large agent fleet — pick per-stage, per-session. See `feedback-workflow-agents-opus` memory for the incident this guards against (opus-fleet session-limit exhaustion; fable-inherit-fleet token blowout).
 </model_routing>
 
 <skills>
