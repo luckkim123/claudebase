@@ -4,7 +4,7 @@ The **why** behind the behavioral rules in `config/CLAUDE.md` → `## Operationa
 
 `config/CLAUDE.md` is symlinked to `~/.claude/CLAUDE.md` and loaded into **every session on every machine and project**, so its bullets must stay short and action-only. This file is the opposite: it is **not loaded into any session**, so it is where the expensive context lives — issue numbers, hook markers, transcript evidence, incident dates, root-cause research. A rule in `CLAUDE.md` carries one `↪ rationale: operating-rationale.md#<anchor>` link to its section here.
 
-**Contract for adding a rule** (mirrored in `config/CLAUDE.md` → `## Operating Rationale`): the action goes in `CLAUDE.md` as one ≤350-char bullet; the *why* (issue numbers, hook design, transcript evidence, incident dates) goes here as a new `## <anchor>` section. Before writing a sentence, ask "is this an *instruction* or an *explanation of why*?" — explanations come here.
+**Contract for adding a rule** (mirrored in `config/CLAUDE.md` → `### Adding an Operational Limit`): the action goes in `CLAUDE.md` as one ≤350-char bullet; the *why* (issue numbers, hook design, transcript evidence, incident dates) goes here as a new `## <anchor>` section. Before writing a sentence, ask "is this an *instruction* or an *explanation of why*?" — explanations come here.
 
 ---
 
@@ -79,3 +79,25 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 - **Tool-abandon ≠ work-authorization.** When the empty-`AskUserQuestion` Stop hook (or `CLAUDE.md`) tells you to "stop calling the tool, state a prose recommendation and continue," that means *abandon the tool and keep the conversation going* — NOT start editing files or taking irreversible/out-of-scope actions on the branch you recommended. State the recommendation, then **stop and wait** for the user to pick. The only exception is a trivial sub-choice *inside* work the user already approved, and even then name the assumption you're proceeding on.
 
 - **"You guessed right" is not consent.** If you proposed a fact (a place name, a value, an interpretation) and the user replies "that's correct, but…" / "맞긴 한데…", they have *verified the fact*, not *authorized you to act on it*. Acting on it is the same scope violation as treating a question as an instruction (see `CLAUDE.md` Principle 3). Re-confirm what to *do* before doing it. The tell that you are about to make this mistake: you are about to write "진행합니다 / proceeding with the recommended option" right after the user only acknowledged a fact, with no explicit go-ahead for the action itself.
+
+---
+
+## deletion-safety
+
+**Rule (see `config/CLAUDE.md`):** Destructive ops go through a recoverable path. Delete → recycle bin, not permanent erase; move = `mv` → verify destination → only then delete source. The rule is *"avoid irreversible loss,"* not *"always run `trash`"* — use the safest path the environment offers.
+
+**Why the environment matters.** There is no single delete command that is safe everywhere, so the rule is environment-adaptive rather than one fixed tool:
+
+- **Recycle-bin per platform.** macOS: `trash` (else move into `~/.Trash`). Linux desktop: `gio trash` / `trash-cli`. **No trash available** (Docker / CI / minimal): before `rm`, confirm a copy exists elsewhere *and* get the user's explicit "this is permanent" approval. In a git repo, `git rm` + commit is itself recoverable.
+- **The move-then-delete sync-lag trap.** Never `rm` the source in the same breath as an `mv`. On sync-backed filesystems (iCloud/Drive) the move can lag — files that look moved are still uploading — so a same-breath delete of the source loses them. Always `find`/`ls` the destination to confirm the files landed *before* deleting the source.
+
+## multisession-git
+
+**Rule (see `config/CLAUDE.md`):** When several Claude/tmux sessions run on one repo, isolate — don't negotiate. Default to one `git worktree` per session; split a shared task by disjoint file ownership up front; only if a shared tree is unavoidable, gate writes with a PreToolUse `flock`/`O_EXCL` lock (contender yields and retries). Keep to 2–4 parallel sessions.
+
+**Why isolation, not runtime negotiation.** Git collisions (overwrites, `.git/index.lock` contention) come from *sharing one working tree*, not from a missing coordinator. Pausing sessions to "talk out" a conflict is the consensus-hard-part the industry deliberately avoids — empirically 95–100% deadlock at 3 agents, and adding a comms channel *worsens* it. So the fix is structural separation:
+
+- **Worktree default.** `claude --worktree <name>` gives each session its own branch, index, and files → file conflicts become structurally impossible; real overlaps surface calmly at merge/rebase, not live at runtime.
+- **Disjoint ownership** for a split task: "session A owns `/api`, B owns `/ui`", claimed before editing, never negotiated after colliding.
+- **Shared-tree fallback:** a PreToolUse `flock`/`O_EXCL` lock; the contender exits 2 and retries (yield, not negotiate). `session_id` is already in every hook's stdin JSON.
+- **Caps & gotchas.** 2–4 parallel sessions (5+ hits rate limits, review breaks down); worktrees do *not* isolate runtime (ports/DBs/caches) and fragment `~/.claude/projects/` history per path. Never carry coordination state in commit trailers — they're unreadable at write-time.
