@@ -1,5 +1,11 @@
 # oh-my-experiments (OMX) — Gap Analysis vs OMC v4.15.2
 
+> **Deepened (2026-07-05).** A 7-cluster, adversarially verified omx-side audit supersedes-and-extends
+> this file's omx view: `oh-my-experiments/docs/2026-07-05-omc-v4.15.2-alignment-audit.md` (omx repo,
+> commit `3655248`) — 27 new findings (headline: no sealed-evaluator guard, unbounded TB ingest,
+> author≠reviewer absent on report.md), 6 corrections to this file, and a consolidated 31-item roadmap
+> that re-prioritizes the 6 candidates below. Read that audit first; this file remains the OMC-side view.
+
 > Sibling harness at `/root/oh-my-experiments`. Experiment-analysis harness: `exp-init` / `exp-analyze` /
 > `exp-design` / `exp-loop` skills over an `omx` CLI and `.omx/` JSON state. Source-of-truth repo.
 > OMC studied only as a *reference* — OMX has a hard ZERO-runtime-dependency rule (design D1). Every
@@ -107,7 +113,8 @@ Ordered by leverage. Each is a Python re-implementation in `omx-core`, never an 
 
 - **OMC mechanism**: `09-research.md:161,188` — `AUTORESEARCH_SETUP_CONFIDENCE_THRESHOLD = 0.8`; an *inferred*
   evaluator below 0.8 "cannot be marked readyToLaunch", and a blocked handoff must carry a
-  `clarificationQuestion` (`setup-contract.ts:92-98`). The comment even cites OMX parity.
+  `clarificationQuestion` (`setup-contract.ts:92-98`). (A claim that the file's comment "cites OMX
+  parity" was refuted by the 2026-07-05 audit — no such comment exists in setup-contract.ts.)
 - **Why OMX needs it**: exp-init writes `evaluator.sh` from the interview and marks the profile
   `pending_approval: true` (`profile.py:73`) — but that flag is binary. There is no distinction between "user
   *stated* the eval command" (high confidence) and "I *inferred* it from the repo" (low confidence). A
