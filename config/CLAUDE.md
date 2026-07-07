@@ -23,6 +23,7 @@ Route code to `executor` (use `model=opus` for complex work). Uncertain SDK usag
 `haiku` (quick lookups), `sonnet` (standard), `opus` (architecture, deep analysis).
 Direct writes OK for: `~/.claude/**`, `.omc/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`.
 Workflow tool (`agent()`/`parallel()`/`pipeline()`) and other multi-agent fan-outs: default `opts.model` to `sonnet` (Sonnet 5) unless the session judges a specific stage needs `opus` (architecture/synthesis/adversarial-verify judgment) or `haiku` (pure lookup/transform). Do not blanket-inherit the parent session's model across a large agent fleet — pick per-stage, per-session. See `feedback-workflow-agents-opus` memory for the incident this guards against (opus-fleet session-limit exhaustion; fable-inherit-fleet token blowout).
+This rule binds pre-built and named workflows too, not just scripts you author inline. Running `Workflow({name: "..."})` (or any `scriptPath`) does NOT exempt you: an `agent()` call with no `model` option silently inherits the *session* model, so launching a named workflow from an Opus session runs the whole fleet on Opus — exactly the failure above. Before firing a named/pre-built workflow, open the script and check each `agent()`'s `model`; if any fan-out stage lacks an explicit non-Opus model, edit the script (Write/Edit the `scriptPath`, add `model: "sonnet"` per stage) and run the edited version. "It's a canned workflow, not my code" is not a pass — the guard is about which model the fleet actually runs on, not who wrote the loop.
 Lean into `sonnet` actively, not just as a grudging default — Sonnet 5's gains are real, so where a stage is legitimately within its reach, reach for it. The strongest such signal is **plan maturity**: when the agent executes against a firm written plan/spec (task is decided, the agent's discretion is mechanical — e.g. `subagent-driven-development`, `executing-plans`), `sonnet` is the right call. Reserve `opus` for where it genuinely out-performs — open-ended judgment the agent must resolve itself: designing the plan (autopilot/ralph loops that plan as they go), deep architecture, synthesis, adversarial verify. This applies to any skill or harness that spawns agents, not just the Workflow tool. It is the session's call per stage — not a fixed rule and not user-gated: bias toward `sonnet` when justified, escalate to `opus` when the judgment load genuinely warrants it.
 </model_routing>
 
@@ -262,5 +263,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-06-24
+**Last Updated**: 2026-07-07
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
