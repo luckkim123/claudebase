@@ -1,5 +1,5 @@
 <!-- OMC:START -->
-<!-- OMC:VERSION:4.15.1 -->
+<!-- OMC:VERSION:4.15.3 -->
 
 # oh-my-claudecode - Intelligent Multi-Agent Orchestration
 
@@ -263,5 +263,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-07-07
+**Last Updated**: 2026-07-09
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
