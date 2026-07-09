@@ -66,14 +66,21 @@ install_omc_hud() {
   local customization_marker="OMC HUD local customization"
 
   # Skip when dest already contains the customization marker AND config-dir.mjs
-  # byte-matches the template's companion. The marker is the truth that
-  # hud-customize.sh has already applied; if it's there, the wrapper is the
-  # patched form we want (not the raw template), and re-copying would clobber
-  # it. We check config-dir.mjs separately because it's never customized.
+  # byte-matches the template's companion AND the wrapper is syntactically
+  # valid. The marker+cmp alone is not sufficient: a wrapper that was patched
+  # twice (e.g. hud-customize.sh applied outside install.sh's idempotency
+  # guard, or a partial write) still contains the marker but throws
+  # `Identifier '__hudReadFileSync' has already been declared` at runtime —
+  # observed 2026-07-09 on a machine where `/oh-my-claudecode:hud setup` was
+  # run standalone (its SKILL.md just `cp`s the raw template, no re-apply of
+  # hud-customize.sh, so a *second* manual customize pass duplicated the
+  # injected blocks). `node --check` catches this class without executing the
+  # wrapper. We check config-dir.mjs separately because it's never customized.
   if [[ -f "$dest" ]] \
      && grep -qF "$customization_marker" "$dest" \
      && [[ -f "$dest_cfg" ]] \
-     && cmp -s "$cfgdir" "$dest_cfg"; then
+     && cmp -s "$cfgdir" "$dest_cfg" \
+     && node --check "$dest" >/dev/null 2>&1; then
     debug "HUD wrapper up to date (skip)"
     return
   fi
@@ -90,6 +97,15 @@ install_omc_hud() {
   # model:). The fresh copy above dropped any prior customization, so
   # hud-customize.sh re-injects it. Its own marker check still applies.
   bash "$REPO_DIR/installer/scripts/hud-customize.sh" 2>&1 | while IFS= read -r line; do log "$line"; done
+
+  # Post-install verification: the customize pass just rewrote $dest via
+  # string-anchored injection (installer/scripts/hud-customize.sh); confirm
+  # the result still parses before declaring success, so a broken wrapper
+  # never lands silently on `[OMC] Starting...`.
+  if ! node --check "$dest" >/dev/null 2>&1; then
+    log "WARNING: HUD wrapper failed syntax check after install -> $dest"
+    log "  run: node --check $dest   (to see the parse error)"
+  fi
 }
 
 # Gate: only install HUD when oh-my-claudecode@omc is in enabledPlugins.

@@ -317,6 +317,44 @@ prints zero action lines — step 6 depends on this). Bundling auto-update would
 make every install non-idempotent and could swap a plugin's commit at a moment
 the user didn't choose. Detect-then-ask keeps the choice explicit.
 
+**4h. HUD wrapper integrity (syntax valid + customization present?)**
+
+`install_omc_hud()` (`installer/lib/omc.sh`) self-heals a broken
+`~/.claude/hud/omc-hud.mjs` as of 2026-07-09 (it now gates its skip-condition
+on `node --check`, not just presence of the customization marker), so step 5
+below will already fix a broken wrapper. This check exists to **report** that
+drift explicitly in the sync summary rather than let it pass silently inside
+install.sh's log noise — a wrapper that was broken (e.g. `/oh-my-claudecode:hud
+setup` run standalone, outside install.sh, which just `cp`s the raw template
+and never re-applies `hud-customize.sh`) is worth surfacing to the user even
+though step 5 will repair it.
+
+```bash
+CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+WRAPPER="$CONFIG_DIR/hud/omc-hud.mjs"
+MARKER="OMC HUD local customization"
+
+if [[ ! -f "$WRAPPER" ]]; then
+  echo "(4h) HUD wrapper not installed yet — step 5 will install it"
+elif ! node --check "$WRAPPER" >/dev/null 2>&1; then
+  echo "(4h) HUD wrapper BROKEN (syntax error) — step 5 will auto-repair"
+  node --check "$WRAPPER" 2>&1 | head -5
+elif ! grep -qF "$MARKER" "$WRAPPER"; then
+  echo "(4h) HUD wrapper valid but missing local customization — step 5 will re-apply"
+else
+  echo "(4h) HUD wrapper OK (valid + customized)"
+fi
+```
+
+If this reports BROKEN or missing customization, note it in the sync summary
+under Drift findings — even though step 5's `install_omc_hud()` repairs it
+automatically, the user should know their HUD was silently degraded (likely
+cause: someone ran `/oh-my-claudecode:hud setup` or `omc-setup` directly,
+bypassing `install.sh` — see Red flags). After step 5 runs, re-check this same
+command to confirm the repair actually landed; if it's still BROKEN, that's a
+genuine regression worth step 7 triage (not a stale-cache false negative,
+since `node --check` reads the file fresh every time).
+
 ### 5. Run installer
 
 ```bash
@@ -417,6 +455,7 @@ For each new template:
 | "Tree is dirty → stop, the user must decide" | Not always. A tracked file (esp. `config/CLAUDE.md`) is often dirtied by another session writing a learning, and the change may already be in `origin`. Run Step 1.5 triage first: ABSORBED → patch-backup + discard; UNIQUE → *then* stop and ask. Blanket-stopping leaves a non-owner wedged on a change they should just drop. |
 | "Dirty change conflicts with the pull → discard it so `--ff-only` works" | Only after Step 1.5 classifies it as ABSORBED/disposable. A UNIQUE change is the user's content — back it up to a patch and surface it; a non-owner preserves it out-of-tree (patch/branch), never silently loses it. |
 | "There's a `@old-marketplace` drift — I'll just `claude plugin uninstall <name>@old` to clear it" | `claude plugin uninstall` is **suffix-blind**: it matches the bare plugin name and removes whatever entry it finds — so `uninstall oh-my-experiments@omx` deletes the *enabled* `oh-my-experiments@heroacademia` from `config/settings.json` instead, breaking a healthy plugin (observed 2026-06-12). For a migration-collision drift (same base enabled under another marketplace) let `plugin_sync.py` auto-heal it (it excises `installed_plugins.json` directly), or excise by hand — never the CLI uninstall. If you ever do run it, diff `config/settings.json` immediately and `git checkout --` any wrongful enabled-plugin deletion. |
+| "HUD shows `[OMC] Starting...`, I'll just re-copy the canonical template to fix it" | That IS the bug, not the fix. `/oh-my-claudecode:hud setup`'s own SKILL.md instructs a bare `cp` from the plugin's template — it does not know about claudebase's `hud-customize.sh` local patch layer, so a standalone `hud setup` (outside `install.sh`) silently drops the user's dir:/branch:/model:/effort: customization. Diagnose with step 4h first: if the marker is present but `node --check` fails, it is very likely a *duplicated* customize pass, not upstream corruption — run `installer/install.sh` (which re-copies the raw template AND re-applies `hud-customize.sh` in one atomic step) instead of hand-copying the template. |
 
 ## Outputs the user expects after a run
 
@@ -426,6 +465,7 @@ A short summary table:
 |---|---|
 | Incoming commits applied | `<sha range or "none">` |
 | Drift findings | `<list, or "none">` |
+| HUD wrapper (4h) | `<"OK" / "was BROKEN, auto-repaired by step 5" / "missing customization, re-applied">` |
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
