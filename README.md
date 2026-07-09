@@ -18,6 +18,30 @@ installer/install.sh                  # macOS / Linux
 
 That symlinks `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, your skills and hooks into the repo. To update: `git pull`. No re-install needed.
 
+### Installing tmux + clipboard tool
+
+`tmux.conf`'s mouse-copy bindings need `tmux` and a clipboard helper. By
+default the installer only warns if they're missing (keeps the install
+idempotent and non-interactive). To have it install them for you:
+
+```bash
+INSTALL_TOOLS=1 installer/install.sh
+```
+
+This is best-effort and OS-aware — already-present tools are skipped, and it
+never blocks on a sudo password prompt (falls back to a warn-only hint
+instead):
+
+| OS | Package manager | tmux | Clipboard |
+|:---|:---|:---|:---|
+| macOS | Homebrew | `brew install tmux` | built-in (`pbcopy`/`pbpaste`, nothing to install) |
+| Linux (Debian/Ubuntu) | apt | `apt-get install -y tmux` | `wl-clipboard` (Wayland) or `xclip` (X11), picked by `$WAYLAND_DISPLAY` |
+| Linux (Fedora/RHEL) | dnf | `dnf install -y tmux` | same as above |
+| Linux (Arch) | pacman | `pacman -S --noconfirm tmux` | same as above |
+
+Without `INSTALL_TOOLS=1`, a missing tool just prints the manual install
+command for your platform instead.
+
 ## MCP servers with API keys
 
 ```bash
@@ -48,7 +72,7 @@ recreates it.
 
 ## Per-machine overrides
 
-Put machine-specific plugins / permissions in `~/.claude/settings.local.json` (gitignored). Claude Code merges it on top of `config/settings.json`. See `templates/settings.local.example.json`.
+Put machine-specific plugins / permissions / model choice (e.g. `"model": "opus[1m]"`) in `~/.claude/settings.local.json` (gitignored). Claude Code merges it on top of `config/settings.json`. See `templates/settings.local.example.json`.
 
 ## Learn more
 

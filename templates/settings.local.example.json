@@ -2,5 +2,6 @@
   "_comment": "Copy to ~/.claude/settings.local.json and edit. Claude Code merges this on top of ~/.claude/settings.json (the symlinked common file). Set a plugin to false to disable a common one on this machine; add new ones to enable per-machine extras.",
   "enabledPlugins": {
     "_remove_this_example": false
-  }
+  },
+  "model": "opus[1m]"
 }

@@ -118,15 +118,15 @@
   "extraKnownMarketplaces": {
     "axlabs": {
       "source": {
-        "source": "github",
-        "repo": "seulee26/mckinsey-pptx"
+        "source": "git",
+        "url": "https://github.com/seulee26/mckinsey-pptx.git"
       },
       "autoUpdate": true
     },
     "omc": {
       "source": {
-        "source": "github",
-        "repo": "Yeachan-Heo/oh-my-claudecode"
+        "source": "git",
+        "url": "https://github.com/Yeachan-Heo/oh-my-claudecode.git"
       },
       "autoUpdate": true
     },
@@ -139,8 +139,8 @@
     },
     "claude-plugins-official": {
       "source": {
-        "source": "github",
-        "repo": "anthropics/claude-plugins-official"
+        "source": "git",
+        "url": "https://github.com/anthropics/claude-plugins-official.git"
       },
       "autoUpdate": true
     }
