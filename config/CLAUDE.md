@@ -70,7 +70,6 @@ State root: `.omc/` by default, or `$OMC_STATE_DIR/{project-id}/` when `OMC_STAT
 ## Setup
 
 Say "setup omc" or run `/oh-my-claudecode:omc-setup`.
-
 <!-- OMC:END -->
 
 <!-- User customizations -->
