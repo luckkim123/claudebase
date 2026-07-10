@@ -5,6 +5,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "model": "sonnet",
   "hooks": {
     "PreToolUse": [
       {
@@ -66,30 +67,6 @@
             "command": "# HUD_ENSURE_ON_START\nbash ~/claudebase/runtime/hooks/hud-ensure.sh 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Ensuring OMC HUD customization is in sync"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# SIMPLICITY_MODE_TRACKER\npython3 ~/claudebase/runtime/hooks/simplicity-mode-tracker.py 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Tracking session simplicity mode"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# SIMPLICITY_MODE_PROPAGATE\npython3 ~/claudebase/runtime/hooks/simplicity-subagent-propagate.py 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Propagating session simplicity mode to subagent"
           }
         ]
       }

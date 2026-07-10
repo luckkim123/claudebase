@@ -112,8 +112,6 @@ This file is symlinked to `~/.claude/CLAUDE.md` by the installer. Project-level 
 
 Test: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
-**Session-local intensity override**: `/simplicity [lite|full|ultra|off]` changes how hard this ladder is enforced for the rest of the current session (and propagates to spawned subagents) without touching this file. `full` is the default and matches the ladder above as written; `lite` builds what's asked but names the lazier alternative; `ultra` challenges the requirement itself before building; `off` suspends the ladder for the session. Plain `/simplicity` reports the current level. See `runtime/hooks/simplicity-mode-tracker.py` / `simplicity-subagent-propagate.py`.
-
 ### 3. Surgical Changes
 
 **Touch only what was requested. Clean up only your own mess.**
