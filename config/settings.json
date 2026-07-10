@@ -89,13 +89,21 @@
     "oh-my-docs@heroacademia": true,
     "oh-my-scholar@heroacademia": true,
     "oh-my-project@heroacademia": true,
-    "oh-my-heroacademia@heroacademia": true
+    "oh-my-heroacademia@heroacademia": true,
+    "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
     "axlabs": {
       "source": {
         "source": "git",
         "url": "https://github.com/seulee26/mckinsey-pptx.git"
+      },
+      "autoUpdate": true
+    },
+    "ponytail": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/DietrichGebert/ponytail.git"
       },
       "autoUpdate": true
     },
