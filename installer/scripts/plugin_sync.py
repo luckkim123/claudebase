@@ -74,26 +74,6 @@ def _marketplace_of(plugin: str) -> str:
     return plugin.rsplit("@", 1)[1]
 
 
-def base_name(plugin: str) -> str:
-    """Plugin id `<name>@<marketplace>` → `<name>` (no suffix → unchanged)."""
-    return plugin.rsplit("@", 1)[0] if "@" in plugin else plugin
-
-
-def drift_collides_with_enabled(plugin: str, settings: dict,
-                                local_enabled: dict | None = None) -> bool:
-    """True if a DRIFT plugin shares its base name with an *enabled* plugin under
-    a *different* marketplace (e.g. `foo@old` drift while `foo@new` is enabled).
-
-    This is the marketplace-migration hazard: `claude plugin uninstall foo@old`
-    is suffix-blind and removes the enabled `foo@new` instead. When this returns
-    True the caller must excise the drift directly instead of via the CLI.
-    """
-    enabled = {k for k, v in settings.get("enabledPlugins", {}).items() if v}
-    enabled |= {k for k, v in (local_enabled or {}).items() if v}
-    target = base_name(plugin)
-    return any(e != plugin and base_name(e) == target for e in enabled)
-
-
 def _current_scope(plugin: str, installed: dict) -> str:
     entries = installed.get("plugins", {}).get(plugin, [])
     if not entries:
@@ -198,36 +178,6 @@ def _claude_available() -> bool:
     return shutil.which("claude") is not None
 
 
-def excise_installed_plugin(plugin: str) -> bool:
-    """Remove one plugin entry from installed_plugins.json + trash its cache,
-    WITHOUT `claude plugin uninstall` (which is suffix-blind, see
-    drift_collides_with_enabled). Returns True on success.
-
-    Used only for marketplace-migration drift where the CLI would clobber the
-    same-base enabled plugin. The cache lives at
-    `<claude>/plugins/cache/<marketplace>/<base>/`.
-    """
-    home = _claude_home()
-    ip_path = home / "plugins" / "installed_plugins.json"
-    if not ip_path.exists():
-        return False
-    try:
-        data = json.loads(ip_path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return False
-    if plugin not in data.get("plugins", {}):
-        return False
-    del data["plugins"][plugin]
-    ip_path.write_text(json.dumps(data, indent=2) + "\n")
-    # Best-effort cache removal — never fail the excision on a missing dir.
-    mp, base = _marketplace_of(plugin), base_name(plugin)
-    if mp and base:
-        cache_dir = home / "plugins" / "cache" / mp / base
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir, ignore_errors=True)
-    return True
-
-
 def install_omc_shell_cli() -> str:
     """Post-install hook for OMC: ensure `omc` shell CLI is on PATH."""
     if shutil.which("omc"):
@@ -254,20 +204,17 @@ def run_post_install(name: str) -> str:
     return fn()
 
 
-def apply(decisions: list[Decision], dry_run: bool, prune: bool,
-          settings: dict | None = None, local_enabled: dict | None = None) -> list[str]:
+def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
     """Execute decisions via `claude plugin`. Returns log lines.
 
-    `settings`/`local_enabled` let the DRIFT path detect a marketplace-migration
-    collision (same base name still enabled elsewhere) and excise the stale entry
-    directly rather than via the suffix-blind `claude plugin uninstall`.
+    Drift is warn-only by design: this installer only *installs* the plugins
+    claudebase recommends and never removes a plugin the recipient installed
+    themselves. A DRIFT decision is reported so the user knows it exists, but
+    nothing is uninstalled/excised.
     """
-    settings = settings or {}
     log: list[str] = []
     counts = {a: 0 for a in Action}
-    removed = 0   # drift entries actually removed (CLI uninstall OR migration excise)
-    kept = 0      # drift entries left in place (warn-only)
-    failed = 0    # drift removals that errored (so a stuck heal doesn't read as removed)
+    kept = 0      # drift entries left in place (always — warn-only)
     for d in decisions:
         counts[d.action] += 1
         if d.action is Action.OK:
@@ -276,41 +223,14 @@ def apply(decisions: list[Decision], dry_run: bool, prune: bool,
             log.append(f"skip (os gate): {d.plugin} — {d.reason}")
             continue
         if d.action is Action.DRIFT:
-            collides = drift_collides_with_enabled(d.plugin, settings, local_enabled)
-            # Migration-collision drift (same base enabled under another
-            # marketplace) is an unambiguous stale leftover, not a user choice —
-            # auto-heal it even WITHOUT --prune, so a recipient who knows nothing
-            # of the marketplace migration is fixed by a plain install.sh run.
-            # A genuine orphan (no same-base enabled) stays warn-only unless --prune.
-            if not prune and not collides:
-                log.append(
-                    f"plugin drift (kept): {d.plugin} — register in settings.local.json "
-                    f"or re-run with --prune to remove"
-                )
-                kept += 1
-                continue
-            if dry_run:
-                how = "excise (migration collision)" if collides else "uninstall"
-                log.append(f"would {how} (drift): {d.plugin}")
-                removed += 1
-                continue
-            if collides:
-                # Suffix-blind `claude plugin uninstall` would clobber the
-                # same-base enabled plugin — excise this entry directly instead.
-                ok = excise_installed_plugin(d.plugin)
-                log.append(f"plugin auto-healed (migration drift): {d.plugin}" if ok
-                           else f"WARNING: failed to excise: {d.plugin}")
-                removed += ok          # count only a real removal — a failed
-                failed += (not ok)     # heal must not read as `removed` next run
-                continue
-            rc = subprocess.run(
-                ["claude", "plugin", "uninstall", "-s", "user", "-y", d.plugin],
-                capture_output=True,
-            ).returncode
-            log.append(f"plugin uninstalled (drift): {d.plugin}" if rc == 0
-                       else f"WARNING: failed to uninstall: {d.plugin}")
-            removed += (rc == 0)
-            failed += (rc != 0)
+            # Warn-only: report the drift but never remove it. This installer
+            # adds recommended plugins; it does not touch plugins the recipient
+            # installed on their own.
+            log.append(
+                f"plugin drift (kept): {d.plugin} — not in claudebase's recommended "
+                f"set; left installed (register in settings.local.json to silence)"
+            )
+            kept += 1
             continue
         if d.action is Action.UPDATE:
             # `claude plugin update` is idempotent — a no-op when already current,
@@ -349,9 +269,7 @@ def apply(decisions: list[Decision], dry_run: bool, prune: bool,
         f"plugin sync: {counts[Action.OK]} already user-scope, "
         f"{counts[Action.INSTALL] + counts[Action.REINSTALL]} fixed, "
         f"{counts[Action.UPDATE]} updated, "
-        f"{removed} removed, "
         f"{kept} drift-kept, "
-        f"{failed} failed, "
         f"{counts[Action.SKIP_OS]} os-skipped"
     )
     return log
@@ -454,7 +372,6 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="claudebase plugin sync")
     ap.add_argument("--apply", action="store_true", help="execute decisions")
     ap.add_argument("--dry-run", action="store_true", help="print intended actions")
-    ap.add_argument("--prune", action="store_true", help="remove drift plugins")
     ap.add_argument("--update", action="store_true",
                     help="also `claude plugin update` enabled user-scope plugins "
                          "(idempotent; CLI no-ops when already current)")
@@ -488,8 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     if not (args.apply or args.dry_run):
         ap.error("specify --apply, --dry-run, or --report")
 
-    for line in apply(decisions, dry_run=args.dry_run, prune=args.prune,
-                      settings=settings, local_enabled=local_enabled):
+    for line in apply(decisions, dry_run=args.dry_run):
         print(line)
     return 0
 

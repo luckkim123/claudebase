@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # claudebase installer (macOS / Linux)
-# Usage: ./install.sh [--copy] [--dry-run] [--verbose] [--prune-plugins]
+# Usage: ./install.sh [--copy] [--dry-run] [--verbose]
 #   --copy            Copy files instead of symlinking (less convenient for sync)
 #   --dry-run         Show actions without executing
 #   --verbose         Print extra detail (idempotent skips, resolved secrets count)
-#   --prune-plugins   Uninstall user-scope plugins not in any enabledPlugins
-#                     (default: warn only — keeps drift-kept plugins installed)
 
 set -euo pipefail
 

@@ -1,10 +1,10 @@
 # shellcheck shell=bash
 # installer/lib/plugins.sh — thin wrapper around installer/scripts/plugin_sync.py.
 #
-# Source order: after lib/args.sh (DRY_RUN, PRUNE_PLUGINS) and lib/log.sh.
+# Source order: after lib/args.sh (DRY_RUN) and lib/log.sh.
 #
 # Exposes:
-#   sync_plugins   — invoke plugin_sync.py with --apply / --dry-run / --prune,
+#   sync_plugins   — invoke plugin_sync.py with --apply / --dry-run,
 #                    prefixing each line of its output with [install].
 #
 # Why bash forwards only: the Python module owns the Action/Decision logic and
@@ -23,7 +23,6 @@ sync_plugins() {
   fi
   local args=(--apply)
   [[ $DRY_RUN -eq 1 ]] && args=(--dry-run)
-  [[ $PRUNE_PLUGINS -eq 1 ]] && args+=(--prune)
   python3 "$REPO_DIR/installer/scripts/plugin_sync.py" "${args[@]}" 2>&1 \
     | while IFS= read -r line; do log "$line"; done
 }
