@@ -65,6 +65,26 @@ Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUD
 - `claude` CLI on PATH (otherwise the plugin-sync sub-step skips with a warning, which is fine but flag it)
 - `~/claudebase/` working tree is clean — if dirty, **do not pull and do not run install.sh on a dirty tree**. But "dirty" is not automatically "stop": a tracked file like `config/CLAUDE.md` (symlinked to `~/.claude/CLAUDE.md`) is routinely edited in place by a *different* session writing a learning, so the working tree is dirty through no action of this run. Go to **Step 1.5 (Dirty working-tree triage)** to classify the change before deciding — only a change that is genuinely the user's to keep stops the run for a human.
 
+## Push authority (resolve ONCE, before any push-related step)
+
+`claudebase` is **luckkim123's distribution repo**: most machines running this skill received a *read-only clone* and cannot push to `origin`. The whole skill already branches on "owner vs non-owner" (Step 1.5, Step 8), but nothing actually *detects* which you are — so on a non-owner machine the run can still fall into the owner path and ask "push N commits?", a question the user can't act on. Detect once up front and carry the result through every push-related decision:
+
+```bash
+# Does THIS clone have push access to origin? --dry-run pushes nothing —
+# it only exercises auth + ref-advertisement, so it is safe to probe.
+if git -C "$CLAUDEBASE_ROOT" push --dry-run origin HEAD >/dev/null 2>&1; then
+  CB_PUSH_AUTH=owner
+else
+  CB_PUSH_AUTH=non-owner
+fi
+echo "push authority: $CB_PUSH_AUTH"
+```
+
+- `owner` → the push gate (Step 8) and the "commit locally" offer in Step 1.5 apply as written.
+- `non-owner` → **never phrase a push as an option.** A local commit that arises (Step 7's autonomous `fix(install:)` commit, or a UNIQUE change preserved in Step 1.5) stays on this clone; forward it to the repo owner as a patch (`git format-patch -1`) or a PR. Do not ask "push N commits?" — the user cannot, and being asked reads as the skill pushing them toward an action they can't take. Surface the patch/PR path instead.
+
+If the probe is inconclusive (no network, `origin` unreachable), treat as **non-owner** for this run — the safe default is to not offer a push you can't verify will succeed.
+
 ## Procedure
 
 ### 1. Fetch incoming
@@ -100,9 +120,9 @@ For each dirty tracked file (`git status --porcelain`):
      git checkout -- <file>
      ```
      State in the summary that the change was absorbed and where the backup patch is. Then continue to step 2 (analyze) → step 3 (pull).
-   - **UNIQUE and worth keeping** → this is genuinely the user's content. **Now** the pre-flight "stop and surface to the user" applies — show the diff and let the user decide. Branch on push authority:
-     - **Owner (can push `origin`)** → offer: commit the change locally now (so the tree is clean), then `git pull --ff-only` (or rebase the new commit onto incoming if they diverge), and push at the step-8 gate.
-     - **Non-owner (cannot push `origin`)** → committing locally is fine for *their* clone, but it will make them diverge from `origin` on the next sync and they cannot upstream it. Guide them instead: keep the change as a **patch file** (`git diff <file> > ~/my-claudebase-change.patch`) or a local branch, `git checkout --` the tracked file so `--ff-only` works, then either (a) send the patch to the repo owner to merge, or (b) re-apply the patch after each pull if it's a personal-machine tweak. The point: a non-owner is never forced to choose between "lose my change" and "block forever" — preserve it out-of-tree and keep syncing.
+   - **UNIQUE and worth keeping** → this is genuinely the user's content. **Now** the pre-flight "stop and surface to the user" applies — show the diff and let the user decide. Branch on `CB_PUSH_AUTH` (already resolved in Pre-flight — don't re-probe):
+     - **Owner (`CB_PUSH_AUTH=owner`)** → offer: commit the change locally now (so the tree is clean), then `git pull --ff-only` (or rebase the new commit onto incoming if they diverge), and push at the step-8 gate.
+     - **Non-owner (`CB_PUSH_AUTH=non-owner`)** → committing locally is fine for *their* clone, but it will make them diverge from `origin` on the next sync and they cannot upstream it. Guide them instead: keep the change as a **patch file** (`git diff <file> > ~/my-claudebase-change.patch`) or a local branch, `git checkout --` the tracked file so `--ff-only` works, then either (a) send the patch to the repo owner to merge, or (b) re-apply the patch after each pull if it's a personal-machine tweak. The point: a non-owner is never forced to choose between "lose my change" and "block forever" — preserve it out-of-tree and keep syncing.
    - **UNIQUE but disposable** (scratch edit, debug print, abandoned experiment) → confirm with the user it's disposable, then discard as in the ABSORBED path (patch-backup is cheap insurance even here).
 
 ### 2. Analyze the incoming diff
@@ -415,7 +435,11 @@ If any check fails → step 7. If all pass → step 8.
 
 ### 8. Push gate
 
-If `git log --oneline @{u}..HEAD` shows local commits:
+Branch on `CB_PUSH_AUTH` (resolved in Pre-flight — **do not re-decide it here**).
+
+**If `CB_PUSH_AUTH=non-owner`:** skip the push gate entirely. If `git log --oneline @{u}..HEAD` shows local commits, do NOT ask "push?" — the user can't. List the commits and surface the forward path instead: keep them on this clone and send to the repo owner as a patch (`git format-patch -1` / `git diff`) or a PR. This is the common case on a distributed clone — being asked to push a repo you don't own is exactly the friction this branch removes.
+
+**If `CB_PUSH_AUTH=owner`** and `git log --oneline @{u}..HEAD` shows local commits:
 
 - List them to the user
 - Ask explicitly: "Push N commit(s) to origin/main? (CLAUDE.md requires explicit confirmation)"
@@ -423,8 +447,6 @@ If `git log --oneline @{u}..HEAD` shows local commits:
 - On no: leave for user
 
 Never push autonomously, even in auto mode. CLAUDE.md governance overrides auto mode.
-
-**Non-owner clones (no push access to `origin`).** If `git push` would fail because this is a distributed clone the user does not own, do NOT treat that as "stuck". The push gate is for the *owner*; a non-owner who ended up with a local commit (e.g. a unique change preserved in Step 1.5) keeps it on their own clone and forwards it to the repo owner as a patch (`git format-patch -1` / `git diff`) or a PR. Surface that path instead of looping on a denied push.
 
 ### 9. Template adoption (only if step 2 flagged a `templates/` change)
 
@@ -443,6 +465,7 @@ For each new template:
 | Thought | Reality |
 |---|---|
 | "Auto mode is on, I can push" | CLAUDE.md "Push only on explicit instruction" wins. Auto mode says so itself: "shared systems still need explicit user confirmation." |
+| "There's a local commit, I'll ask the user to push it" | Only if `CB_PUSH_AUTH=owner`. `claudebase` is a *distribution* repo — most machines are non-owner clones that can't push `origin`. Asking a non-owner "push N commits?" pushes them toward an action they can't take. Resolve `CB_PUSH_AUTH` in Pre-flight; on non-owner, surface the patch/PR forward-path, never a push prompt. |
 | "I'll amend the previous commit to bundle the fix" | CLAUDE.md "Do not amend or force-push commits already on origin/main." |
 | "These per-machine extras might also help on the other machine — promote to common" | "Plugin reconciliation": wait until the *other* machine actually adopts. Ask before promoting. |
 | "settings.local.json is per-machine, I can rewrite it" | The user owns this file. Adding entries is fine; deleting/restructuring needs a yes. |
