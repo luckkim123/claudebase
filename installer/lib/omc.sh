@@ -65,6 +65,27 @@ install_omc_hud() {
   local dest_cfg="$CLAUDE_HOME/hud/lib/config-dir.mjs"
   local customization_marker="OMC HUD local customization"
 
+  # Install the statusLine cache shim + its shell helpers, mirroring OMC's own
+  # installer (dist/installer/index.js: copies hud-cache-wrapper.sh ->
+  # omc-hud-cache.sh, find-node.sh, config-dir.sh). config/settings.json's
+  # statusLine runs `sh .../omc-hud-cache.sh .../omc-hud.mjs` every render, so a
+  # missing shim = a silently blank HUD (observed 2026-07-12: wrapper healthy,
+  # shim absent, statusLine failed). This MUST run before the wrapper skip gate
+  # below — otherwise a healthy wrapper early-returns and the shim never lands.
+  # Derive the shim sources from $cfgdir (…/scripts/lib/config-dir.mjs) rather
+  # than re-referencing $ver, whose scope is the for-loop above.
+  local lib_dir; lib_dir="$(dirname "$cfgdir")"           # …/scripts/lib
+  local scripts_dir; scripts_dir="$(dirname "$lib_dir")"  # …/scripts
+  local shim_src="$lib_dir/hud-cache-wrapper.sh"
+  local find_node_src="$scripts_dir/find-node.sh"
+  local cfg_sh_src="$lib_dir/config-dir.sh"
+  mkdir -p "$CLAUDE_HOME/hud/lib"
+  if [[ -f "$shim_src" ]]; then
+    cp "$shim_src" "$CLAUDE_HOME/hud/omc-hud-cache.sh" && chmod 755 "$CLAUDE_HOME/hud/omc-hud-cache.sh"
+  fi
+  [[ -f "$find_node_src" ]] && { cp "$find_node_src" "$CLAUDE_HOME/hud/find-node.sh" && chmod 755 "$CLAUDE_HOME/hud/find-node.sh"; }
+  [[ -f "$cfg_sh_src" ]] && { cp "$cfg_sh_src" "$CLAUDE_HOME/hud/lib/config-dir.sh" && chmod 755 "$CLAUDE_HOME/hud/lib/config-dir.sh"; }
+
   # Skip when dest already contains the customization marker AND config-dir.mjs
   # byte-matches the template's companion AND the wrapper is syntactically
   # valid. The marker+cmp alone is not sufficient: a wrapper that was patched
