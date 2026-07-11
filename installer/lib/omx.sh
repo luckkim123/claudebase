@@ -26,9 +26,33 @@
 #   1. $OMX_SOURCE_DIR                       (explicit override; machine-specific)
 #   2. $REPO_DIR/../oh-my-experiments/omx-core   (sibling of claudebase)
 #   3. $HOME/oh-my-experiments/omx-core
+#   4. the installed oh-my-experiments PLUGIN cache (highest version)
 # omx lives in its OWN repo, so claudebase cannot hardcode one absolute path
-# (it ships to every machine). We probe the conventional spots and, if none
-# exist, warn-and-skip (deps.sh pattern) rather than guess.
+# (it ships to every machine). We probe the conventional dev checkouts first,
+# then fall back to the plugin cache — the oh-my-experiments plugin BUNDLES
+# omx-core, so a normal user who never clones the repo (and may not even know
+# the `omx` CLI exists) still gets it installed + kept current: the marketplace
+# refreshes the plugin cache, and each install.sh re-pins the editable CLI to
+# the newest bundled copy. A dev checkout, when present, still wins so local
+# edits take effect. If nothing is found, warn-and-skip (deps.sh pattern).
+
+resolve_omx_plugin_source() {
+  # Echo the omx-core dir inside the highest-versioned installed
+  # oh-my-experiments plugin, or nothing. Version dirs sort with `sort -V`;
+  # some marketplaces name the dir by commit hash instead of semver, so fall
+  # back to newest-mtime when no dir parses as a version.
+  local plugin_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/heroacademia/oh-my-experiments"
+  [[ -d "$plugin_root" ]] || return 1
+  local ver
+  # Prefer semver-looking dirs, highest first; then any dir by mtime.
+  for ver in $(ls -1 "$plugin_root" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | sort -rV) \
+             $(ls -1t "$plugin_root" 2>/dev/null); do
+    [[ -f "$plugin_root/$ver/omx-core/omx_core/__init__.py" ]] || continue
+    printf '%s\n' "$plugin_root/$ver/omx-core"
+    return 0
+  done
+  return 1
+}
 
 resolve_omx_source() {
   # Echo the first existing omx-core source dir, or empty if none found.
@@ -36,6 +60,7 @@ resolve_omx_source() {
     "${OMX_SOURCE_DIR:-}"
     "$REPO_DIR/../oh-my-experiments/omx-core"
     "$HOME/oh-my-experiments/omx-core"
+    "$(resolve_omx_plugin_source)"
   )
   local c
   for c in "${candidates[@]}"; do
