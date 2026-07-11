@@ -358,16 +358,24 @@ since `node --check` reads the file fresh every time).
 
 **4i. Personal harness repos up-to-date? (fetch-drift sweep, ask-then-pull)**
 
-`~/claudebase` is not the only repo the user actively develops. Personal
-harness/plugin **source** repos live outside `~/claudebase` — e.g.
-`/root/oh-my-experiments` (the `omx-core` CLI source, whence the
-`oh-my-experiments@heroacademia` plugin is built). A stale local clone of one of
-these drifts silently: on 2026-07-11 the local `oh-my-experiments` `main` was
-**39 commits behind** origin (stuck at `v0.4.0` while origin had `v0.5.0`/`v0.6.0`),
-noticed only because a mid-conversation "what version is omx" happened to check
-it. The installed plugin was fine (sourced from the marketplace cache, not this
-clone), so nothing surfaced the drift until it was asked about ad hoc. This sweep
-brings those repos up to date as a first-class part of the sync instead.
+`~/claudebase` is not the only repo the user may develop. Personal
+harness/plugin **source** repos can live outside `~/claudebase` — e.g. a dev
+checkout of `oh-my-experiments` at `/root/oh-my-experiments`. This sweep keeps
+such a checkout current so a developer's local edits sit on top of the latest
+`main` instead of drifting silently (observed 2026-07-11: a local
+`oh-my-experiments` `main` was **39 commits behind** origin, `v0.4.0` vs origin
+`v0.6.0`, noticed only by an ad-hoc "what version is omx").
+
+**This sweep is a developer convenience, NOT how the tools get installed.** Do
+not read a stale-clone finding as "the CLI is broken". The `omx` CLI is
+installed from the omx-core BUNDLED IN THE PLUGIN CACHE
+(`installer/lib/omx.sh::resolve_omx_source`, which falls back to
+`~/.claude/plugins/cache/heroacademia/oh-my-experiments/<ver>/omx-core`), so a
+normal user who never clones the repo still gets a working, marketplace-current
+`omx` on every `install.sh` (step 5). A dev checkout, when present, wins that
+resolution so local edits take effect — which is exactly what this sweep keeps
+fresh. So the sweep matters only for machines that carry a dev checkout; on a
+clone-free machine it is correctly a no-op and the CLI is still current.
 
 **Registry — user-maintained list in `settings.local.json` (no auto-discovery).**
 Mirror the established `projectTargets` pattern (`installer/lib/project_hooks.sh`
