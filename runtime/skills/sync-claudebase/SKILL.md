@@ -64,6 +64,7 @@ Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUD
 - `~/claudebase/` is a git repo with `origin` set
 - `claude` CLI on PATH (otherwise the plugin-sync sub-step skips with a warning, which is fine but flag it)
 - `~/claudebase/` working tree is clean — if dirty, **do not pull and do not run install.sh on a dirty tree**. But "dirty" is not automatically "stop": a tracked file like `config/CLAUDE.md` (symlinked to `~/.claude/CLAUDE.md`) is routinely edited in place by a *different* session writing a learning, so the working tree is dirty through no action of this run. Go to **Step 1.5 (Dirty working-tree triage)** to classify the change before deciding — only a change that is genuinely the user's to keep stops the run for a human.
+- (Informational, not a gate) This run also sweeps **personal harness source repos** listed in `~/.claude/settings.local.json`'s `personalRepos` key (e.g. `/root/oh-my-experiments`) for fetch-drift — see **Step 4i**. Absent/empty list → skipped as "none configured"; `/workspace/*` project repos are deliberately out of scope.
 
 ## Procedure
 
@@ -355,6 +356,98 @@ command to confirm the repair actually landed; if it's still BROKEN, that's a
 genuine regression worth step 7 triage (not a stale-cache false negative,
 since `node --check` reads the file fresh every time).
 
+**4i. Personal harness repos up-to-date? (fetch-drift sweep, ask-then-pull)**
+
+`~/claudebase` is not the only repo the user actively develops. Personal
+harness/plugin **source** repos live outside `~/claudebase` — e.g.
+`/root/oh-my-experiments` (the `omx-core` CLI source, whence the
+`oh-my-experiments@heroacademia` plugin is built). A stale local clone of one of
+these drifts silently: on 2026-07-11 the local `oh-my-experiments` `main` was
+**39 commits behind** origin (stuck at `v0.4.0` while origin had `v0.5.0`/`v0.6.0`),
+noticed only because a mid-conversation "what version is omx" happened to check
+it. The installed plugin was fine (sourced from the marketplace cache, not this
+clone), so nothing surfaced the drift until it was asked about ad hoc. This sweep
+brings those repos up to date as a first-class part of the sync instead.
+
+**Registry — user-maintained list in `settings.local.json` (no auto-discovery).**
+Mirror the established `projectTargets` pattern (`installer/lib/project_hooks.sh`
+reads a gitignored per-machine list from `~/.claude/settings.local.json`) — a
+new `personalRepos` key, a JSON array of repo paths (`~` allowed). It is
+per-machine on purpose: which harness repos exist and where they live differs
+by machine, so the list must **not** be committed into the shared repo (a
+committed `config/personal-repos.txt` would tell every machine to sweep a path
+that may not exist there). There is **no hardcoded fallback**: an absent or
+empty list means "none configured" — the sweep is skipped and the summary says
+so. Registering a repo is an explicit user act, in keeping with this skill's
+no-auto-magic style (same reason it never auto-promotes per-machine plugins).
+
+```bash
+CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# One entry per array line; expand a leading ~ ; drop blank lines so an empty/
+# missing personalRepos key yields ZERO elements (not one empty string —
+# `print('\n'.join([]))` emits a lone newline that mapfile would store as a
+# single empty element, making the "0 configured" check misfire).
+mapfile -t PERSONAL_REPOS < <(
+  python3 -c "import json,sys
+d=json.load(open('$CONFIG_DIR/settings.local.json'))
+[print(x) for x in d.get('personalRepos',[])]" 2>/dev/null \
+    | while IFS= read -r p; do [ -n "$p" ] && printf '%s\n' "${p/#\~/$HOME}"; done
+)
+if [ ${#PERSONAL_REPOS[@]} -eq 0 ]; then
+  echo "(4i) no personalRepos configured in settings.local.json — sweep skipped"
+fi
+```
+
+**Do NOT auto-discover** by scanning `~/` for git repos with a `luckkim123`
+origin — too broad (it would sweep unrelated cloned repos), and it would rope in
+the `/workspace/*` UUV RL stack (isaaclab, marinelab, constrained-albc,
+marinegym), which is a **different governance domain**: those have their own git
+workflow rules in `/workspace/.claude/rules/02-operations.md` (baseline-tag +
+`exp/<topic>` branch discipline, explicit-path staging) and must never be
+fetch-swept by this skill. The registry excludes them by simply not listing them
+(and the user should not list them). See Red flags.
+
+**For each `repo` in `PERSONAL_REPOS`** (skip silently if `$repo/.git` is
+absent — a listed path that isn't a repo on this machine is not an error), mirror
+the Step 1 ahead/behind logic exactly:
+
+```bash
+for repo in "${PERSONAL_REPOS[@]}"; do
+  [ -d "$repo/.git" ] || { echo "(4i) $repo: not a git repo here — skip"; continue; }
+  git -C "$repo" fetch --quiet
+  echo "=== $repo ==="; git -C "$repo" status -sb | head -1
+  git -C "$repo" status --porcelain | head -1   # empty => clean tree
+done
+```
+
+Classify per repo (identical governance tiers to Step 1 + Step 4e/4f/4g —
+**detect, then ask, never auto-pull** a repo this skill doesn't structurally own):
+
+- **`0 ahead, 0 behind`** → up to date. Nothing to do.
+- **Behind only + clean tree** → list incoming (`git -C "$repo" log --oneline
+  HEAD..@{u}`), then **ask the user** before pulling — same AskUserQuestion-tier
+  gate as 4e/4f: "`<repo>` is N commits behind origin. Pull `--ff-only` now?"
+  On yes: `git -C "$repo" pull --ff-only`. Never silently auto-pull — unlike
+  `~/claudebase` itself (which this skill owns end-to-end), these are
+  independently-released repos, so the pull is always user-confirmed.
+- **Behind + dirty tree** → do **not** discard uncommitted work. Run the same
+  Step 1.5 triage reasoning (read the diff, decide ABSORBED / UNIQUE /
+  disposable) *or*, if that is too heavy for a repo this skill doesn't own,
+  explicitly report "`<repo>`: behind but tree is dirty — resolve manually" and
+  leave it. Either way, never `git checkout --`/`stash`/`pull` over someone's
+  uncommitted changes in one of these repos automatically.
+- **Ahead only** → local unpushed commits exist. Surface them (`git -C "$repo"
+  log --oneline @{u}..HEAD`); do NOT push (same push-gate as step 8, per-repo).
+- **Diverged** → bail to user for that repo. Never auto-merge.
+
+**Non-goal — do not install/build inside these repos.** This step only syncs git
+state. Do NOT run `pip install -e` (or any build) for a swept repo even after a
+pull — a partial editable reinstall after a branch/state change is a known
+failure mode (`feedback_editable_install_namespace` memory). If a pull lands new
+code that *needs* a reinstall (e.g. omx-core's `console_scripts` changed), the
+step **surfaces** that as a follow-up for the user to run, but does not execute
+it. Same push-gate as step 8: this sweep never pushes in any repo.
+
 ### 5. Run installer
 
 ```bash
@@ -456,6 +549,9 @@ For each new template:
 | "Dirty change conflicts with the pull → discard it so `--ff-only` works" | Only after Step 1.5 classifies it as ABSORBED/disposable. A UNIQUE change is the user's content — back it up to a patch and surface it; a non-owner preserves it out-of-tree (patch/branch), never silently loses it. |
 | "There's a `@old-marketplace` drift — I'll just `claude plugin uninstall <name>@old` to clear it" | `claude plugin uninstall` is **suffix-blind**: it matches the bare plugin name and removes whatever entry it finds — so `uninstall oh-my-experiments@omx` deletes the *enabled* `oh-my-experiments@heroacademia` from `config/settings.json` instead, breaking a healthy plugin (observed 2026-06-12). For a migration-collision drift (same base enabled under another marketplace) let `plugin_sync.py` auto-heal it (it excises `installed_plugins.json` directly), or excise by hand — never the CLI uninstall. If you ever do run it, diff `config/settings.json` immediately and `git checkout --` any wrongful enabled-plugin deletion. |
 | "HUD shows `[OMC] Starting...`, I'll just re-copy the canonical template to fix it" | That IS the bug, not the fix. `/oh-my-claudecode:hud setup`'s own SKILL.md instructs a bare `cp` from the plugin's template — it does not know about claudebase's `hud-customize.sh` local patch layer, so a standalone `hud setup` (outside `install.sh`) silently drops the user's dir:/branch:/model:/effort: customization. Diagnose with step 4h first: if the marker is present but `node --check` fails, it is very likely a *duplicated* customize pass, not upstream corruption — run `installer/install.sh` (which re-copies the raw template AND re-applies `hud-customize.sh` in one atomic step) instead of hand-copying the template. |
+| "I'll just fetch/pull every git repo I can find under `~/`" (step 4i) | Too broad. The sweep is **registry-driven only** (`personalRepos` in `settings.local.json`) — auto-discovery would rope in unrelated cloned repos and, worse, the `/workspace/*` UUV RL stack, which has its own git discipline (`/workspace/.claude/rules/02-operations.md`) and is a different governance domain. If a repo isn't in `personalRepos`, it isn't swept. Never widen the sweep to a directory scan. |
+| "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
+| "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
 
 ## Outputs the user expects after a run
 
@@ -466,6 +562,7 @@ A short summary table:
 | Incoming commits applied | `<sha range or "none">` |
 | Drift findings | `<list, or "none">` |
 | HUD wrapper (4h) | `<"OK" / "was BROKEN, auto-repaired by step 5" / "missing customization, re-applied">` |
+| Personal harness repos (4i) | per swept repo: `<repo>: up to date / X behind (pulled to Y) / X behind (pull deferred) / behind but tree dirty (manual) / N ahead (unpushed) / diverged (needs manual resolution)` — or "none configured" |
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
