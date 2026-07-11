@@ -1,6 +1,6 @@
 ---
 name: kill-session
-description: 'Use when the user wants to terminate AND remove the CURRENT background session it is invoked in — clearing it from the `claude agents` background-job list so it stops lingering as a stopped/done entry. Triggers on "/kill-session", "이 세션 삭제", "이 세션 종료하고 지워", "background session 삭제", "kill this session", "remove this background session", "이 백그라운드 세션 없애줘". Only ever touches the session it runs in (identified by $CLAUDE_JOB_DIR) — never other sessions. This is irreversible: the in-progress conversation ends where it stands and cannot be resumed.'
+description: 'Use when the user wants to terminate/remove the CURRENT background session it is invoked in, or asks how to make a background session disappear from the `claude agents` list. Triggers on "/kill-session", "이 세션 삭제", "이 세션 종료하고 지워", "background session 삭제", "kill this session", "remove this background session", "이 백그라운드 세션 없애줘". IMPORTANT: a background session CANNOT delete itself non-interactively — the daemon respawns it. This skill explains why and points to the one path that works (the `claude agents` TUI). It never touches any other session.'
 triggers:
   - "/kill-session"
   - "kill-session"
@@ -17,67 +17,41 @@ triggers:
 
 # kill-session
 
-Terminate and delete the **current** background session — the one this skill is invoked in — so it disappears from the `claude agents` background-job list instead of lingering as a `stopped`/`done` entry.
+**A background session cannot delete itself. Do not try — you will trigger an infinite respawn loop.** This skill exists to explain that, and to point at the one path that actually removes a background session.
 
-## Scope guarantee (the whole point of this skill)
+## The hard truth (verified 2026-07-11, this exact session)
 
-This skill acts on **exactly one** session: the one it runs in, identified by the `$CLAUDE_JOB_DIR` environment variable that Claude Code injects per session (e.g. `/root/.claude/jobs/5e51adfe`). It never enumerates, selects, or deletes any other session. If you ever find yourself computing a target from anything other than `$CLAUDE_JOB_DIR`, stop — that is a different task (bulk cleanup), not this skill.
+The background daemon (`claude daemon`, a supervisor process) holds a **lease** for every background session, in its own **process memory** — not in any file. As long as that lease is live, the daemon keeps the session alive: if the worker process dies, the daemon claims a fresh worker from its spare pool and re-attaches the session to it. The daemon log shows this as `bg claimed-spare <id> (fleet)` and the terminal shows `[worker crashed (exit 143) — respawning…]`.
 
-## Why a plain `rm` is not enough
+Consequences, all confirmed by experiment:
 
-The background daemon owns a **respawn record**: each job dir holds a `state.json` with `respawnFlags`, and the daemon keeps a rendezvous socket at `/tmp/cc-daemon-*/*/rv/<id>.sock`. If you delete the job dir while the session process is still alive, the daemon can re-materialize the entry from that record. So the correct order is: **remove the respawn record first, then kill the owning process last.** The kill must be the final action because it ends this very session.
+- **`kill <worker-pid>` does not work.** SIGTERM (exit 143) makes the daemon respawn the session from the spare pool within ~1s. Loops forever.
+- **`rm -rf $CLAUDE_JOB_DIR` does not work.** The job dir (`state.json` with `respawnFlags`, the rendezvous socket) is *reconstructed* on respawn. It is a cache of the lease, not the lease itself. Deleting it changes nothing.
+- **Deleting the rendezvous socket does not work.** Same reason.
 
-## Preconditions
+The lease lives in the supervisor's memory and is only released through the daemon's control socket — which the `claude agents` TUI drives. That TUI requires a real TTY (`claude agents` refuses to run when stdout is not a TTY). A background session **has no TTY**, so it cannot issue the release for itself. This is a structural dead end, not a missing flag.
 
-- **Must be a background session.** If `$CLAUDE_JOB_DIR` is empty/unset, this is an interactive session, not a background job — do not run the deletion. Tell the user this command only works inside a background session and stop.
-- **Confirm with the user first.** This is irreversible: the current conversation terminates where it stands and cannot be resumed. State that plainly and get a yes before proceeding (skip only if the user's invoking message already made the intent explicit, e.g. "종료하고 지워줘").
+## What actually removes a background session
 
-## Procedure
+Tell the user to do **one** of these (they act from a real terminal, not from inside the background session):
 
-Run this as a single Bash call. It resolves its own pid from the authoritative `claude agents --json` mapping (job id → pid), removes the respawn record, then kills its own process tree last.
+1. **`claude agents` (interactive TUI).** Open it in a terminal, select the target session, and use the TUI's terminate/remove action. This is the *only* clean, single-session path — it releases the daemon lease so the session does not respawn, then clears it from the list.
 
-```bash
-set -u
-JOB_DIR="${CLAUDE_JOB_DIR:-}"
-if [ -z "$JOB_DIR" ] || [ ! -d "$JOB_DIR" ]; then
-  echo "Not a background session (\$CLAUDE_JOB_DIR unset or missing) — nothing to delete."
-  exit 0
-fi
-ID="$(basename "$JOB_DIR")"
+2. **`claude daemon stop` — only if removing ALL background sessions is acceptable.** This shuts down the supervisor and terminates every background session at once (add `--keep-workers` to leave detached workers running). Do not suggest this when other live sessions must survive — check `claude agents --json` first; right now unrelated sessions are usually running.
 
-# 1. Resolve OUR pid from the daemon's own view (id -> pid). Authoritative.
-PID="$(claude agents --json 2>/dev/null | python3 -c "
-import json,sys
-tgt='$ID'
-try:
-    for a in json.load(sys.stdin):
-        if a.get('id')==tgt:
-            print(a.get('pid') or ''); break
-except Exception:
-    pass
-")"
+After the session is gone, its `~/.claude/jobs/<id>/` dir can be removed if it lingers (only once the daemon no longer holds the lease — i.e. after step 1 or 2).
 
-# 2. Remove the respawn record FIRST so the daemon can't re-materialize us.
-rm -rf "$JOB_DIR"
-# Rendezvous socket (best-effort; ignore if the layout differs).
-rm -f /tmp/cc-daemon-*/*/rv/"$ID".sock 2>/dev/null || true
+## What this skill must NOT do
 
-echo "Removed background session $ID (job dir + rendezvous socket)."
+- **Never run `kill` on the session's own worker, and never `rm -rf $CLAUDE_JOB_DIR`, to "delete this session".** Both fail and the kill path spins the respawn loop that spams `[worker crashed — respawning…]`. This was the original (wrong) implementation; it is preserved here as a warning, not an instruction.
+- **Never touch another session.** Scope, if anything is ever done at the file level, is strictly `$CLAUDE_JOB_DIR` — and even that only *after* the lease is released elsewhere.
 
-# 3. Kill our own process LAST. This ends the session — nothing runs after it.
-if [ -n "$PID" ]; then
-  kill "$PID" 2>/dev/null || true
-else
-  # Fallback: no pid from the daemon view — terminate our own process group.
-  kill -- -"$(ps -o pgid= -p $$ | tr -d ' ')" 2>/dev/null || true
-fi
-```
+## Bulk cleanup of already-dead sessions (a different task)
 
-## After running
+Removing sessions that are **already terminated** (no live worker, no lease) is safe and file-based — this is what "지워줘" usually means when several stale entries pile up:
 
-The Bash call ends the session mid-response, so there is no "after" to narrate — the kill is the last thing that happens. If for some reason the process survives (e.g. `kill` was blocked), report that the job dir was removed but the process is still alive, and the user should terminate it from the `claude agents` view.
+1. `claude agents --json` → note which ids are live (`status: busy`/`idle` with a real pid).
+2. For every `~/.claude/jobs/<id>/` whose id is **not** in that live set, `rm -rf` it.
+3. Leave live ones and the current session alone.
 
-## What this skill is NOT
-
-- **Not bulk cleanup.** Deleting many stopped/done sessions is a separate manual task — enumerate `~/.claude/jobs/*/state.json`, keep only live ones (cross-check `claude agents --json` for `status: busy`/live pids), and `rm -rf` the rest. Do that directly, not through this skill.
-- **Not for interactive sessions.** Those have no `$CLAUDE_JOB_DIR` and are managed by closing the terminal.
+That works because dead sessions have no lease for the daemon to respawn from. Live ones do — which is the whole point above.
