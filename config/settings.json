@@ -130,9 +130,6 @@
     }
   },
   "language": "한국",
-  "alwaysThinkingEnabled": false,
-  "effortLevel": "xhigh",
-  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": false,
