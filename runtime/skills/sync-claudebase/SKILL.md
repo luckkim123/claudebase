@@ -72,7 +72,26 @@ Everywhere the procedure says `cd ~/claudebase && ...`, read that as `cd "$CLAUD
 ```bash
 # Does THIS clone have push access to origin? --dry-run pushes nothing —
 # it only exercises auth + ref-advertisement, so it is safe to probe.
-if git -C "$CLAUDEBASE_ROOT" push --dry-run origin HEAD >/dev/null 2>&1; then
+#
+# IMPORTANT: probe with a NON-CONFLICTING ref, not `HEAD` (a bare local
+# branch name). `push --dry-run origin HEAD` fails for TWO unrelated
+# reasons that look identical from the exit code alone:
+#   1. genuine auth/permission failure (no push access)
+#   2. non-fast-forward rejection (local HEAD is simply behind origin)
+# An owner whose local branch has drifted behind origin (the common case
+# after skipping a sync for a while) hits (2) and gets misclassified as
+# non-owner — exactly the false negative that shipped in the first version
+# of this probe. Push the remote's OWN tip back at itself instead: this can
+# never be non-fast-forward (source == destination's current value), so a
+# rejection here can only mean a real auth failure.
+remote_main="$(git -C "$CLAUDEBASE_ROOT" ls-remote origin refs/heads/main | cut -f1)"
+# Braces around ${remote_main} are load-bearing in zsh: an unbraced
+# "$remote_main:refs/..." is parsed as the `:r` history/parameter
+# modifier (strips to the "root", eating the leading `r` of `refs`),
+# silently mangling the refspec into a bogus ref name. bash never had
+# this problem, but this snippet is copy-pasted into whatever shell the
+# user's terminal runs — brace it so it's correct in both.
+if [ -n "$remote_main" ] && git -C "$CLAUDEBASE_ROOT" push --dry-run origin "${remote_main}:refs/heads/main" >/dev/null 2>&1; then
   CB_PUSH_AUTH=owner
 else
   CB_PUSH_AUTH=non-owner
@@ -83,7 +102,17 @@ echo "push authority: $CB_PUSH_AUTH"
 - `owner` → the push gate (Step 8) and the "commit locally" offer in Step 1.5 apply as written.
 - `non-owner` → **never phrase a push as an option.** A local commit that arises (Step 7's autonomous `fix(install:)` commit, or a UNIQUE change preserved in Step 1.5) stays on this clone; forward it to the repo owner as a patch (`git format-patch -1`) or a PR. Do not ask "push N commits?" — the user cannot, and being asked reads as the skill pushing them toward an action they can't take. Surface the patch/PR path instead.
 
-If the probe is inconclusive (no network, `origin` unreachable), treat as **non-owner** for this run — the safe default is to not offer a push you can't verify will succeed.
+If the probe is inconclusive (no network, `origin` unreachable, `ls-remote` returns nothing), treat as **non-owner** for this run — the safe default is to not offer a push you can't verify will succeed.
+
+> **Why not `HEAD`? (2026-07-13 regression fix).** The original probe used
+> `push --dry-run origin HEAD`, which folds "no auth" and "local branch is
+> behind" into the same failure. Caught live: an owning machine whose local
+> `main` was 8 commits behind `origin/main` got `CB_PUSH_AUTH=non-owner` from
+> this exact bug, immediately after the same probe had shipped as the "fix"
+> for push-authority misdetection. Verified fix: pushing `origin/main`'s own
+> tip back at `refs/heads/main` is a true no-op (`Everything up-to-date`) when
+> auth is fine, regardless of how far behind the local branch is — it only
+> fails on a genuine permission error.
 
 ## Procedure
 
