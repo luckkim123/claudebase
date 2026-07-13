@@ -69,6 +69,21 @@ function Run([scriptblock]$block) {
 # Called after Debug is defined (it relies on it).
 Ensure-ConvenienceTools
 
+# Opt-in: make the `claude` CLI disable mouse capture (drag-select fix) — mirror
+# of install.sh's maybe_enable_claude_mouse. DIVERGENCE (intentional, documented):
+# the Unix fix is a `claude()` shell function sourced from ~/.zshrc|~/.bashrc, and
+# the breakage it fixes (Claude's TUI mouse capture defeating terminal / tmux
+# drag-select) is a Unix-terminal concern. The env vars themselves
+# (CLAUDE_CODE_DISABLE_MOUSE / _NO_FLICKER) are cross-platform, but native Windows
+# Terminal selection is not broken the same way and this path is unverified there.
+# So this is a documented no-op kept for parity; if a Windows user needs it, add a
+# $PROFILE `function claude { $env:CLAUDE_CODE_DISABLE_MOUSE=1; & claude.exe @args }`.
+function Enable-ClaudeMouse {
+    if ($env:INSTALL_CLAUDE_MOUSE -ne '1') { return }
+    Debug "claude-mouse: Unix shell-rc wrapper only; no Windows equivalent shipped (skip)"
+}
+Enable-ClaudeMouse
+
 function Already-Linked([string]$target, [string]$src) {
     if (-not (Test-Path -LiteralPath $target)) { return $false }
     $item = Get-Item -LiteralPath $target -Force

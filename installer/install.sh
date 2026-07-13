@@ -85,6 +85,14 @@ maybe_install_omc_hud
 source "$REPO_DIR/installer/lib/viewer.sh"
 maybe_install_viewer
 
+# Optional opt-in: make the `claude` CLI disable mouse capture so native / tmux
+# drag-select works (sources shell/claude-mouse.sh from the login-shell rc).
+# Default No; the single marker-guarded exception to the symlink-only, never-
+# touch-rc model. See lib/claude_mouse.sh header for why rc-append is required.
+# shellcheck source=lib/claude_mouse.sh
+source "$REPO_DIR/installer/lib/claude_mouse.sh"
+maybe_enable_claude_mouse
+
 # Idempotent editable (re)install of the omx-core CLI → lib/omx.sh. Re-pins the
 # editable install to the current oh-my-experiments checkout so a moved repo
 # (e.g. /workspace -> /root) self-heals here instead of leaving `omx` broken

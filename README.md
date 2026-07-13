@@ -42,6 +42,25 @@ instead):
 Without `INSTALL_TOOLS=1`, a missing tool just prints the manual install
 command for your platform instead.
 
+### Native drag-select in the terminal (opt-in)
+
+Claude Code's TUI captures mouse events, which breaks native / tmux
+drag-to-select (the selection gets "stuck" at the visible screen edge). The
+installer can wrap the `claude` command so it launches with mouse capture
+disabled, restoring terminal selection:
+
+```bash
+INSTALL_CLAUDE_MOUSE=1 installer/install.sh   # non-interactive
+# or just run installer/install.sh and answer [y/N] at the prompt
+```
+
+On yes it appends one marked `source shell/claude-mouse.sh` line to your login
+shell's rc (`~/.zshrc` / `~/.bashrc`) — the only place claudebase writes to your
+rc, marker-guarded so re-runs are a no-op. **Tradeoff**: mouse-off also disables
+in-TUI mouse clicks/scroll (use the keyboard / tmux copy-mode). Revert by
+deleting the `claudebase:claude-mouse` line. Windows: documented no-op (Unix /
+tmux concern).
+
 ## MCP servers with API keys
 
 ```bash

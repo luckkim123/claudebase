@@ -2,6 +2,24 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-07-13 — opt-in: `claude` CLI mouse-capture off (drag-select fix)
+
+New opt-in installer step + `shell/claude-mouse.sh`: wraps the `claude` command
+with `CLAUDE_CODE_DISABLE_MOUSE=1 CLAUDE_CODE_NO_FLICKER=1` so native / tmux
+drag-select works again. Claude Code's TUI captures mouse events, which "sticks"
+terminal selection at the visible screen edge (anthropics/claude-code#66957,
+#63054; tmux#337). Default **No** — this is the single marker-guarded exception
+to claudebase's symlink-only, never-touch-rc model.
+
+### Added
+- `shell/claude-mouse.sh` — sourceable `claude()` wrapper (mouse-off + no-flicker; `command claude` avoids recursion).
+- `installer/lib/claude_mouse.sh` — `maybe_enable_claude_mouse`: opt-in prompt (default No, `INSTALL_CLAUDE_MOUSE=1` forces yes), appends one `# claudebase:claude-mouse`-marked `source` line to the login shell's rc (`~/.zshrc` / `~/.bashrc`). Idempotent: marker present → pure no-op.
+- `installer/install.sh` — wires the step after the viewer opt-in.
+
+### Notes
+- `install.ps1`: documented no-op (mirrors the existing tmux convenience-tool no-op) — the drag-select breakage is a Unix/tmux terminal concern and the env vars are unverified on native Windows Terminal. Upgrade path noted inline.
+- Tradeoff: mouse-off disables in-TUI mouse clicks/scroll — use the keyboard / tmux copy-mode. Revert by deleting the marked rc line.
+
 ## [Unreleased] — 2026-06-17 — drop 5 redundant official plugins (superseded by OMC / superpowers / gh)
 
 Removed 5 official plugins that were never used (`pluginUsage: 0`) and whose

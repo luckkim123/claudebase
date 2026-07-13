@@ -29,7 +29,8 @@ claudebase/
 │   ├── linux/                # apt / dnf / pip
 │   └── windows/              # winget, pip
 ├── shell/
-│   └── tmux.conf             # → ~/.tmux.conf (Unix only)
+│   ├── tmux.conf             # → ~/.tmux.conf (Unix only)
+│   └── claude-mouse.sh       # sourced from login rc (opt-in, Unix only)
 ├── secrets/
 │   ├── secrets.example.env   # tracked sample
 │   └── secrets.env           # **gitignored** — real API keys
@@ -60,6 +61,8 @@ Specs follow a per-topic folder convention: each non-trivial change is paired as
 | `~/.tmux.conf` (Unix) | `<repo>/shell/tmux.conf` |
 
 `~/.claude/mcp.json` is **rendered**, not symlinked — `installer/install.sh` substitutes `${VAR}` placeholders in `config/mcp.template.json` from `secrets/secrets.env` and writes the result. Re-render is idempotent: if the rendered content matches what's already on disk, the file is left alone.
+
+`shell/claude-mouse.sh` is **sourced**, not symlinked — the opt-in `maybe_enable_claude_mouse` step (default No, or `INSTALL_CLAUDE_MOUSE=1`) appends one marker-guarded `source` line to the login shell's rc (`~/.zshrc` / `~/.bashrc`). It is the **only** place the installer writes into the user's rc; the `claudebase:claude-mouse` marker makes re-runs a no-op. See `lib/claude_mouse.sh` for why an rc-append (not a symlink or settings.json `env`) is the required mechanism.
 
 The installer is **idempotent**: a second run prints zero `linked:` / `rendered:` lines. That's the contract — if you see actions on a second run, the installer has a bug.
 
