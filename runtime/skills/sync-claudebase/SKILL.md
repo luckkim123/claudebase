@@ -106,6 +106,18 @@ For each dirty tracked file (`git status --porcelain`):
      - **Non-owner (cannot push `origin`)** → committing locally is fine for *their* clone, but it will make them diverge from `origin` on the next sync and they cannot upstream it. Guide them instead: keep the change as a **patch file** (`git diff <file> > ~/my-claudebase-change.patch`) or a local branch, `git checkout --` the tracked file so `--ff-only` works, then either (a) send the patch to the repo owner to merge, or (b) re-apply the patch after each pull if it's a personal-machine tweak. The point: a non-owner is never forced to choose between "lose my change" and "block forever" — preserve it out-of-tree and keep syncing.
    - **UNIQUE but disposable** (scratch edit, debug print, abandoned experiment) → confirm with the user it's disposable, then discard as in the ABSORBED path (patch-backup is cheap insurance even here).
 
+**Known pattern — `config/settings.json` per-machine key leak (`model`/`effortLevel`/`alwaysThinkingEnabled`/`tui`/`theme`).** If the dirty diff in `config/settings.json` touches any of these five keys, this is **not** a fresh UNIQUE decision to put to the user — it's an already-settled convention violation. Commit `654484a` ("move per-machine prefs out of synced settings.json") established that these keys live in `settings.local.json` only; `templates/settings.local.example.json`'s own `_comment` spells out the same rule; and commit `b70396a` shows this exact leak already recurred once (reintroduced by a ponytail revert). The likely cause is a live session writing `/config` changes directly into the symlinked `~/.claude/settings.json`, which resolves to this tracked file. Handle it without asking:
+
+```bash
+# For each of model/effortLevel/alwaysThinkingEnabled/tui/theme present in the
+# config/settings.json diff: merge its value into settings.local.json (only if
+# absent there — never clobber an existing local override), back up the full
+# diff to a patch (cheap insurance), then revert config/settings.json.
+git diff config/settings.json > /tmp/claudebase-local-settings-leak-$(date +%Y%m%d-%H%M%S).patch
+git checkout -- config/settings.json
+```
+Then edit `~/.claude/settings.local.json` (the merge target) to add whichever of the five keys were missing there, using the leaked value. Report the auto-fix in the sync summary ("settings.json per-machine leak: moved `<keys>` to settings.local.json") — don't gate this specific, already-decided pattern behind `AskUserQuestion`. A dirty diff touching *other* keys still falls through to the general ABSORBED/UNIQUE/disposable triage above.
+
 ### 2. Analyze the incoming diff
 
 For each new commit (`git show --stat <sha>`), classify which subsystem it touches:
@@ -559,6 +571,7 @@ For each new template:
 | "I'll just fetch/pull every git repo I can find under `~/`" (step 4i) | Too broad. The sweep is **registry-driven only** (`personalRepos` in `settings.local.json`) — auto-discovery would rope in unrelated cloned repos and, worse, the `/workspace/*` UUV RL stack, which has its own git discipline (`/workspace/.claude/rules/02-operations.md`) and is a different governance domain. If a repo isn't in `personalRepos`, it isn't swept. Never widen the sweep to a directory scan. |
 | "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
 | "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
+| "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
 
 ## Outputs the user expects after a run
 
