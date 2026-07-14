@@ -132,7 +132,6 @@
   "language": "한국",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "omcHud": {
@@ -190,5 +189,6 @@
         "sessionSummary"
       ]
     }
-  }
+  },
+  "remoteControlAtStartup": true
 }
