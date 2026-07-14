@@ -83,7 +83,6 @@
     "learning-output-style@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "axlabs-mckinsey-pptx@axlabs": true,
     "oh-my-claudecode@omc": true,
     "oh-my-experiments@heroacademia": true,
     "oh-my-docs@heroacademia": true,
@@ -93,13 +92,6 @@
     "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
-    "axlabs": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/seulee26/mckinsey-pptx.git"
-      },
-      "autoUpdate": true
-    },
     "ponytail": {
       "source": {
         "source": "git",
@@ -132,6 +124,7 @@
   "language": "한국",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "omcHud": {
@@ -189,6 +182,5 @@
         "sessionSummary"
       ]
     }
-  },
-  "remoteControlAtStartup": true
+  }
 }

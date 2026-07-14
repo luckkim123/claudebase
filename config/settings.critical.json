@@ -7,7 +7,6 @@
     "SessionStart": ["SURROGATE_AUTO_REPAIR_ON_START"]
   },
   "requiredPlugins": [
-    "axlabs-mckinsey-pptx@axlabs",
     "clangd-lsp@claude-plugins-official",
     "claude-code-setup@claude-plugins-official",
     "claude-md-management@claude-plugins-official",
@@ -22,7 +21,7 @@
     "pyright-lsp@claude-plugins-official",
     "superpowers@claude-plugins-official"
   ],
-  "requiredMarketplaces": ["axlabs", "heroacademia", "omc"],
+  "requiredMarketplaces": ["heroacademia", "omc"],
   "requiredHudLayout": ["line1", "main"],
   "requiredScalars": ["language", "remoteControlAtStartup", "skipWorkflowUsageWarning"]
 }
