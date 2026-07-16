@@ -1,7 +1,8 @@
 # shellcheck shell=bash
-# installer/lib/claude_mouse.sh — OPT-IN: make the `claude` CLI disable mouse
-# capture (CLAUDE_CODE_DISABLE_MOUSE=1) so native / tmux drag-select works
-# again. See README + shell/claude-mouse.sh.
+# installer/lib/claude_mouse.sh — OPT-IN: make the `claude` CLI launch with the
+# fullscreen renderer (CLAUDE_CODE_NO_FLICKER=1). See README +
+# shell/claude-mouse.sh. Name is historical (was a mouse-capture opt-out until
+# 2026-07-16); kept so installed rc lines keep resolving.
 #
 # Source order: after lib/args.sh (DRY_RUN) and lib/log.sh (log/debug/run).
 #
@@ -10,12 +11,14 @@
 #                                line to the user's login-shell rc.
 #
 # Why opt-in (default No) AND why this is the ONE rc-append exception:
-# the fix is a `claude()` shell function that must be *sourced* by the login
-# shell — settings.json `env` is read too late for the TUI's mouse init, and
-# tmux.conf can't set the claude process's env. claudebase is otherwise
-# symlink-only and never mutates the user's rc; this is the single,
-# marker-guarded exception. Mouse-off also disables in-TUI mouse clicks (a real
-# tradeoff), so default No and ask once — same spirit as lib/viewer.sh.
+# it must be a `claude()` shell function *sourced* by the login shell — the
+# alternative, `/tui fullscreen`, persists the pref into ~/.claude/settings.json,
+# which claudebase symlinks to the tracked config/settings.json (the recurring
+# per-machine leak of 654484a / 8904b63); and tmux.conf can't set the claude
+# process's env. claudebase is otherwise symlink-only and never mutates the
+# user's rc; this is the single, marker-guarded exception. Fullscreen is an
+# upstream research preview and trades away the terminal's native scrollback (a
+# real tradeoff), so default No and ask once — same spirit as lib/viewer.sh.
 #
 # Idempotency (repo rule #5): once the marked line exists, a re-run finds the
 # marker and is a pure no-op. Non-interactive runs skip silently unless
@@ -49,7 +52,7 @@ maybe_enable_claude_mouse() {
   if [[ "${INSTALL_CLAUDE_MOUSE:-}" != "1" ]]; then
     [[ -t 0 ]] || { debug "claude-mouse: non-interactive, skipping opt-in prompt"; return; }
     local reply=""
-    printf '[install] Optional: make the claude CLI disable mouse capture so drag-select works (also disables in-TUI mouse clicks)? [y/N] '
+    printf '[install] Optional: launch the claude CLI with the fullscreen renderer (no flicker + in-app mouse scroll/select; gives up the terminal'"'"'s native scrollback)? [y/N] '
     read -r reply || reply=""
     case "$reply" in
       y|Y|yes|YES) ;;
@@ -65,7 +68,7 @@ maybe_enable_claude_mouse() {
   # Single mutation: append the marked source line. The marker makes every
   # later run a no-op, and revert = delete these two lines.
   {
-    printf '\n# %s — disable mouse capture for the claude CLI (drag-select fix)\n' "$CLAUDE_MOUSE_MARKER"
+    printf '\n# %s — fullscreen renderer for the claude CLI\n' "$CLAUDE_MOUSE_MARKER"
     printf '[ -f "%s" ] && source "%s"\n' "$snippet" "$snippet"
   } >> "$rc"
   log "claude-mouse: enabled in $rc (open a new shell to apply)"

@@ -69,15 +69,16 @@ function Run([scriptblock]$block) {
 # Called after Debug is defined (it relies on it).
 Ensure-ConvenienceTools
 
-# Opt-in: make the `claude` CLI disable mouse capture (drag-select fix) — mirror
-# of install.sh's maybe_enable_claude_mouse. DIVERGENCE (intentional, documented):
-# the Unix fix is a `claude()` shell function sourced from ~/.zshrc|~/.bashrc, and
-# the breakage it fixes (Claude's TUI mouse capture defeating terminal / tmux
-# drag-select) is a Unix-terminal concern. The env var itself
-# (CLAUDE_CODE_DISABLE_MOUSE) is cross-platform, but native Windows Terminal
-# selection is not broken the same way and this path is unverified there.
-# So this is a documented no-op kept for parity; if a Windows user needs it, add a
-# $PROFILE `function claude { $env:CLAUDE_CODE_DISABLE_MOUSE=1; & claude.exe @args }`.
+# Opt-in: launch the `claude` CLI with the fullscreen renderer — mirror of
+# install.sh's maybe_enable_claude_mouse. DIVERGENCE (intentional, documented):
+# the Unix path is a `claude()` shell function sourced from ~/.zshrc|~/.bashrc,
+# and the reason it exists there is to keep the pref out of the claudebase-
+# symlinked ~/.claude/settings.json — a Unix-symlink concern. The env var itself
+# (CLAUDE_CODE_NO_FLICKER) is cross-platform, but this path is unverified on
+# native Windows Terminal, where upstream also warns about stale-cell artifacts
+# (CLAUDE_CODE_ALT_SCREEN_FULL_REPAINT). So this is a documented no-op kept for
+# parity; if a Windows user needs it, add a $PROFILE
+# `function claude { $env:CLAUDE_CODE_NO_FLICKER=1; & claude.exe @args }`.
 function Enable-ClaudeMouse {
     if ($env:INSTALL_CLAUDE_MOUSE -ne '1') { return }
     Debug "claude-mouse: Unix shell-rc wrapper only; no Windows equivalent shipped (skip)"

@@ -2,24 +2,34 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — 2026-07-13 — opt-in: `claude` CLI mouse-capture off (drag-select fix)
+## [Unreleased] — 2026-07-16 — opt-in: `claude` CLI fullscreen renderer (leak-free, per-machine)
 
 New opt-in installer step + `shell/claude-mouse.sh`: wraps the `claude` command
-with `CLAUDE_CODE_DISABLE_MOUSE=1` so native / tmux drag-select works again.
-Claude Code's TUI captures mouse events, which "sticks" terminal selection at
-the visible screen edge (anthropics/claude-code#66957,
-#63054; tmux#337). Default **No** — this is the single marker-guarded exception
-to claudebase's symlink-only, never-touch-rc model.
+with `CLAUDE_CODE_NO_FLICKER=1` so it launches into the fullscreen renderer —
+no flicker, flat memory in long conversations, and in-app mouse scroll and
+selection. Default **No** — this is the single marker-guarded exception to
+claudebase's symlink-only, never-touch-rc model.
+
+**Why an rc env var and not `/tui fullscreen`.** Upstream calls the `tui`
+setting and `CLAUDE_CODE_NO_FLICKER` equivalent, but `/tui` persists `tui` into
+`~/.claude/settings.json`, which claudebase symlinks to the *tracked*
+`config/settings.json` — so the pref leaks into the synced repo on every use.
+That is the recurring per-machine-key leak `654484a` and `8904b63` are about; an
+rc env var is per-machine by construction and cannot leak.
 
 ### Added
-- `shell/claude-mouse.sh` — sourceable `claude()` wrapper (mouse-off; `command claude` avoids recursion).
+- `shell/claude-mouse.sh` — sourceable `claude()` wrapper (`CLAUDE_CODE_NO_FLICKER=1` + `CLAUDE_CODE_SCROLL_SPEED=3`; `command claude` avoids recursion).
 - `installer/lib/claude_mouse.sh` — `maybe_enable_claude_mouse`: opt-in prompt (default No, `INSTALL_CLAUDE_MOUSE=1` forces yes), appends one `# claudebase:claude-mouse`-marked `source` line to the login shell's rc (`~/.zshrc` / `~/.bashrc`). Idempotent: marker present → pure no-op.
 - `installer/install.sh` — wires the step after the viewer opt-in.
 
 ### Notes
-- `install.ps1`: documented no-op (mirrors the existing tmux convenience-tool no-op) — the drag-select breakage is a Unix/tmux terminal concern and the env vars are unverified on native Windows Terminal. Upgrade path noted inline.
-- Tradeoff: mouse-off disables in-TUI mouse clicks/scroll — use the keyboard / tmux copy-mode. Revert by deleting the marked rc line.
-- Deliberately **not** paired with `CLAUDE_CODE_NO_FLICKER=1`: despite the name it opts into Claude's fullscreen renderer (alternate screen buffer), which leaves tmux/terminal scrollback empty (verified: tmux `history_size=0`) — killing the very copy-mode fallback the tradeoff above recommends. The pair left no way to scroll back at all. Keep the flicker; keep the scrollback.
+- File/marker names (`claude-mouse`) are **historical** — this began as a `CLAUDE_CODE_DISABLE_MOUSE=1` mouse-capture opt-out for drag-select (anthropics/claude-code#66957, #63054; tmux#337). Kept as-is so already-installed rc lines keep resolving; a rename would silently no-op them on other machines.
+- Why `DISABLE_MOUSE` was dropped: its documented cost is losing "wheel scrolling inside Claude Code", and fullscreen's alternate screen buffer leaves tmux/terminal scrollback empty (verified: tmux `history_size=0`). Together they removed *every* way to scroll back — mouse-off hands the wheel to tmux, fullscreen leaves tmux nothing to scroll. Fullscreen's own capture is also strictly better than the native selection the opt-out protected: click-drag selects and auto-copies on mouse release (and to the tmux paste buffer inside tmux). One-off native selection: hold `Shift` (VS Code / most terminals), `Fn` (Terminal.app), `Option` (iTerm2).
+- `CLAUDE_CODE_SCROLL_SPEED=3`: the VS Code integrated terminal sends exactly one wheel event per notch with no multiplier; `3` matches vim's default. Drop it on terminals that already amplify (Ghostty, iTerm2 with faster scrolling).
+- Tradeoff: fullscreen gives up the terminal's native scrollback, so `Cmd+f` and tmux copy mode can't see the conversation. Use `Ctrl+o` transcript mode (then `[` writes it back to native scrollback, `/` searches). Revert by deleting the marked rc line.
+- Requires tmux `set -g mouse on` for wheel scrolling (already set in `tmux/.tmux.conf`). Incompatible with iTerm2's `tmux -CC` integration mode.
+- `install.ps1`: documented no-op (mirrors the existing tmux convenience-tool no-op) — unverified on native Windows Terminal, where upstream warns about stale-cell artifacts. Upgrade path noted inline.
+- Fullscreen is an upstream **research preview**; behavior may change.
 
 ## [Unreleased] — 2026-06-17 — drop 5 redundant official plugins (superseded by OMC / superpowers / gh)
 

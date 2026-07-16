@@ -85,8 +85,8 @@ maybe_install_omc_hud
 source "$REPO_DIR/installer/lib/viewer.sh"
 maybe_install_viewer
 
-# Optional opt-in: make the `claude` CLI disable mouse capture so native / tmux
-# drag-select works (sources shell/claude-mouse.sh from the login-shell rc).
+# Optional opt-in: launch the `claude` CLI with the fullscreen renderer
+# (sources shell/claude-mouse.sh from the login-shell rc).
 # Default No; the single marker-guarded exception to the symlink-only, never-
 # touch-rc model. See lib/claude_mouse.sh header for why rc-append is required.
 # shellcheck source=lib/claude_mouse.sh
