@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # installer/lib/claude_mouse.sh — OPT-IN: make the `claude` CLI disable mouse
-# capture (CLAUDE_CODE_DISABLE_MOUSE=1 + CLAUDE_CODE_NO_FLICKER=1) so native /
-# tmux drag-select works again. See README + shell/claude-mouse.sh.
+# capture (CLAUDE_CODE_DISABLE_MOUSE=1) so native / tmux drag-select works
+# again. See README + shell/claude-mouse.sh.
 #
 # Source order: after lib/args.sh (DRY_RUN) and lib/log.sh (log/debug/run).
 #

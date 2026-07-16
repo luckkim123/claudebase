@@ -73,9 +73,9 @@ Ensure-ConvenienceTools
 # of install.sh's maybe_enable_claude_mouse. DIVERGENCE (intentional, documented):
 # the Unix fix is a `claude()` shell function sourced from ~/.zshrc|~/.bashrc, and
 # the breakage it fixes (Claude's TUI mouse capture defeating terminal / tmux
-# drag-select) is a Unix-terminal concern. The env vars themselves
-# (CLAUDE_CODE_DISABLE_MOUSE / _NO_FLICKER) are cross-platform, but native Windows
-# Terminal selection is not broken the same way and this path is unverified there.
+# drag-select) is a Unix-terminal concern. The env var itself
+# (CLAUDE_CODE_DISABLE_MOUSE) is cross-platform, but native Windows Terminal
+# selection is not broken the same way and this path is unverified there.
 # So this is a documented no-op kept for parity; if a Windows user needs it, add a
 # $PROFILE `function claude { $env:CLAUDE_CODE_DISABLE_MOUSE=1; & claude.exe @args }`.
 function Enable-ClaudeMouse {
