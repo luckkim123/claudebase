@@ -5,6 +5,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -122,6 +123,7 @@
     }
   },
   "language": "한국",
+  "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": true,
