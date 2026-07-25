@@ -61,6 +61,46 @@ in-TUI mouse clicks/scroll (use the keyboard / tmux copy-mode). Revert by
 deleting the `claudebase:claude-mouse` line. Windows: documented no-op (Unix /
 tmux concern).
 
+### Token compression via headroom (opt-in)
+
+`headroom` routes Claude Code through a **local** proxy that compresses tool
+outputs, file reads, and logs before they reach the model — cutting input
+tokens (docs ~20 %, JSON 60–95 %) with the same answers. It runs on your
+machine; data never leaves it. The CLI ships via **pip** (the npm `headroom-ai`
+is an SDK, not the CLI).
+
+```bash
+pip install "headroom-ai[all]"     # needs Python >=3.10
+headroom wrap claude               # launch Claude Code through the proxy (:8787)
+headroom doctor                    # health-check the integration
+headroom dashboard                 # live token savings
+```
+
+Opt-in and per-machine — nothing is installed by `install.sh`. Running
+`/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
+(default No). See [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) for the
+weekly savings-vs-quality loop this feeds.
+
+### Optional extra plugins (opt-in)
+
+A few non-core plugins are available as opt-in personal extras — **not** enabled
+lab-wide (they're absent from `config/settings.json`):
+
+| Plugin | Marketplace | What it is |
+|:---|:---|:---|
+| `remotion` | `remotion-dev/claude-code-plugin` | programmatic video (React / Remotion) |
+| `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | UI/UX design intelligence |
+| `marketing-skills` | `coreyhaines31/marketingskills` | 60+ marketing skills |
+| `claude-mem` | `thedotmack/claude-mem` | cross-session memory (adds session-start injection — measure it, see fitting doc) |
+
+Enable them by running `/sync-claudebase` (step 4k detects, asks per plugin, then
+registers the marketplace + installs each at user scope), or manually:
+
+```bash
+claude plugin marketplace add <marketplace-ref>
+claude plugin install <plugin> -s user
+```
+
 ## MCP servers with API keys
 
 ```bash

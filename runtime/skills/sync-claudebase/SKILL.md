@@ -467,6 +467,97 @@ code that *needs* a reinstall (e.g. omx-core's `console_scripts` changed), the
 step **surfaces** that as a follow-up for the user to run, but does not execute
 it. Same push-gate as step 8: this sweep never pushes in any repo.
 
+**4j. `headroom` token-compression CLI present? (detect-then-ask install)**
+
+`headroom` (opt-in — see README "Token compression via headroom") wraps Claude
+Code through a local compression proxy to cut input tokens. It's a per-machine
+pip tool that `install.sh` does **not** install, so a freshly-synced machine may
+be missing it. Detect and offer, never auto-install (pip is non-idempotent and
+needs Python >=3.10):
+
+```bash
+if command -v headroom >/dev/null 2>&1; then
+  echo "(4j) headroom present: $(headroom --version 2>/dev/null)"
+else
+  echo "(4j) headroom not installed"
+fi
+```
+
+If missing, **ask** (same governance as 4e/4f — detect-then-ask, never
+auto-apply):
+
+> "`headroom` (token-compression proxy for `claude`) isn't installed on this
+> machine. Install it now? (`pip install "headroom-ai[all]"`, needs Python >=3.10)"
+
+On yes, install with a Python >=3.10 interpreter (macOS system `python3` is 3.9 —
+prefer a real `python3.1x`; add `--break-system-packages` only if the chosen
+interpreter is PEP-668 externally-managed):
+
+```bash
+PY="$(command -v python3.13 || command -v python3.12 || command -v python3.11 || echo python3)"
+"$PY" -m pip install "headroom-ai[all]"
+headroom doctor      # confirm the integration after install
+```
+
+Then remind the user it's opt-in per launch — `headroom wrap claude` (not a
+persistent wrapper; it sets `ANTHROPIC_BASE_URL` to the local proxy only for
+that session). Report the outcome in the summary.
+
+**Why ask, not auto:** pip install is non-idempotent and pulls a large
+dependency set, and headroom changes how `claude` launches. Folding it into
+step 5's install.sh would break that step's idempotency contract — same reason
+`--update` (4g) stays opt-in.
+
+**4k. Optional personal plugins enabled? (detect-then-ask, per plugin)**
+
+Four non-core plugins are opt-in personal extras — deliberately **not** in
+`config/settings.json` (never forced lab-wide) and their marketplaces **not** in
+`extraKnownMarketplaces` (so `install.sh`'s plugin sync won't register them; it
+resolves marketplaces from `config/settings.json` only — `plugin_sync.py`
+`_marketplace_source_arg`). That means the *only* place they get enabled is here,
+on explicit yes. Candidates:
+
+| Plugin | Marketplace add ref | Install target |
+|:---|:---|:---|
+| `remotion` | `remotion-dev/claude-code-plugin` | `remotion@remotion` |
+| `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | `ui-ux-pro-max@ui-ux-pro-max-skill` |
+| `marketing-skills` | `coreyhaines31/marketingskills` | `marketing-skills@marketingskills` |
+| `claude-mem` | `thedotmack/claude-mem` | `claude-mem@claude-mem` |
+
+Detect which are already installed:
+
+```bash
+claude plugin list 2>/dev/null | grep -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' \
+  || echo "(4k) none of the optional extras installed"
+```
+
+**Ask per plugin** for each missing one (they serve different purposes — video,
+design, marketing, memory — the user may want some and not others):
+
+> "Optional plugin `<name>` (<what it is>) isn't enabled. Add it now?"
+
+On yes:
+
+```bash
+claude plugin marketplace add <marketplace-ref>       # note the marketplace NAME it reports
+claude plugin install <plugin>@<marketplace-name> -s user
+```
+
+Then record it in `~/.claude/settings.local.json` `enabledPlugins` (e.g.
+`"remotion@remotion": true`) so future syncs don't flag it as reverse drift
+(4g / `find_drift`). The `@<marketplace-name>` suffix must match the name the
+marketplace declares in its `marketplace.json` — usually the repo name, but
+verify from the `marketplace add` output (e.g. `coreyhaines31/marketingskills`'s
+marketplace name is `marketingskills`). Adding entries to `settings.local.json`
+is fine; deleting/restructuring it needs a yes (same rule as the Red-flags
+table). Tell the user to **restart** Claude Code afterward — `claude plugin
+install` notes "restart required".
+
+**Caution — `claude-mem`:** it injects prior-session context at session start,
+which *adds* to the always-on input that headroom (4j) is cutting, and overlaps
+the existing memory stack (`MEMORY.md`, OMC wiki, omp secretary). Offer it as a
+measured experiment, not a default — see `docs/ai-usage-fitting.md`.
+
 ### 5. Run installer
 
 ```bash
@@ -586,6 +677,8 @@ A short summary table:
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
+| headroom CLI (4j) | `<"present (vX)" / "installed" / "offered, declined" / "not installed">` |
+| Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |
