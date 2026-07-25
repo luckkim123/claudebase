@@ -2,6 +2,20 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-07-26 — opt-in: `headroom` token compression, AI-usage fitting loop, optional plugins
+
+Three opt-in additions, all per-machine and absent from the lab-forced
+`config/settings.json` — nothing here runs in `install.sh`.
+
+### Added
+- **`headroom` token compression (opt-in).** README subsection + `sync-claudebase` step 4j (detect-then-ask `pip install "headroom-ai[all]"`; Python ≥3.10). `headroom wrap claude` routes Claude Code through a local, on-machine compression proxy that cuts *dynamic* input tokens (docs ~20 %, JSON 60–95 %) with the same answers. The npm `headroom-ai` is SDK-only; the CLI ships via pip.
+- **`docs/ai-usage-fitting.md`** — a weekly loop to cut input tokens without losing answer quality: audit always-on injection (static) vs tool/file output (dynamic), turn repeated judgments into terse gated rules, compress the dynamic half with headroom, and review savings % **and** answer quality together. `config/CLAUDE.md` → Workflow gets a one-line pointer.
+- **Optional personal plugins (opt-in)** via `sync-claudebase` step 4k (detect-then-ask, per plugin): `remotion`, `ui-ux-pro-max`, `marketing-skills`, `claude-mem`. Declared in README + `templates/settings.local.example.json`; **not** enabled lab-wide and their marketplaces are not registered in `config/settings.json` — enabled only on explicit yes at user scope.
+
+### Notes
+- `claude-mem` injects prior-session context at session start — it *adds* to the always-on input that headroom does not compress, and overlaps the existing memory stack (`MEMORY.md`, OMC wiki, omp secretary). Flagged in the fitting doc + step 4k as the loop's first measured subject (measure net effect before keeping).
+- The static baseline behind the fitting doc was measured on the maintainer's machine 2026-07-25 (routing ~25 KB/turn, `MEMORY.md` 31.7 KB/session) and is illustrative, not universal.
+
 ## [Unreleased] — 2026-07-16 — opt-in: `claude` CLI fullscreen renderer (leak-free, per-machine)
 
 New opt-in installer step + `shell/claude-mouse.sh`: wraps the `claude` command
