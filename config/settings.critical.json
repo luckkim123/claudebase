@@ -3,7 +3,7 @@
   "hookMarkers": {
     "_comment": "Each marker string must appear in some hooks[].hooks[].command. These are the defense hooks the CLI shrink drops first.",
     "PreToolUse": ["ASKUSERQUESTION_GUARD"],
-    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD"],
+    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD", "EMOJI_GUARD"],
     "SessionStart": ["SURROGATE_AUTO_REPAIR_ON_START"]
   },
   "requiredPlugins": [

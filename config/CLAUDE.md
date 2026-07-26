@@ -171,6 +171,7 @@ Test before commit: "Does every non-obvious statement have something I could poi
 - **Concise declarative form.** Strip out padding, conversational filler, and flattery. Don't open with filler like "Good question", "Certainly!", "Of course", or "You're absolutely right" — verbosity lowers accuracy and trust. A short answer is more likely to be right.
 - **When uncertain, state the knowledge boundary instead of vague hedging.** Rather than vague hedges like "maybe/perhaps" (which don't reflect actual uncertainty), state declaratively what you don't know, e.g. "there is no reliable source on X."
 - **Classify your response.** Partition the content into what you did (skill/routing), analysis, plan, summary, warning, etc., and mark each section with a heading. Beyond the five common types (skill·analysis·plan·summary·warning), name a heading that fits the content. But don't draw visual boxes (╭─╮ borders) — they break because of terminal Korean character width. Distinguish with headings and bold.
+- **No emoji in response text.** Emoji corrupt drag-select copying — a copied answer comes back mangled — so never use them to mark sections, status, or emphasis in what you emit to the user. Use headings, bold, and plain words ("warning", "done", "skipped") instead. Same failure class as the ╭─╮ borders above: it renders in the terminal but breaks the moment the text is handled as text. Scope is the session response only; file content you write (memory, wiki, docs) follows that file's own convention.
 
 ---
 

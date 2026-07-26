@@ -60,6 +60,12 @@
             "command": "# ASKUSERQUESTION_RETRY_GUARD\npython3 ~/claudebase/runtime/hooks/askuserquestion_retry.py 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Recovering empty AskUserQuestion calls"
+          },
+          {
+            "type": "command",
+            "command": "# EMOJI_GUARD\npython3 ~/claudebase/runtime/hooks/emoji_guard.py 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking response text for emoji"
           }
         ]
       }
