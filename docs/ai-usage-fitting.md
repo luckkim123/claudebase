@@ -49,7 +49,7 @@ net negative.
 
 ## 3. Compress with headroom (opt-in)
 
-See [README → Token compression via headroom](../README.md#token-compression-via-headroom-opt-in).
+See [docs/headroom.md](headroom.md).
 `headroom wrap claude` routes Claude Code through a local proxy that compresses
 dynamic input before it reaches the model (local-only — data stays on the
 machine).

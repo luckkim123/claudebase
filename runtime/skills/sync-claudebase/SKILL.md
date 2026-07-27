@@ -536,7 +536,7 @@ it. Same push-gate as step 8: this sweep never pushes in any repo.
 
 **4j. `headroom` token-compression CLI present? (detect-then-ask install)**
 
-`headroom` (opt-in — see README "Token compression via headroom") wraps Claude
+`headroom` (opt-in — see `docs/headroom.md` in claudebase) wraps Claude
 Code through a local compression proxy to cut input tokens. It's a per-machine
 pip tool that `install.sh` does **not** install, so a freshly-synced machine may
 be missing it. Detect and offer, never auto-install (pip is non-idempotent and
