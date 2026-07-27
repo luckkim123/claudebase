@@ -617,6 +617,57 @@ which *adds* to the always-on input that headroom (4j) is cutting, and overlaps
 the existing memory stack (`MEMORY.md`, OMC wiki, omp secretary). Offer it as a
 measured experiment, not a default — see `docs/ai-usage-fitting.md`.
 
+**Prerequisite check — `claude-mem` needs the `bun` runtime (2026-07-27 gap,
+found live).** `claude-mem`'s own `hooks/hooks.json` routes every hook
+(`SessionStart`, `PostToolUse`, `Stop`, etc.) through `scripts/bun-runner.js`,
+which requires the `bun` binary. Run this check whether `claude-mem` is newly
+offered above OR **already installed** — "installed" only means the plugin
+directory + hook manifest exist, not that the hooks can execute. Verified live:
+plugin installed 2026-07-25, zero observation/DB data anywhere on disk two days
+later — every hook invocation was silently failing on `bun: command not found`.
+
+```bash
+if command -v bun >/dev/null 2>&1 || [ -x "$HOME/.bun/bin/bun" ]; then
+  echo "(4k) bun present — claude-mem hooks can run"
+else
+  echo "(4k) claude-mem is installed (or being installed) but bun is MISSING"
+fi
+```
+
+If `claude-mem` is installed/being installed and `bun` is missing, **ask** (same
+detect-then-ask governance as the rest of this section):
+
+> "`claude-mem`은 hook 실행에 `bun` 런타임이 필요한데 이 머신엔 없습니다.
+> 설치할까요? (`curl -fsSL https://bun.sh/install | bash` — Homebrew tap
+> 경로는 Xcode/CLT가 오래된 머신에서 실패할 수 있음, 실측 확인됨)"
+
+On yes:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+**Then add the PATH export to `~/.zprofile`, not just the installer's default
+`~/.zshrc`.** `claude-mem`'s hook commands resolve PATH via
+`$SHELL -lc 'echo $PATH'` — a login-but-non-interactive invocation. zsh sources
+`.zprofile` for that, but **not** `.zshrc` (interactive-only by zsh's own
+design). The bun installer only appends to `.zshrc`, so a bare install leaves
+the hook's own PATH-resolution trick unable to find it — verified live:
+`zsh -lc 'command -v bun'` failed until the export was duplicated into
+`.zprofile`.
+
+```bash
+grep -q 'BUN_INSTALL' ~/.zprofile 2>/dev/null || cat >> ~/.zprofile <<'EOF'
+
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+EOF
+zsh -lc 'command -v bun && bun --version'   # must print a path + version
+```
+
+Tell the user hooks take effect from the **next** session (`SessionStart` fires
+once per session start) — this sync cannot backfill data for the current one.
+
 ### 5. Run installer
 
 ```bash
