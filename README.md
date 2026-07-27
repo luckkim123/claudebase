@@ -76,10 +76,19 @@ headroom doctor                    # health-check the integration
 headroom dashboard                 # live token savings
 ```
 
+**Installing it does not turn it on.** `pip install` only puts the CLI on the
+machine — compression starts only when Claude Code is *launched* through the
+proxy, so a plain `claude` bypasses it entirely and silently. The tell is
+`headroom doctor`: a machine that installed it and never wrapped reports
+`proxy: not reachable`, `wrap_marker: no wrap marker found`, and
+`savings: no savings recorded yet`. Non-zero savings is the only proof it is
+actually routing.
+
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
-(default No). See [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) for the
-weekly savings-vs-quality loop this feeds.
+(default No); step 4j also reports an installed-but-never-routed machine. See
+[docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) for the weekly
+savings-vs-quality loop this feeds.
 
 ### Optional extra plugins (opt-in)
 

@@ -527,10 +527,20 @@ needs Python >=3.10):
 ```bash
 if command -v headroom >/dev/null 2>&1; then
   echo "(4j) headroom present: $(headroom --version 2>/dev/null)"
+  headroom doctor 2>&1 || true   # present != active — read the proxy/wrap_marker/savings rows
 else
   echo "(4j) headroom not installed"
 fi
 ```
+
+**Present is not active — check both.** `pip install` puts the CLI on the machine
+but changes nothing about how `claude` launches, so the common state is
+*installed and never routed*: `command -v headroom` succeeds while every request
+still bypasses the proxy. `headroom doctor` names it — `proxy: not reachable` +
+`wrap_marker: no wrap marker found` + `savings: no savings recorded yet` together
+mean the tool has never been used on this machine. Report that in the summary
+(installed but inactive) rather than treating a successful `command -v` as done;
+the fix is a launch-time `headroom wrap claude`, not a reinstall.
 
 If missing, **ask** (same governance as 4e/4f — detect-then-ask, never
 auto-apply):
