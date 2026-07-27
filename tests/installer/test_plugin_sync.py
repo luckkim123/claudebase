@@ -115,6 +115,18 @@ def test_drift_respects_local_enabledPlugins(settings, installed):
     assert "stray-plugin@somewhere" not in drift_names
 
 
+def test_local_only_plugin_is_reported_as_shadowable(settings):
+    """Enabled only in ~/.claude/settings.local.json → warn (project map replaces it)."""
+    local = {"claude-mem@thedotmack": True, "off-one@mp": False}
+    assert ps.shadowed_by_project_scope(settings, local) == ["claude-mem@thedotmack"]
+
+
+def test_common_settings_plugin_is_never_shadowable(settings):
+    """config/settings.json entries always merge in → never warned about."""
+    common = next(k for k, v in settings["enabledPlugins"].items() if v)
+    assert ps.shadowed_by_project_scope(settings, {common: True}) == []
+
+
 # ─── drift is warn-only (installer never removes recipient's own plugins) ────
 
 

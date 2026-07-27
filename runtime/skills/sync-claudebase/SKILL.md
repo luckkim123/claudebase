@@ -661,7 +661,22 @@ claude plugin install <plugin>@<marketplace-name> -s user
 
 Then record it in `~/.claude/settings.local.json` `enabledPlugins` (e.g.
 `"remotion@remotion": true`) so future syncs don't flag it as reverse drift
-(4g / `find_drift`). The `@<marketplace-name>` suffix must match the name the
+(4g / `find_drift`).
+
+**That record alone does NOT make it active everywhere.** Claude Code honours
+exactly ONE `settings.local.json` — the nearest one. In a project that ships its
+own `.claude/settings.local.json` with an `enabledPlugins` map, that map fully
+REPLACES the home-level one (no per-key merge), so the plugin is silently
+disabled there — no error, and `plugin_sync` only prints a WARNING. Entries in
+the shared `config/settings.json` are immune (they always merge in). So for a
+plugin the user wants everywhere, the lab-wide `config/settings.json` is the
+only place that works; for a personal opt-in, re-declare it in each project's
+own `settings.local.json`. Confirm with `claude plugin list` run FROM the
+project directory — running it from `$HOME` shows it enabled and hides the
+problem. (Verified 2026-07-27: claude-mem's SessionStart banner was missing in
+one project for exactly this reason.)
+
+The `@<marketplace-name>` suffix must match the name the
 marketplace declares in its `marketplace.json` — usually the repo name, but
 verify from the `marketplace add` output (e.g. `coreyhaines31/marketingskills`'s
 marketplace name is `marketingskills`, and `thedotmack/claude-mem`'s is

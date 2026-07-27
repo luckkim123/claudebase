@@ -139,6 +139,20 @@ def find_drift(settings: dict, installed: dict, local_enabled: dict) -> list[Dec
     return drifts
 
 
+def shadowed_by_project_scope(settings: dict, local_enabled: dict) -> list[str]:
+    """Plugins enabled ONLY in `~/.claude/settings.local.json`.
+
+    Claude Code honours exactly ONE settings.local.json — the nearest one. Inside
+    a project that ships its own `.claude/settings.local.json` with an
+    `enabledPlugins` map, that map fully REPLACES the home-level one (no per-key
+    merge), so these plugins are silently disabled there — no error anywhere, and
+    this sync still reports green. Entries in `config/settings.json` are immune:
+    they always merge in. Verified 2026-07-27 by three-state experiment.
+    """
+    common = {k for k, v in settings.get("enabledPlugins", {}).items() if v}
+    return sorted(k for k, v in (local_enabled or {}).items() if v and k not in common)
+
+
 def plan_actions(settings: dict, installed: dict, metadata: dict,
                  platform: str, local_enabled: dict | None = None,
                  update_candidates: bool = False) -> list[Decision]:
@@ -389,6 +403,16 @@ def main(argv: list[str] | None = None) -> int:
 
     for line in ensure_marketplaces(settings, metadata, platform, args.dry_run):
         print(line)
+
+    # A green sync is NOT evidence the plugin is on. Anything enabled only in the
+    # home settings.local.json goes dark inside any project that declares its own
+    # enabledPlugins map (nearest-file-wins, no merge) — warn rather than imply OK.
+    for name in shadowed_by_project_scope(settings, local_enabled):
+        print(f"WARNING: {name} is enabled only in ~/.claude/settings.local.json — "
+              f"it is DISABLED inside any project whose .claude/settings.local.json "
+              f"declares its own enabledPlugins (that map replaces this one, it does "
+              f"not merge). Confirm with `claude plugin list` from that project and "
+              f"re-declare it there if needed.")
 
     decisions = plan_actions(settings, installed, metadata, platform, local_enabled,
                              update_candidates=args.update)
