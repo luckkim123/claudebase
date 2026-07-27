@@ -16,7 +16,7 @@ installer/install.sh                  # macOS / Linux
 # pwsh installer/install.ps1          # Windows
 ```
 
-That symlinks `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, your skills and hooks into the repo. To update: `git pull`. No re-install needed.
+That symlinks `~/.claude/CLAUDE.md`, your skills and hooks into the repo, and **renders** `~/.claude/settings.json` from `config/settings.json` plus this machine's `settings.local.json`. To update: `git pull` — enough for everything symlinked; a change to `config/settings.json` needs one `installer/install.sh` run to re-render.
 
 ### Installing tmux + clipboard tool
 
@@ -87,20 +87,24 @@ actually routing.
 **When nothing launches `claude` by hand, `wrap` has no hook point.** In a
 container or under a harness that spawns `claude` for you, route it with an env
 setting instead — in **`settings.local.json`**, never `config/settings.json`
-(that one is symlinked and synced, so the proxy URL would reach machines with no
-proxy running and fail every request there):
+(that one is synced to every machine, so the proxy URL would reach machines with
+no proxy running and fail every request there):
 
 ```jsonc
 // ~/.claude/settings.local.json  — plus a running `headroom proxy`
 { "env": { "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787" } }
 ```
 
-`headroom doctor` will still print `claude: not routed` in this setup — it only
-reads `~/.claude/settings.json` and never sees `settings.local.json`. Trust the
+**Run `installer/install.sh` after adding it.** Claude Code never reads
+`settings.local.json` itself; the installer merges it into the rendered
+`~/.claude/settings.json`, and that render is what actually routes the CLI. Skip
+the run and the env block sits there doing nothing, silently. Once rendered,
+`headroom doctor` reports it correctly too — its `claude: not routed` line reads
+`~/.claude/settings.json`, which now contains the merged env. Either way the
 `savings` row (or a rising `.summary.api_requests` from
-`curl -s http://127.0.0.1:8787/stats`) over that warning. Note the proxy is not
+`curl -s http://127.0.0.1:8787/stats`) is the ground truth. Note the proxy is not
 a service: it dies with the container, and a dead proxy with this env set fails
-every request — delete the `env` block to roll back.
+every request — delete the `env` block and re-render to roll back.
 
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it

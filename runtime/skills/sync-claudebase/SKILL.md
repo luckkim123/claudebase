@@ -560,14 +560,19 @@ mean the tool has never been used on this machine. Report that in the summary
 (installed but inactive) rather than treating a successful `command -v` as done;
 the fix is a launch-time `headroom wrap claude`, not a reinstall.
 
-**But `claude: not routed` alone is NOT proof of inactive — doctor cannot see
-`settings.local.json`.** `check_claude_routing` reads `~/.claude/settings.json`
-only (`headroom/cli/doctor.py`); the per-machine `settings.local.json` that
-Claude Code merges on top of it is never consulted. So a machine that routes via
-`"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in
-`settings.local.json` — **the correct place for it**, since `~/.claude/settings.json`
-is a symlink into this repo and would ship the proxy URL to every machine — gets
-a permanent false `⚠ not routed`. Read the rows together before concluding:
+**`claude: not routed` alone is NOT proof of inactive — but check whether this
+machine has been re-rendered first.** `check_claude_routing` reads
+`~/.claude/settings.json` only (`headroom/cli/doctor.py`) and never opens
+`settings.local.json`. Since `installer/scripts/render_settings.py` landed, the
+installer merges the two, so on a machine that has run `install.sh` since adding
+the env block, `~/.claude/settings.json` *does* contain the proxy URL and doctor
+reports it accurately. The false negative survives only where the render has not
+run yet — and there the env block is not routing anything either, so the fix is
+the same: run `installer/install.sh`.
+
+`settings.local.json` remains **the correct place to write it**: `config/settings.json`
+is synced to every machine and would ship the proxy URL to hosts with no proxy
+running. Read the rows together before concluding:
 
 | doctor rows | verdict |
 |:---|:---|
@@ -577,8 +582,8 @@ a permanent false `⚠ not routed`. Read the rows together before concluding:
 The authoritative check is whether a NEW `claude` process increments the proxy's
 request counter (`curl -s http://127.0.0.1:8787/stats` → `.summary.api_requests`
 before/after) — `savings` being non-zero is the same evidence after the fact.
-Report "active via settings.local.json (doctor's claude row is a known false
-negative)", not "installed but inactive".
+Report "active via settings.local.json (doctor's claude row is a false negative
+on a machine that has not re-rendered)", not "installed but inactive".
 
 Caveat to carry into the summary: with this env set, a **dead proxy fails every
 request**. The proxy is not a service — it dies with the container/host, so
@@ -606,7 +611,7 @@ Then point at the two ways to actually route through it, and pick by how
 | Launch style | How to route |
 |:---|:---|
 | Human types `claude` in a terminal | `headroom wrap claude` — per-launch, nothing persisted, easiest to undo |
-| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`** + a running `headroom proxy` |
+| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`**, then `installer/install.sh` to render it, + a running `headroom proxy` |
 
 There is no wrap point to hook when a harness spawns `claude` for you, so the
 env route is the only option there — and it must go in `settings.local.json`,
