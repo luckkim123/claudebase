@@ -615,9 +615,33 @@ Then point at the two ways to actually route through it, and pick by how
 
 There is no wrap point to hook when a harness spawns `claude` for you, so the
 env route is the only option there — and it must go in `settings.local.json`,
-never `config/settings.json` (a symlinked, synced file: the proxy URL would ship
-to every machine and break the ones with no proxy running). Report the outcome
-in the summary.
+never `config/settings.json` (a synced file: the proxy URL would ship to every
+machine and break the ones with no proxy running).
+
+**Name what routing costs before the user picks either row: Remote Control and
+the 1M context window both stop working.** Claude Code gates them on the base URL
+client-side, so *any* routing disables them — `wrap` included, since it sets the
+same variable for its child — for as long as it is in effect (upstream
+#746/#1158). Compression and RC + 1M cannot both be on. On a machine driven
+remotely, or one running a 1M-context model, the honest recommendation is to
+leave it unrouted and reach for `headroom wrap claude` only on the sessions that
+want compression. Report the outcome in the summary.
+
+**If the user does route, check the port before anything else: one port per
+machine, from the `18787+` block, never the default `8787` on two machines.**
+VS Code Remote-SSH forwards a remote machine's listening ports to the *same*
+local port, so a second machine on the default finds `localhost:8787` already
+answering — with the **other** machine's proxy. A persistent deployment bound
+there cannot bind and keepalive-respawns forever (`last exit code = 3`) while
+`headroom install status` still reports `healthy`, because the forward answers
+the health probe. So `status: healthy` is not proof the local proxy is the one
+replying — confirm with `lsof -nP -iTCP:<port> -sTCP:LISTEN` that a `Python`
+process owns the socket, not the editor's helper. The README carries the running
+port allocation — read it to pick a free number, and add the machine when you
+assign one. Bind `127.0.0.1` only (on a flat overlay network — Tailscale,
+WireGuard, ZeroTier — `0.0.0.0` publishes an unauthenticated
+credential-forwarding proxy to every node), and point `ANTHROPIC_BASE_URL` at
+this machine's own loopback, never another host's address.
 
 **If present, check whether it is stale (same detect-then-ask gate).** `install.sh`
 never installs or upgrades headroom, so a machine can sit on an old version

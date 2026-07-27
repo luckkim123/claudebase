@@ -95,6 +95,18 @@ no proxy running and fail every request there):
 { "env": { "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787" } }
 ```
 
+**Routing turns off Remote Control and the 1M context window.** Claude Code gates
+both on the base URL, client-side: point it at a local proxy and `/rc` stops
+working and the 1M window no longer applies (upstream #746/#1158, which `headroom
+doctor` names in its own output). This is not specific to the env route —
+`headroom wrap claude` sets the same variable for its child, so it costs the same
+for the session it wraps. Automatic compression and Remote Control + 1M are
+therefore mutually exclusive; pick per machine, and leave routing off on any
+machine you drive remotely or run a 1M-context model on. The MCP tools
+(`headroom_compress`, `headroom_retrieve`) survive either choice, but they are
+on-demand only — they cannot shrink a tool result that has already landed in the
+context, so they do not substitute for the proxy.
+
 **Run `installer/install.sh` after adding it.** Claude Code never reads
 `settings.local.json` itself; the installer merges it into the rendered
 `~/.claude/settings.json`, and that render is what actually routes the CLI. Skip
@@ -104,7 +116,40 @@ the run and the env block sits there doing nothing, silently. Once rendered,
 `savings` row (or a rising `.summary.api_requests` from
 `curl -s http://127.0.0.1:8787/stats`) is the ground truth. Note the proxy is not
 a service: it dies with the container, and a dead proxy with this env set fails
-every request — delete the `env` block and re-render to roll back.
+every request — delete the `env` block and re-render to roll back. `headroom
+install apply --preset persistent-service` promotes it to a keepalive service
+(launchd/systemd at user scope) so it survives a reboot; `headroom install
+status` is the check.
+
+**One distinct port per machine — never the default 8787 on more than one.** The
+default collides in a way that is easy to misread: VS Code Remote-SSH
+auto-forwards a remote machine's listening ports to the *same* local port, so
+opening a remote window makes your `localhost:8787` someone else's proxy. A local
+deployment bound there then fails to bind and keepalive-respawns forever (`exit
+code 3`), while `headroom install status` still reports `healthy` because the
+forward answers the health probe — it cannot tell whose proxy replied. Confirm
+ownership with `lsof -nP -iTCP:<port> -sTCP:LISTEN`: a local proxy shows a
+`Python` process, a forward shows your editor's helper.
+
+The allocation rule is one distinct port per machine, taken from the `18787+`
+block (nothing forwards it by default) and recorded in that machine's own
+`settings.local.json` — it is per-machine state and never belongs in the synced
+`config/settings.json`. Keep the running list here so a new machine can pick a
+free number without hunting; extend it when you add one:
+
+| Machine | Port |
+|:---|:---|
+| `ksm-mac` | `18787` |
+| `kim-macbookair` | `18788` |
+| `ksm-ubuntu` | `18789` |
+
+Two invariants hold at any number of machines. Bind **`127.0.0.1` only, never
+`0.0.0.0`** — on a flat overlay network (Tailscale, WireGuard, ZeroTier) that
+publishes an unauthenticated credential-forwarding proxy to every node. And
+point `ANTHROPIC_BASE_URL` at **this machine's own loopback, never another
+host's address**, so requests never leave the box and one machine's dead proxy
+cannot take another's sessions down with it. With the env route active,
+`headroom wrap` is redundant — every `claude` already routes.
 
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
