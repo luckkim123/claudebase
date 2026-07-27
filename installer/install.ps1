@@ -128,8 +128,41 @@ function Link-OrCopy([string]$src, [string]$dest) {
 # 1. ensure ~/.claude
 if (-not (Test-Path $ClaudeHome)) { Run { New-Item -ItemType Directory -Path $ClaudeHome -Force | Out-Null } }
 
-# 2. settings.json
-Link-OrCopy "$RepoDir/config/settings.json" "$ClaudeHome/settings.json"
+# 2. settings.json — RENDERED, not linked (mirror of install.sh lib/link.sh
+#    `render_settings`). ~/.claude/settings.json is the only file Claude Code
+#    reads user-scope settings from; a user-scope settings.local.json is never
+#    parsed by the CLI. Linking this path at the tracked baseline therefore sent
+#    every CLI write into the repo and left the per-machine layer inert.
+#    The script stays silent when nothing changed, so the idempotency contract
+#    (no `rendered:` line on a second run) still holds.
+$RenderScript = "$RepoDir/installer/scripts/render_settings.py"
+$Python = Get-Command python3 -ErrorAction SilentlyContinue
+if (-not $Python) { $Python = Get-Command python -ErrorAction SilentlyContinue }
+if (-not $Python) {
+    Log "skip settings render: python not available - leaving $ClaudeHome/settings.json as-is"
+} else {
+    $RenderArgs = @(
+        $RenderScript,
+        "--base", "$RepoDir/config/settings.json",
+        "--local", "$ClaudeHome/settings.local.json",
+        "--out", "$ClaudeHome/settings.json"
+    )
+    if ($DryRun) { $RenderArgs += "--dry-run" }
+    $RenderOut = & $Python.Source @RenderArgs
+    if ($LASTEXITCODE -ne 0) {
+        Log "settings render FAILED - $ClaudeHome/settings.json left untouched"
+        if ($RenderOut) { $RenderOut | ForEach-Object { Log $_ } }
+    } elseif ($RenderOut) {
+        $RenderOut | ForEach-Object { Log $_ }
+        if ($DryRun) {
+            Log "would render: $ClaudeHome/settings.json (config/settings.json + settings.local.json)"
+        } else {
+            Log "rendered: $ClaudeHome/settings.json (config/settings.json + settings.local.json)"
+        }
+    } else {
+        Debug "settings already current: $ClaudeHome/settings.json"
+    }
+}
 
 # 2b. user-level CLAUDE.md — universal behavioral rules applied across all projects
 Link-OrCopy "$RepoDir/config/CLAUDE.md" "$ClaudeHome/CLAUDE.md"
@@ -262,7 +295,7 @@ if ($Enabled -match 'oh-my-claudecode@omc') {
 if (Get-Command git -ErrorAction SilentlyContinue) {
     $drift = git -C $RepoDir status --porcelain config/settings.json 2>$null
     if ($drift) {
-        Log "drift: config/settings.json modified by Claude CLI - review with: git -C $RepoDir diff config/settings.json"
+        Log "drift: config/settings.json is dirty - if this machine still links $ClaudeHome/settings.json, re-run install.ps1 to migrate; review with: git -C $RepoDir diff config/settings.json"
     }
 }
 

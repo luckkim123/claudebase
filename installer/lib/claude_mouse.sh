@@ -12,9 +12,11 @@
 #
 # Why opt-in (default No) AND why this is the ONE rc-append exception:
 # it must be a `claude()` shell function *sourced* by the login shell — the
-# alternative, `/tui fullscreen`, persists the pref into ~/.claude/settings.json,
-# which claudebase symlinks to the tracked config/settings.json (the recurring
-# per-machine leak of 654484a / 8904b63); and tmux.conf can't set the claude
+# alternative, `/tui fullscreen`, persists the pref into ~/.claude/settings.json
+# — which claudebase used to symlink at the tracked config/settings.json (the
+# recurring per-machine leak of 654484a / 8904b63). That path is rendered now,
+# so `tui` is captured into settings.local.json instead of the lab baseline, but
+# it still only takes effect next session; and tmux.conf can't set the claude
 # process's env. claudebase is otherwise symlink-only and never mutates the
 # user's rc; this is the single, marker-guarded exception. Fullscreen is an
 # upstream research preview and trades away the terminal's native scrollback (a

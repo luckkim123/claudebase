@@ -55,12 +55,21 @@ Specs follow a per-topic folder convention: each non-trivial change is paired as
 
 | Symlink | Target |
 |:---|:---|
-| `~/.claude/settings.json` | `<repo>/config/settings.json` |
 | `~/.claude/CLAUDE.md` | `<repo>/config/CLAUDE.md` |
 | `~/.claude/skills/<name>` | `<repo>/runtime/skills/<name>` (one symlink per skill — leaves other skills untouched) |
 | `~/.tmux.conf` (Unix) | `<repo>/shell/tmux.conf` |
 
 `~/.claude/mcp.json` is **rendered**, not symlinked — `installer/install.sh` substitutes `${VAR}` placeholders in `config/mcp.template.json` from `secrets/secrets.env` and writes the result. Re-render is idempotent: if the rendered content matches what's already on disk, the file is left alone.
+
+`~/.claude/settings.json` is **rendered** too (`installer/scripts/render_settings.py`), for a reason worth stating plainly: it is the *only* file Claude Code reads user-scope settings from. `claude --setting-sources` offers `user` / `project` / `local`, and `local` there means the **project's** `.claude/settings.local.json` — a user-scope `settings.local.json` is never parsed by the CLI at all (measured 2026-07-27 against CLI 2.1.220: invalid JSON in `~/.claude/settings.local.json` produces no error whatsoever). Symlinking this path at the tracked baseline therefore had two effects nobody intended — every `/model` and `claude plugin enable -s user` wrote straight into the lab file, and the per-machine layer this repo documented everywhere did nothing. A blanket `git checkout -- config/settings.json` to undo the first silently undid whatever the second was believed to hold; that is how four opt-in plugins sat installed-but-*disabled* for two days.
+
+So the render is the merge:
+
+```
+~/.claude/settings.json = deep_merge(config/settings.json, ~/.claude/settings.local.json)
+```
+
+Keys starting with `_` and `personalRepos` are installer bookkeeping and are stripped from the output. Before overwriting, whatever the CLI wrote into the previous render that neither source explains is **captured** back into `settings.local.json`, so a `/model` choice survives the next install run instead of being clobbered. Two consequences follow: editing `settings.local.json` takes effect on the next `install.sh` run rather than instantly, and the tracked baseline stops absorbing personal preferences (`lib/drift.sh`'s dirty-baseline warning should now stay quiet).
 
 `shell/claude-mouse.sh` is **sourced**, not symlinked — the opt-in `maybe_enable_claude_mouse` step (default No, or `INSTALL_CLAUDE_MOUSE=1`) appends one marker-guarded `source` line to the login shell's rc (`~/.zshrc` / `~/.bashrc`). It is the **only** place the installer writes into the user's rc; the `claudebase:claude-mouse` marker makes re-runs a no-op. See `lib/claude_mouse.sh` for why an rc-append (not a symlink or settings.json `env`) is the required mechanism.
 
@@ -75,7 +84,7 @@ Plugin code lives under `~/.claude/plugins/`, not in this repo. Tracking the bin
 
 After `git pull`, run `installer/install.sh` once. It scans `enabledPlugins`, checks which are installed at user scope, and installs the missing ones via `claude plugin install --user`. Existing plugins are left as-is.
 
-Per-machine plugins go in `~/.claude/settings.local.json` (gitignored, see `templates/settings.local.example.json`). Claude Code merges `settings.local.json` on top of `settings.json` by key.
+Per-machine plugins go in `~/.claude/settings.local.json` (gitignored, see `templates/settings.local.example.json`), which `install.sh` merges into the rendered `~/.claude/settings.json` (see "Symlink model"). Listing a plugin there is what re-enables it on every render — it is not merely drift bookkeeping. `claude plugin install/enable -s user` writes into the rendered file, so run `install.sh` afterwards to capture it, and confirm with `claude plugin list` that Status reads `enabled`: "installed" and "enabled" are separate states, and the gap between them is where opt-in plugins go quiet.
 
 ## Secrets
 
@@ -100,13 +109,20 @@ every package imports.
 
 The venv's `bin` (Windows: `Scripts`) is prepended to the session `PATH` via
 the machine-local `~/.claude/settings.local.json` `env.PATH` (Claude Code
-expands `$PATH` and prepends — verified against the settings docs). This is
-how the **external** omd `doc-builder` and mckinsey `slide-agent` — which
-invoke a bare `python3` and live outside this repo — resolve to the venv
-interpreter with no edits to those plugins. PATH injection lives in
-`settings.local.json`, not the shared `config/settings.json`, because the
-venv path is a machine-specific absolute path (`~`/`$HOME` do not expand in
-the `env` block) and shared files must stay machine-portable.
+expands `$PATH` and prepends). This is how the **external** omd `doc-builder`
+and mckinsey `slide-agent` — which invoke a bare `python3` and live outside
+this repo — resolve to the venv interpreter with no edits to those plugins.
+PATH injection lives in `settings.local.json`, not the shared
+`config/settings.json`, because the venv path is a machine-specific absolute
+path (`~`/`$HOME` do not expand in the `env` block) and shared files must stay
+machine-portable.
+
+It reaches Claude Code only because `install.sh` merges `settings.local.json`
+into the rendered `~/.claude/settings.json`. Under the old symlink layout the
+CLI never read that file, so this injection was inert wherever it was
+configured — if a machine has `env.PATH` set here and its `doc-builder` has
+been quietly falling back to the system `python3`, that is the cause. Re-run
+`install.sh`, then confirm with `command -v python3` inside a session.
 
 The venv is machine-local and not git-tracked (`.gitignore` ignores
 `**/.venv/`); each machine rebuilds it on `installer/install.sh`.
@@ -139,7 +155,7 @@ Three knobs for things that should not be shared across machines:
 - **Permissions** — machine-specific tool allow/deny lists in `settings.local.json`.
 - **HUD** — `omcHud` preset in `~/.claude/settings.json` (managed by `oh-my-claudecode`; switch via `/oh-my-claudecode:hud minimal|focused|full`).
 
-`settings.local.json` follows the same JSON shape as `settings.json`. Anything you put there overrides the shared file for that machine only.
+`settings.local.json` follows the same JSON shape as `settings.json`. Anything you put there overrides the shared file for that machine only — applied by `install.sh`'s render, so re-run it after editing. The HUD is the mirror case: `oh-my-claudecode` writes `omcHud` straight into the rendered `~/.claude/settings.json`, and the next render captures it back into `settings.local.json` rather than dropping it.
 
 ## Drift detection
 

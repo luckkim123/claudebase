@@ -167,6 +167,24 @@ git checkout -- config/settings.json
 ```
 Then edit `~/.claude/settings.local.json` (the merge target) to add whichever of the five keys were missing there, using the leaked value. Report the auto-fix in the sync summary ("settings.json per-machine leak: moved `<keys>` to settings.local.json") — don't gate this specific, already-decided pattern behind `AskUserQuestion`. A dirty diff touching *other* keys still falls through to the general ABSORBED/UNIQUE/disposable triage above.
 
+**This leak pattern should now be extinct — if it fires, the machine has not migrated.** Since `installer/scripts/render_settings.py` landed, `~/.claude/settings.json` is a *rendered* file rather than a symlink into the repo, so CLI writes no longer reach `config/settings.json` at all. A dirty baseline therefore means this machine is still on the old symlink layout: run `installer/install.sh` to migrate it (the render replaces the symlink, and captures whatever the CLI left behind into `settings.local.json`), then re-check.
+
+**Until it has migrated, never blanket-revert when the diff also carries `enabledPlugins` / `extraKnownMarketplaces` (2026-07-27, measured).** `git checkout -- config/settings.json` reverts the *whole file*, and under the symlink layout that file was the only place Claude Code read user-scope plugin enablement from — so a blanket revert silently disabled every optional personal plugin (4k) in the same stroke. Verified live: all four 4k plugins plus `typescript-lsp` sat at `Status: ✘ disabled` for two days after exactly this sweep, while `settings.local.json` still listed them `true`. Check the diff before reverting:
+
+```bash
+# Blanket revert is safe ONLY if the diff touches nothing but the five pref keys.
+git diff config/settings.json | grep -E '^\+' | grep -E 'enabledPlugins|extraKnownMarketplaces|@' \
+  && echo "STOP: diff carries plugin state — remove only the pref keys, do NOT git checkout" \
+  || git checkout -- config/settings.json
+```
+
+When it does carry plugin state, delete just the leaked pref keys from `~/.claude/settings.json` and leave the plugin entries in place, then confirm nothing was collaterally disabled:
+
+```bash
+claude plugin list | grep -A3 -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' | grep Status
+# every one the user opted into must read "enabled", not "disabled"
+```
+
 ### 2. Analyze the incoming diff
 
 For each new commit (`git show --stat <sha>`), classify which subsystem it touches:
@@ -542,14 +560,19 @@ mean the tool has never been used on this machine. Report that in the summary
 (installed but inactive) rather than treating a successful `command -v` as done;
 the fix is a launch-time `headroom wrap claude`, not a reinstall.
 
-**But `claude: not routed` alone is NOT proof of inactive — doctor cannot see
-`settings.local.json`.** `check_claude_routing` reads `~/.claude/settings.json`
-only (`headroom/cli/doctor.py`); the per-machine `settings.local.json` that
-Claude Code merges on top of it is never consulted. So a machine that routes via
-`"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in
-`settings.local.json` — **the correct place for it**, since `~/.claude/settings.json`
-is a symlink into this repo and would ship the proxy URL to every machine — gets
-a permanent false `⚠ not routed`. Read the rows together before concluding:
+**`claude: not routed` alone is NOT proof of inactive — but check whether this
+machine has been re-rendered first.** `check_claude_routing` reads
+`~/.claude/settings.json` only (`headroom/cli/doctor.py`) and never opens
+`settings.local.json`. Since `installer/scripts/render_settings.py` landed, the
+installer merges the two, so on a machine that has run `install.sh` since adding
+the env block, `~/.claude/settings.json` *does* contain the proxy URL and doctor
+reports it accurately. The false negative survives only where the render has not
+run yet — and there the env block is not routing anything either, so the fix is
+the same: run `installer/install.sh`.
+
+`settings.local.json` remains **the correct place to write it**: `config/settings.json`
+is synced to every machine and would ship the proxy URL to hosts with no proxy
+running. Read the rows together before concluding:
 
 | doctor rows | verdict |
 |:---|:---|
@@ -559,8 +582,8 @@ a permanent false `⚠ not routed`. Read the rows together before concluding:
 The authoritative check is whether a NEW `claude` process increments the proxy's
 request counter (`curl -s http://127.0.0.1:8787/stats` → `.summary.api_requests`
 before/after) — `savings` being non-zero is the same evidence after the fact.
-Report "active via settings.local.json (doctor's claude row is a known false
-negative)", not "installed but inactive".
+Report "active via settings.local.json (doctor's claude row is a false negative
+on a machine that has not re-rendered)", not "installed but inactive".
 
 Caveat to carry into the summary: with this env set, a **dead proxy fails every
 request**. The proxy is not a service — it dies with the container/host, so
@@ -588,7 +611,7 @@ Then point at the two ways to actually route through it, and pick by how
 | Launch style | How to route |
 |:---|:---|
 | Human types `claude` in a terminal | `headroom wrap claude` — per-launch, nothing persisted, easiest to undo |
-| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`** + a running `headroom proxy` |
+| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`**, then `installer/install.sh` to render it, + a running `headroom proxy` |
 
 There is no wrap point to hook when a harness spawns `claude` for you, so the
 env route is the only option there — and it must go in `settings.local.json`,
@@ -615,7 +638,7 @@ on explicit yes. Candidates:
 | `remotion` | `remotion-dev/claude-code-plugin` | `remotion@remotion` |
 | `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | `ui-ux-pro-max@ui-ux-pro-max-skill` |
 | `marketing-skills` | `coreyhaines31/marketingskills` | `marketing-skills@marketingskills` |
-| `claude-mem` | `thedotmack/claude-mem` | `claude-mem@claude-mem` |
+| `claude-mem` | `thedotmack/claude-mem` | `claude-mem@thedotmack` |
 
 Detect which are already installed:
 
@@ -641,10 +664,35 @@ Then record it in `~/.claude/settings.local.json` `enabledPlugins` (e.g.
 (4g / `find_drift`). The `@<marketplace-name>` suffix must match the name the
 marketplace declares in its `marketplace.json` — usually the repo name, but
 verify from the `marketplace add` output (e.g. `coreyhaines31/marketingskills`'s
-marketplace name is `marketingskills`). Adding entries to `settings.local.json`
+marketplace name is `marketingskills`, and `thedotmack/claude-mem`'s is
+`thedotmack`, **not** `claude-mem`). Adding entries to `settings.local.json`
 is fine; deleting/restructuring it needs a yes (same rule as the Red-flags
 table). Tell the user to **restart** Claude Code afterward — `claude plugin
 install` notes "restart required".
+
+**Recording it there is load-bearing, and it applies at render time — not
+instantly (2026-07-27).** Claude Code's setting sources are exactly `user` /
+`project` / `local` (`claude --setting-sources`), where `local` means the
+*project's* `.claude/settings.local.json`. There is no user-scope
+`settings.local.json` source — invalid JSON in `~/.claude/settings.local.json`
+produces no CLI error at all, because the file is never parsed. What makes the
+entry above real is `installer/scripts/render_settings.py`, which merges it into
+`~/.claude/settings.json` on every `install.sh` run (step 5). So the order
+matters: install the plugin, record it here, **then run install.sh**, and only
+then is it enabled for the next session.
+
+`claude plugin install/enable -s user` writes into the rendered
+`~/.claude/settings.json` directly, which is enough for the current session; the
+next render captures it back into `settings.local.json` so it is not lost. Either
+way, verify rather than assume:
+
+```bash
+claude plugin list | grep -A3 '<plugin>@<marketplace>' | grep Status   # must read "enabled"
+```
+
+"Installed" is not "enabled": `plugin list` reports both, and all four 4k extras
+were found installed-but-disabled two days after a sweep because the only record
+of them was in a file nothing read.
 
 **Caution — `claude-mem`:** it injects prior-session context at session start,
 which *adds* to the always-on input that headroom (4j) is cutting, and overlaps
