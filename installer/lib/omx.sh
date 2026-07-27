@@ -78,10 +78,27 @@ resolve_omx_python() {
   # enough — probe newest-first and verify the version, same warn-and-skip
   # contract as resolve_omx_source.
   #   1. $OMX_PYTHON                  (explicit override; machine-specific)
-  #   2. python3.13 / 3.12 / 3.11 / 3.10  (named interpreters, newest first)
-  #   3. python3                      (only if it is already >=3.10)
+  #   2. the interpreter the INSTALLED `omx` CLI already runs on
+  #   3. python3.13 / 3.12 / 3.11 / 3.10  (named interpreters, newest first)
+  #   4. python3                      (only if it is already >=3.10)
+  #
+  # (2) is load-bearing when omx-core lives in a dedicated venv (e.g. an image
+  # that pre-installs it to /opt/omx-venv). The CLI shim's shebang names that
+  # venv's python, but a bare `python3.10` probe resolves to the SYSTEM
+  # interpreter, whose site-packages has no omx_core — so the idempotency check
+  # below reads "broken" on every run and reinstalls into the wrong environment.
+  # Observed 2026-07-27: `omx` worked and reported 0.7.5 while the plugin cache
+  # had 0.9.0, and every install.sh printed a reinstall WARNING without ever
+  # closing the gap. Probing the shim first keeps the check, the install, and
+  # the CLI pointed at ONE environment.
+  local omx_shim_py=""
+  if command -v omx >/dev/null 2>&1; then
+    omx_shim_py="$(sed -n '1s/^#!//p' "$(command -v omx)" 2>/dev/null | awk '{print $NF}')"
+    [[ -x "$omx_shim_py" ]] || omx_shim_py=""
+  fi
   local candidates=(
     "${OMX_PYTHON:-}"
+    "$omx_shim_py"
     python3.13 python3.12 python3.11 python3.10
     python3
   )
