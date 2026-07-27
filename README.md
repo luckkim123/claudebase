@@ -84,6 +84,24 @@ proxy, so a plain `claude` bypasses it entirely and silently. The tell is
 `savings: no savings recorded yet`. Non-zero savings is the only proof it is
 actually routing.
 
+**When nothing launches `claude` by hand, `wrap` has no hook point.** In a
+container or under a harness that spawns `claude` for you, route it with an env
+setting instead — in **`settings.local.json`**, never `config/settings.json`
+(that one is symlinked and synced, so the proxy URL would reach machines with no
+proxy running and fail every request there):
+
+```jsonc
+// ~/.claude/settings.local.json  — plus a running `headroom proxy`
+{ "env": { "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787" } }
+```
+
+`headroom doctor` will still print `claude: not routed` in this setup — it only
+reads `~/.claude/settings.json` and never sees `settings.local.json`. Trust the
+`savings` row (or a rising `.summary.api_requests` from
+`curl -s http://127.0.0.1:8787/stats`) over that warning. Note the proxy is not
+a service: it dies with the container, and a dead proxy with this env set fails
+every request — delete the `env` block to roll back.
+
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
 (default No); step 4j also reports an installed-but-never-routed machine. See

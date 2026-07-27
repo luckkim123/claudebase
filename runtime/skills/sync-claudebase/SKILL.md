@@ -542,6 +542,30 @@ mean the tool has never been used on this machine. Report that in the summary
 (installed but inactive) rather than treating a successful `command -v` as done;
 the fix is a launch-time `headroom wrap claude`, not a reinstall.
 
+**But `claude: not routed` alone is NOT proof of inactive — doctor cannot see
+`settings.local.json`.** `check_claude_routing` reads `~/.claude/settings.json`
+only (`headroom/cli/doctor.py`); the per-machine `settings.local.json` that
+Claude Code merges on top of it is never consulted. So a machine that routes via
+`"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in
+`settings.local.json` — **the correct place for it**, since `~/.claude/settings.json`
+is a symlink into this repo and would ship the proxy URL to every machine — gets
+a permanent false `⚠ not routed`. Read the rows together before concluding:
+
+| doctor rows | verdict |
+|:---|:---|
+| `proxy: not reachable` + `savings: no savings recorded yet` | genuinely never used |
+| `proxy: pass` + `savings: pass` (non-zero, "last request just now") | **routing fine** — the `claude` warn is a false negative |
+
+The authoritative check is whether a NEW `claude` process increments the proxy's
+request counter (`curl -s http://127.0.0.1:8787/stats` → `.summary.api_requests`
+before/after) — `savings` being non-zero is the same evidence after the fact.
+Report "active via settings.local.json (doctor's claude row is a known false
+negative)", not "installed but inactive".
+
+Caveat to carry into the summary: with this env set, a **dead proxy fails every
+request**. The proxy is not a service — it dies with the container/host, so
+`headroom proxy` must be running. Rollback is deleting the `env` block.
+
 If missing, **ask** (same governance as 4e/4f — detect-then-ask, never
 auto-apply):
 
@@ -558,9 +582,19 @@ PY="$(command -v python3.13 || command -v python3.12 || command -v python3.11 ||
 headroom doctor      # confirm the integration after install
 ```
 
-Then remind the user it's opt-in per launch — `headroom wrap claude` (not a
-persistent wrapper; it sets `ANTHROPIC_BASE_URL` to the local proxy only for
-that session). Report the outcome in the summary.
+Then point at the two ways to actually route through it, and pick by how
+`claude` gets launched on this machine:
+
+| Launch style | How to route |
+|:---|:---|
+| Human types `claude` in a terminal | `headroom wrap claude` — per-launch, nothing persisted, easiest to undo |
+| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`** + a running `headroom proxy` |
+
+There is no wrap point to hook when a harness spawns `claude` for you, so the
+env route is the only option there — and it must go in `settings.local.json`,
+never `config/settings.json` (a symlinked, synced file: the proxy URL would ship
+to every machine and break the ones with no proxy running). Report the outcome
+in the summary.
 
 **Why ask, not auto:** pip install is non-idempotent and pulls a large
 dependency set, and headroom changes how `claude` launches. Folding it into
@@ -790,7 +824,7 @@ A short summary table:
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
-| headroom CLI (4j) | `<"present (vX)" / "installed" / "offered, declined" / "not installed">` |
+| headroom CLI (4j) | `<"active (vX, routed via settings.local.json)" / "present (vX) but never routed" / "installed" / "offered, declined" / "not installed">` |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
