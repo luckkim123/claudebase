@@ -77,7 +77,12 @@ def _current_scope(plugin: str, installed: dict) -> str:
     entries = installed.get("plugins", {}).get(plugin, [])
     if not entries:
         return "none"
-    return entries[0].get("scope", "none")
+    # A plugin can carry several entries at once -- e.g. a leftover project-scoped
+    # install sitting next to the user-scope one. User scope is the goal state, so
+    # it wins; reading entries[0] blindly re-triggered REINSTALL on every single
+    # run whenever the stale entry happened to be listed first.
+    scopes = [e.get("scope", "none") for e in entries]
+    return "user" if "user" in scopes else scopes[0]
 
 
 def detect_platform() -> str:
@@ -366,6 +371,19 @@ def _claude_home() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
 
 
+def lab_wide_settings(repo_dir: Path | None = None) -> dict:
+    """The tracked lab-wide map — what the shadow check must compare against.
+
+    Deliberately NOT `~/.claude/settings.json`: since the symlink->render migration
+    that file is config/settings.json WITH settings.local.json already merged in, so
+    every local-only plugin looks lab-wide there and shadowed_by_project_scope()
+    would go permanently silent.
+    """
+    repo = repo_dir or Path(__file__).resolve().parents[2]
+    path = repo / "config" / "settings.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
 def load_inputs(repo_dir: Path | None = None) -> tuple[dict, dict, dict, dict]:
     """Read (settings, installed, metadata, local_enabled). Missing files -> {}."""
     repo = repo_dir or Path(__file__).resolve().parents[2]
@@ -407,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     # A green sync is NOT evidence the plugin is on. Anything enabled only in the
     # home settings.local.json goes dark inside any project that declares its own
     # enabledPlugins map (nearest-file-wins, no merge) — warn rather than imply OK.
-    for name in shadowed_by_project_scope(settings, local_enabled):
+    for name in shadowed_by_project_scope(lab_wide_settings(), local_enabled):
         print(f"WARNING: {name} is enabled only in ~/.claude/settings.local.json — "
               f"it is DISABLED inside any project whose .claude/settings.local.json "
               f"declares its own enabledPlugins (that map replaces this one, it does "

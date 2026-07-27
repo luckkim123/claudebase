@@ -58,6 +58,45 @@ def test_decide_wrong_scope_triggers_reinstall(settings, installed):
     assert d.current_scope == "project"
 
 
+def test_lab_wide_settings_ignores_the_rendered_home_file(tmp_path, monkeypatch):
+    """The shadow check reads config/settings.json, never the rendered ~/.claude one.
+
+    Regression: the rendered file is config + settings.local merged, so a local-only
+    plugin looked lab-wide there and the shadow warning never fired.
+    """
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    (repo / "config" / "settings.json").write_text(
+        json.dumps({"enabledPlugins": {"common@mp": True}}))
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "settings.json").write_text(
+        json.dumps({"enabledPlugins": {"common@mp": True, "local-only@mp": True}}))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home))
+
+    lab_wide = ps.lab_wide_settings(repo)
+    assert ps.shadowed_by_project_scope(lab_wide, {"local-only@mp": True}) == ["local-only@mp"]
+
+
+def test_decide_stale_project_entry_beside_user_entry_is_ok(settings):
+    """Two entries (leftover project-scope + the real user-scope) -> OK, not REINSTALL.
+
+    Regression: reading entries[0] made install.sh reinstall the plugin on every
+    run, so the run was never idempotent.
+    """
+    installed = {
+        "plugins": {
+            "superpowers@claude-plugins-official": [
+                {"scope": "local", "projectPath": "/workspace"},
+                {"scope": "user"},
+            ]
+        }
+    }
+    d = ps.decide_plugin("superpowers@claude-plugins-official", settings, installed)
+    assert d.action is Action.OK
+    assert d.current_scope == "user"
+
+
 def test_decide_not_installed_triggers_install(settings, installed):
     """Enabled but empty entries list → fresh install at user scope."""
     d = ps.decide_plugin("oh-my-claudecode@omc", settings, installed)
