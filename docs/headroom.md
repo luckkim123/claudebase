@@ -44,6 +44,27 @@ machine you drive remotely or run a 1M-context model on. The MCP tools
 on-demand only — they cannot shrink a tool result that has already landed in the
 context, so they do not substitute for the proxy.
 
+**Routing also turns off deferred tool loading unless `ENABLE_TOOL_SEARCH` is
+set.** Claude Code defers MCP and system tool schemas — sending a schema only
+once the model searches for that tool — but it stops deferring the moment a
+custom `ANTHROPIC_BASE_URL` is in play, so every schema comes back resident and
+the context grows instead of shrinking. `headroom wrap` sets
+`ENABLE_TOOL_SEARCH` in the child env to restore it
+(`true`/`false`/`auto`/`auto:N`, N 0-100), and the proxy re-injects deferral
+itself on paths where the client did not; the tokens it kept out are booked
+under the `tool_search_deferred_tokens` tag. **The env route of the previous
+section does not set that variable** — add it next to `ANTHROPIC_BASE_URL`, or
+the proxy spends its savings on a toolset it just un-deferred. Deferral pays off
+from ten tools or 10k tokens of definitions and becomes necessary past 30-50,
+where tool-selection accuracy drops on its own; its price is that the model must
+find a tool before it can call one. Claude Code picks which tools stay resident,
+but the other half of the platform guidance is ours to apply: put a one-line
+tool-category pointer in the project `CLAUDE.md` of repos where a deferred
+toolset matters, or the model never thinks to search for it and works around it
+with `Bash` instead. Deferred schemas stay out of the system-prompt prefix, so
+prompt caching survives either way. See [Tool search
+tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).
+
 **Run `installer/install.sh` after adding it.** Claude Code never reads
 `settings.local.json` itself; the installer merges it into the rendered
 `~/.claude/settings.json`, and that render is what actually routes the CLI. Skip
@@ -124,6 +145,26 @@ covers tool results, and a pasted brief is a user message — so a long spec pas
 into the prompt can still come back with file:line citations and figures mangled,
 which reads as if it were written that way. Write it to a file and pass the path
 instead; that routes it through `Read`, which the flag does cover.
+
+**Installing headroom brings a second tool with it: `tokensave`.** headroom's
+default code-graph compressor is
+[`aovestdipaperino/tokensave`](https://github.com/aovestdipaperino/tokensave),
+and registering the agent downloads its release binary to
+`~/.local/bin/tokensave` (155 MB, ad-hoc signed, built in GitHub Actions),
+writes a global `mcpServers.tokensave` entry into `~/.claude.json`, and creates
+the `~/.tokensave/` index DB — which is what the `.tokensave` line in
+`.gitignore` is for. Nothing announces any of this, so the receipt is
+`~/.headroom/mcp_installs.json`: it records the agent, a fingerprint, and
+`installed_at`. Two things follow. It arrives *without* running tokensave's own
+installer, so `installed_agents` stays empty in `~/.tokensave/config.toml` and
+no `CLAUDE.md`, permission entry, hook, or global git `post-commit` hook is
+touched — but the prompt rule that reminds the model its `tokensave_*` catalog
+(34 languages) exists is skipped along with them, which is why the pointer in
+the previous section matters. And its telemetry is on by default
+(`upload_enabled = true`, counting to a Cloudflare worker); `tokensave
+disable-upload-counter` turns it off. The pinned version can trail the latest
+(7.0.2 against a cached 7.8.1 on 2026-07-27) — treat that as headroom's choice
+and leave `tokensave upgrade` alone unless headroom's own docs move.
 
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
