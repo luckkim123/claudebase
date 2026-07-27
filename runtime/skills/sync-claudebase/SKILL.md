@@ -619,6 +619,36 @@ never `config/settings.json` (a symlinked, synced file: the proxy URL would ship
 to every machine and break the ones with no proxy running). Report the outcome
 in the summary.
 
+**If present, check whether it is stale (same detect-then-ask gate).** `install.sh`
+never installs or upgrades headroom, so a machine can sit on an old version
+indefinitely. Compare against PyPI using the interpreter that owns the installed CLI:
+
+```bash
+# Derive the interpreter from the installed CLI's shebang — do NOT reuse the
+# python3.1x probe from the install path above. headroom often lives in its own
+# venv (e.g. ~/.claude/.headroom-venv), so probing picks an interpreter that has
+# no headroom-ai and the check silently reports "up to date".
+HPY="$(sed -n '1s|^#!||p' "$(command -v headroom)")"
+if "$HPY" -m pip show headroom-ai >/dev/null 2>&1; then
+  "$HPY" -m pip list --outdated 2>/dev/null | grep -i '^headroom-ai' \
+    || echo "(4j) headroom up to date"
+else
+  echo "(4j) cannot resolve headroom's interpreter — check the upgrade manually"
+fi
+```
+
+If a newer version shows, **ask** before upgrading — never auto-run it (same reason as
+the install gate below):
+
+> "`headroom` is on vX, vY is available. Upgrade now? (`pip install -U "headroom-ai[all]"`)"
+
+On yes: `"$HPY" -m pip install -U "headroom-ai[all]"`, then `headroom doctor`. **Restart the
+proxy before reading the result** — a running `headroom proxy` keeps serving the old code
+until it is restarted, so doctor's `version` row (which compares the live proxy against the
+installed package) reports a mismatch that is stale-process, not a real drift. Report the
+outcome in the summary.
+
+
 **Why ask, not auto:** pip install is non-idempotent and pulls a large
 dependency set, and headroom changes how `claude` launches. Folding it into
 step 5's install.sh would break that step's idempotency contract — same reason
@@ -887,7 +917,7 @@ A short summary table:
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
-| headroom CLI (4j) | `<"active (vX, routed via settings.local.json)" / "present (vX) but never routed" / "installed" / "offered, declined" / "not installed">` |
+| headroom CLI (4j) | `<"active (vX, routed via settings.local.json)" / "present (vX) but never routed" / "installed" / "upgraded vX -> vY" / "upgrade offered, deferred" / "offered, declined" / "not installed">` |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
