@@ -36,3 +36,4 @@ desktop.ini
 
 # OMC runtime state (reviews, handoffs, sessions, project memory)
 .omc/
+.tokensave
