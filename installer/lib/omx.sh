@@ -152,10 +152,19 @@ PY
   fi
 
   log "omx: (re)installing editable from $src via $PY (was: ${pinned:-unknown})"
-  # --break-system-packages: this container's python is PEP-668 externally-
-  # managed; the original install used the same flag. -e keeps it editable so
-  # source edits take effect without reinstall during development.
-  if "$PY" -m pip install -e "$src" --break-system-packages >/dev/null 2>&1; then
+  # -e keeps it editable so source edits take effect without reinstall during
+  # development. Try plain first; only add --break-system-packages if pip
+  # itself reports a PEP-668 externally-managed environment. Passing the flag
+  # unconditionally breaks on pip <23.0.1 (predates PEP 668 support), which
+  # rejects the unrecognized flag outright before attempting the install.
+  local pip_out pip_status=0
+  pip_out="$("$PY" -m pip install -e "$src" 2>&1)" || pip_status=$?
+  if [[ $pip_status -ne 0 ]] && grep -q "externally-managed-environment" <<<"$pip_out"; then
+    debug "omx: externally-managed environment — retrying with --break-system-packages"
+    pip_status=0
+    pip_out="$("$PY" -m pip install -e "$src" --break-system-packages 2>&1)" || pip_status=$?
+  fi
+  if [[ $pip_status -eq 0 ]]; then
     if "$PY" -c 'import omx_core' >/dev/null 2>&1; then
       log "omx: CLI ready (import omx_core OK)"
     else
@@ -163,5 +172,6 @@ PY
     fi
   else
     printf '[install] WARNING: `pip install -e %s` failed — `omx` CLI may not work\n' "$src"
+    debug "omx: pip error: $pip_out"
   fi
 }
