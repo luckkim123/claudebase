@@ -60,6 +60,15 @@ headroom dashboard       # live token savings
 headroom output-savings  # per-workload breakdown
 ```
 
+Not every workload can afford it: compression rewrites tool output, so
+full-fidelity reading (whole-codebase reads, config values, diff review) breaks
+under an aggressively-tuned proxy. Reach for the mode before the off switch —
+`--mode cache` plus `--protect-tool-results` keeps file reads intact while still
+earning the prefix-cache credit, and only `--mode token` rewrites prior turns.
+See the README's "Turn it off for full-fidelity reading" and the mode note under
+it. Either way it is a deliberate per-task choice, distinct from the gradual
+quality drift step 4 watches for.
+
 ## 4. Weekly review — savings AND quality, together
 
 Savings without a quality check is a trap: compression that drops the wrong

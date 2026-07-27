@@ -636,9 +636,11 @@ there cannot bind and keepalive-respawns forever (`last exit code = 3`) while
 `headroom install status` still reports `healthy`, because the forward answers
 the health probe. So `status: healthy` is not proof the local proxy is the one
 replying — confirm with `lsof -nP -iTCP:<port> -sTCP:LISTEN` that a `Python`
-process owns the socket, not the editor's helper. The README carries the running
-port allocation — read it to pick a free number, and add the machine when you
-assign one. Bind `127.0.0.1` only (on a flat overlay network — Tailscale,
+process owns the socket, not the editor's helper. There is no central allocation
+list — the port is per-machine state, so pick any free number in the block and
+let that `lsof` check settle ownership; it catches a forward that a stale list
+would have called free. Record the choice in this machine's own
+`settings.local.json`. Bind `127.0.0.1` only (on a flat overlay network — Tailscale,
 WireGuard, ZeroTier — `0.0.0.0` publishes an unauthenticated
 credential-forwarding proxy to every node), and point `ANTHROPIC_BASE_URL` at
 this machine's own loopback, never another host's address.
