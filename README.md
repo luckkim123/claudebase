@@ -158,7 +158,7 @@ recreates it.
 
 ## Per-machine overrides
 
-Put machine-specific plugins / permissions / model choice (e.g. `"model": "opus[1m]"`) in `~/.claude/settings.local.json` (gitignored). Claude Code merges it on top of `config/settings.json`. See `templates/settings.local.example.json`.
+Put machine-specific plugins / permissions / model choice (e.g. `"model": "opus[1m]"`) in `~/.claude/settings.local.json` (gitignored). `installer/install.sh` merges it on top of `config/settings.json` and **renders** the result to `~/.claude/settings.json` — the only user-scope settings file Claude Code reads. Two consequences: edits to `settings.local.json` take effect on the next `install.sh` run rather than instantly, and anything the CLI writes into the rendered file (`/model`, `/config`, `claude plugin enable -s user`) is captured back into `settings.local.json` on that run, so personal preferences persist without ever touching the tracked baseline. See `templates/settings.local.example.json`.
 
 ## Learn more
 

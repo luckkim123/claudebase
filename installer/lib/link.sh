@@ -50,10 +50,59 @@ link_or_copy() {
   fi
 }
 
+# render_settings — ~/.claude/settings.json = baseline + per-machine overrides.
+#
+# settings.json is rendered, not symlinked, because it is the ONLY file Claude
+# Code reads user-scope settings from: `claude --setting-sources` offers
+# user/project/local, where `local` is the *project's* .claude/settings.local.json.
+# A user-scope settings.local.json is never parsed by the CLI (measured
+# 2026-07-27, CLI 2.1.220). Symlinking this path at the tracked baseline
+# therefore pushed every `/model` and `claude plugin enable` into the lab file
+# while leaving ~/.claude/settings.local.json completely inert. Rendering makes
+# the per-machine layer real and keeps the baseline clean.
+#
+# COPY_MODE is irrelevant here — a rendered file is neither a link nor a copy.
+render_settings() {
+  local base="$REPO_DIR/config/settings.json"
+  local local_file="$CLAUDE_HOME/settings.local.json"
+  local dest="$CLAUDE_HOME/settings.json"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    log "skip settings render: 'python3' not available — leaving $dest as-is"
+    return
+  fi
+
+  local args=(--base "$base" --local "$local_file" --out "$dest")
+  [[ ${DRY_RUN:-0} -eq 1 ]] && args+=(--dry-run)
+
+  # Not wrapped in `run`: the script does its own --dry-run reporting, and its
+  # capture step must read the live file even on a dry run.
+  # The script stays silent when nothing changed, so any output means it acted —
+  # that is what keeps a second install.sh run free of `rendered:` lines
+  # (tests/smoke/test_install_idempotent.sh).
+  local out
+  if out="$(python3 "$REPO_DIR/installer/scripts/render_settings.py" "${args[@]}")"; then
+    if [[ -n "$out" ]]; then
+      printf '%s\n' "$out"
+      if [[ ${DRY_RUN:-0} -eq 1 ]]; then
+        log "would render: $dest (config/settings.json + settings.local.json)"
+      else
+        log "rendered: $dest (config/settings.json + settings.local.json)"
+      fi
+    else
+      debug "settings already current: $dest"
+    fi
+  else
+    printf '%s\n' "$out"
+    log "settings render FAILED — $dest left untouched"
+    return 1
+  fi
+}
+
 # Stage 1+2+2b — ~/.claude/{,settings.json,CLAUDE.md}.
 link_settings_and_md() {
   [[ -d "$CLAUDE_HOME" ]] || run mkdir -p "$CLAUDE_HOME"
-  link_or_copy "$REPO_DIR/config/settings.json" "$CLAUDE_HOME/settings.json"
+  render_settings
   link_or_copy "$REPO_DIR/config/CLAUDE.md"     "$CLAUDE_HOME/CLAUDE.md"
 }
 
