@@ -19,7 +19,7 @@ HOOK = REPO_ROOT / "runtime" / "hooks" / "omc-reference-emit.py"
 def _run(env_home: Path) -> dict:
     env = os.environ.copy()
     env["HOME"] = str(env_home)
-    r = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env)
+    r = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env, check=False)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 

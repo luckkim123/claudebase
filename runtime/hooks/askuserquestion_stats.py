@@ -81,12 +81,18 @@ def _format(stats: dict) -> str:
         "AskUserQuestion failure telemetry",
         "=" * 34,
         f"  total failures   : {stats['total']}",
-        f"  guard denies     : {stats['guard_denies']}  "
-        "(empty-array / partial / surrogate)",
-        f"  retry rejections : {stats['retry_rejections']}  "
-        "(bare missing-`questions`)",
-        f"  abandon events   : {stats['abandon_events']}  "
-        "(runaway loops that hit the abandon stage)",
+        (
+            f"  guard denies     : {stats['guard_denies']}  "
+            "(empty-array / partial / surrogate)"
+        ),
+        (
+            f"  retry rejections : {stats['retry_rejections']}  "
+            "(bare missing-`questions`)"
+        ),
+        (
+            f"  abandon events   : {stats['abandon_events']}  "
+            "(runaway loops that hit the abandon stage)"
+        ),
     ]
     by_session = stats["by_session"]
     if by_session:

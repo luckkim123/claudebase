@@ -121,7 +121,7 @@ def main():
                 payload = sys.stdin.read()
                 if payload.strip():
                     tp = json.loads(payload).get("transcript_path")
-        except Exception:
+        except Exception:  # noqa: BLE001 — a raising hook blocks the user's turn; failing open is the contract
             tp = None
         tp = tp or os.environ.get("CLAUDE_TRANSCRIPT_PATH") or os.environ.get("TRANSCRIPT_PATH")
         if not tp or not os.path.exists(tp):

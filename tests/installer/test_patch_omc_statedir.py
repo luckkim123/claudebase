@@ -105,7 +105,7 @@ def dist_of(cfg: Path) -> Path:
 
 def run_patch(config_dir: Path, dry: str = "0"):
     env = {**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir), "DRY_RUN": dry}
-    return subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True)
+    return subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False)
 
 
 def test_patch_applies_and_helper_copied(tmp_path):
@@ -174,7 +174,7 @@ def test_patched_file_is_valid_js(tmp_path):
     cfg = make_mock_omc(tmp_path)
     run_patch(cfg)
     js = dist_of(cfg) / "worktree-paths.js"
-    chk = subprocess.run(["node", "--check", str(js)], capture_output=True, text=True)
+    chk = subprocess.run(["node", "--check", str(js)], capture_output=True, text=True, check=False)
     assert chk.returncode == 0, chk.stderr
 
 
@@ -269,7 +269,7 @@ def test_bridge_bundle_is_patched(tmp_path):
     assert (bridge_of(cfg) / "_claudebase-omc-ascent.cjs").exists()
     # The OMC_STATE_DIR branch (root2) must stay untouched.
     assert "const root2 = resolveStateAnchorRoot(worktreeRoot);" in js
-    chk = subprocess.run(["node", "--check", str(bridge)], capture_output=True, text=True)
+    chk = subprocess.run(["node", "--check", str(bridge)], capture_output=True, text=True, check=False)
     assert chk.returncode == 0, chk.stderr
 
 
