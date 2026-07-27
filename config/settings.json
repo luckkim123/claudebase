@@ -139,6 +139,7 @@
     }
   },
   "language": "한국",
+  "alwaysThinkingEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "remoteControlAtStartup": true,
