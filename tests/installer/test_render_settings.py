@@ -16,7 +16,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "installer" / "scripts"))
 
-import render_settings as rs  # noqa: E402
+import render_settings as rs
+
+# A realistic slice of the lab baseline: one common plugin plus a scalar block,
+# which is enough to exercise both merge modes.
+BASE = {
+    "enabledPlugins": {"superpowers@official": True},
+    "permissions": {"defaultMode": "auto"},
+}
 
 
 class TestDeepMerge:
@@ -67,27 +74,25 @@ class TestDiffOverrides:
 
 
 class TestPlan:
-    BASE = {"enabledPlugins": {"superpowers@official": True}, "permissions": {"defaultMode": "auto"}}
-
     def test_local_plugin_reaches_the_render(self):
         # The original bug, stated as a test: an opt-in plugin recorded per
         # machine must actually be enabled in the file Claude Code reads.
         local = {"enabledPlugins": {"claude-mem@thedotmack": True}}
-        rendered, _ = rs.plan(self.BASE, local, existing=None)
+        rendered, _ = rs.plan(BASE, local, existing=None)
         assert rendered["enabledPlugins"]["claude-mem@thedotmack"] is True
         assert rendered["enabledPlugins"]["superpowers@official"] is True
 
     def test_cli_written_pref_is_captured_and_survives(self):
         # `/model opus` lands in the rendered file; the next install run must
         # move it into settings.local.json rather than clobber it.
-        existing = rs.deep_merge(self.BASE, {"model": "opus"})
-        rendered, new_local = rs.plan(self.BASE, {}, existing=existing)
+        existing = rs.deep_merge(BASE, {"model": "opus"})
+        rendered, new_local = rs.plan(BASE, {}, existing=existing)
         assert new_local["model"] == "opus"
         assert rendered["model"] == "opus"
 
     def test_cli_enabled_plugin_is_captured(self):
-        existing = rs.deep_merge(self.BASE, {"enabledPlugins": {"remotion@remotion": True}})
-        _, new_local = rs.plan(self.BASE, {}, existing=existing)
+        existing = rs.deep_merge(BASE, {"enabledPlugins": {"remotion@remotion": True}})
+        _, new_local = rs.plan(BASE, {}, existing=existing)
         assert new_local["enabledPlugins"] == {"remotion@remotion": True}
 
     def test_installer_only_keys_never_reach_the_render(self):
@@ -97,7 +102,7 @@ class TestPlan:
             "personalRepos": ["~/x"],
             "model": "opus",
         }
-        rendered, _ = rs.plan(self.BASE, local, existing=None)
+        rendered, _ = rs.plan(BASE, local, existing=None)
         assert "_comment" not in rendered
         assert "_optional_plugins_note" not in rendered
         assert "personalRepos" not in rendered
@@ -107,22 +112,22 @@ class TestPlan:
         # The shipped template ships `enabledPlugins._remove_this_example`;
         # a machine that copies it verbatim must not get a bogus plugin id.
         local = {"enabledPlugins": {"_remove_this_example": False, "remotion@remotion": True}}
-        rendered, _ = rs.plan(self.BASE, local, existing=None)
+        rendered, _ = rs.plan(BASE, local, existing=None)
         assert "_remove_this_example" not in rendered["enabledPlugins"]
         assert rendered["enabledPlugins"]["remotion@remotion"] is True
 
     def test_is_idempotent(self):
         local = {"model": "opus"}
-        rendered, new_local = rs.plan(self.BASE, local, existing=None)
-        again, again_local = rs.plan(self.BASE, new_local, existing=rendered)
+        rendered, new_local = rs.plan(BASE, local, existing=None)
+        again, again_local = rs.plan(BASE, new_local, existing=rendered)
         assert again == rendered
         assert again_local == new_local
 
     def test_baseline_update_still_propagates_after_capture(self):
         # Capture must not shadow the baseline: adding a plugin to the lab file
         # has to reach a machine that previously captured a different one.
-        existing = rs.deep_merge(self.BASE, {"enabledPlugins": {"remotion@remotion": True}})
-        _, new_local = rs.plan(self.BASE, {}, existing=existing)
+        existing = rs.deep_merge(BASE, {"enabledPlugins": {"remotion@remotion": True}})
+        _, new_local = rs.plan(BASE, {}, existing=existing)
         grown = {"enabledPlugins": {"superpowers@official": True, "ponytail@ponytail": True}}
         rendered, _ = rs.plan(grown, new_local, existing=None)
         assert rendered["enabledPlugins"]["ponytail@ponytail"] is True
