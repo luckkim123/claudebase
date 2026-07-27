@@ -81,6 +81,7 @@ def test_cli_runs_and_prints_summary(tmp_path):
         {"signal": "empty_askuserquestion", "session_id": "A", "mode": "retry"}])
     proc = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), "--root", str(tmp_path)],
+        check=False,
         capture_output=True, text=True, timeout=15)
     assert proc.returncode == 0, proc.stderr
     assert "total" in proc.stdout.lower()

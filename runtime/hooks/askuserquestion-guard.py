@@ -71,7 +71,6 @@ import json
 import os
 import sys
 
-
 REASON = (
     "Empty AskUserQuestion call rejected. Your tool_input was {} (or had no "
     "'questions' array). The harness would have rejected this with "
@@ -127,7 +126,7 @@ def _log_deny(cwd, session_id) -> None:
             f.write(json.dumps(
                 {"signal": "denied_askuserquestion", "session_id": session_id},
                 ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — a raising hook blocks the user's turn; failing open is the contract
         pass
 
 
@@ -174,10 +173,10 @@ def _heal_transcript(transcript_path) -> None:
         # Runtime sibling import (same hooks/ dir). Static analyzers can't resolve
         # it because the path is only added at call time — that's expected; the
         # resolved import is exercised by test_surrogate_heals_transcript_in_place.
-        import fix_surrogate  # type: ignore[import-not-found]  # noqa: E402
+        import fix_surrogate  # type: ignore[import-not-found]
 
         fix_surrogate.process_file(transcript_path, fix=True, backup=True)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — a raising hook blocks the user's turn; failing open is the contract
         # Outer Stop/SessionStart surrogate repair remains the safety net.
         pass
 

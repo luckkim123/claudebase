@@ -32,7 +32,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-
 # ─── data model ──────────────────────────────────────────────────────────────
 
 
@@ -187,6 +186,7 @@ def install_omc_shell_cli() -> str:
     rc = subprocess.run(
         ["npm", "i", "-g", "oh-my-claude-sisyphus@latest"],
         capture_output=True,
+        check=False,
     ).returncode
     return ("installed oh-my-claude-sisyphus" if rc == 0
             else "WARNING: failed to install oh-my-claude-sisyphus")
@@ -241,6 +241,7 @@ def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
             rc = subprocess.run(
                 ["claude", "plugin", "update", d.plugin],
                 capture_output=True,
+                check=False,
             ).returncode
             log.append(f"plugin updated (user): {d.plugin}" if rc == 0
                        else f"WARNING: failed to update: {d.plugin}")
@@ -254,10 +255,12 @@ def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
             subprocess.run(
                 ["claude", "plugin", "uninstall", "-s", d.current_scope, "-y", d.plugin],
                 capture_output=True,
+                check=False,
             )
         rc = subprocess.run(
             ["claude", "plugin", "install", "-s", "user", d.plugin],
             capture_output=True,
+            check=False,
         ).returncode
         if rc != 0:
             log.append(f"WARNING: failed to install: {d.plugin}")
@@ -284,6 +287,7 @@ def _existing_marketplaces() -> set[str]:
     out = subprocess.run(
         ["claude", "plugin", "marketplace", "list"],
         capture_output=True, text=True,
+        check=False,
     ).stdout
     names = set()
     for line in out.splitlines():
@@ -334,6 +338,7 @@ def ensure_marketplaces(settings: dict, metadata: dict, platform: str,
         rc = subprocess.run(
             ["claude", "plugin", "marketplace", "add", source],
             capture_output=True,
+            check=False,
         ).returncode
         log.append(f"added marketplace: {name}" if rc == 0
                    else f"WARNING: failed to add marketplace: {name}")

@@ -46,6 +46,7 @@ def _run_hook(stdin_obj: dict) -> dict:
         capture_output=True,
         text=True,
         timeout=15,
+        check=False,
     )
     assert proc.returncode == 0, f"hook must always exit 0, got {proc.returncode}: {proc.stderr}"
     out = proc.stdout.strip()
@@ -159,6 +160,7 @@ def test_hook_never_blocks_on_malformed_stdin():
         capture_output=True,
         text=True,
         timeout=15,
+        check=False,
     )
     assert proc.returncode == 0
     assert proc.stdout.strip() == ""  # exit clean, no decision

@@ -359,7 +359,7 @@ def _log(cwd: str, record: dict) -> None:
         path = os.path.join(log_dir, "askuserquestion_retry.jsonl")
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — a raising hook blocks the user's turn; failing open is the contract
         pass
 
 

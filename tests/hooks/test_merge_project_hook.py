@@ -37,6 +37,7 @@ def _run(fragment: Path, target: Path) -> tuple[int, str, str]:
     r = subprocess.run(
         [sys.executable, str(HOOK), str(fragment), str(target), MARKER],
         capture_output=True, text=True,
+        check=False,
     )
     return r.returncode, r.stdout, r.stderr
 

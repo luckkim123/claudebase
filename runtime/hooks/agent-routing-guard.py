@@ -64,7 +64,6 @@ import json
 import os
 import sys
 
-
 # --- research-intent detection -------------------------------------------------
 # Two categories. A task is "research" only when BOTH fire. Requiring both is the
 # false-positive guard: a single stray keyword (e.g. "compare these two configs"
@@ -143,7 +142,7 @@ def _log_deny(cwd, session_id) -> None:
             f.write(json.dumps(
                 {"signal": "denied_agent_routing", "session_id": session_id},
                 ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — a raising hook blocks the user's turn; failing open is the contract
         pass
 
 

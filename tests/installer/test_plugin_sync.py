@@ -19,9 +19,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "installer" / "scripts"))
 
-import plugin_sync as ps  # noqa: E402
-from plugin_sync import Action, Decision  # noqa: E402
-
+import plugin_sync as ps
+from plugin_sync import Action, Decision
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
 
