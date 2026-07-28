@@ -132,6 +132,7 @@ lab-wide (they're absent from `config/settings.json`):
 | `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | UI/UX design intelligence |
 | `marketing-skills` | `coreyhaines31/marketingskills` | 60+ marketing skills |
 | `claude-mem` | `thedotmack/claude-mem` | cross-session memory (adds session-start injection — measure it, see fitting doc) |
+| `headroom` | `chopratejas/headroom` | on-demand MCP compression tools — the **plugin**, not the pip CLI proxy of [docs/headroom.md](docs/headroom.md); separate installs, neither implies the other |
 
 Enable them by running `/sync-claudebase` (step 4k detects, asks per plugin, then
 registers the marketplace + installs each at user scope), or manually:

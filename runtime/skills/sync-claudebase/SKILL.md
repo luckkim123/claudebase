@@ -183,7 +183,7 @@ git diff config/settings.json | grep -E '^\+' | grep -E 'enabledPlugins|extraKno
 When it does carry plugin state, delete just the leaked pref keys from `~/.claude/settings.json` and leave the plugin entries in place, then confirm nothing was collaterally disabled:
 
 ```bash
-claude plugin list | grep -A3 -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' | grep Status
+claude plugin list | grep -A3 -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem|headroom' | grep Status
 # every one the user opted into must read "enabled", not "disabled"
 ```
 
@@ -684,7 +684,7 @@ step 5's install.sh would break that step's idempotency contract — same reason
 
 **4k. Optional personal plugins enabled? (detect-then-ask, per plugin)**
 
-Four non-core plugins are opt-in personal extras — deliberately **not** in
+Five non-core plugins are opt-in personal extras — deliberately **not** in
 `config/settings.json` (never forced lab-wide) and their marketplaces **not** in
 `extraKnownMarketplaces` (so `install.sh`'s plugin sync won't register them; it
 resolves marketplaces from `config/settings.json` only — `plugin_sync.py`
@@ -697,13 +697,24 @@ on explicit yes. Candidates:
 | `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | `ui-ux-pro-max@ui-ux-pro-max-skill` |
 | `marketing-skills` | `coreyhaines31/marketingskills` | `marketing-skills@marketingskills` |
 | `claude-mem` | `thedotmack/claude-mem` | `claude-mem@thedotmack` |
+| `headroom` | `chopratejas/headroom` | `headroom@headroom-marketplace` |
 
 Detect which are already installed:
 
 ```bash
-claude plugin list 2>/dev/null | grep -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' \
+claude plugin list 2>/dev/null | grep -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem|headroom' \
   || echo "(4k) none of the optional extras installed"
 ```
+
+**`headroom` here is the plugin, not the CLI of step 4j — they are separate
+installs and neither implies the other.** The plugin ships the on-demand MCP
+tools (`headroom_compress`, `headroom_retrieve`); the pip CLI runs the proxy that
+compresses automatically. The marketplace registration lives in
+`~/.claude/plugins/known_marketplaces.json`, which is machine-local runtime state
+that nothing in this repo syncs — so on a fresh machine an
+`"headroom@headroom-marketplace": true` line copied into `settings.local.json` is
+a dead entry until `claude plugin marketplace add chopratejas/headroom` runs
+here. Offer it independently of 4j's answer.
 
 **Ask per plugin** for each missing one (they serve different purposes — video,
 design, marketing, memory — the user may want some and not others):

@@ -168,7 +168,14 @@ and leave `tokensave upgrade` alone unless headroom's own docs move.
 
 Opt-in and per-machine — nothing is installed by `install.sh`. Running
 `/sync-claudebase` detects a missing `headroom` and offers to `pip install` it
-(default No); step 4j also reports an installed-but-never-routed machine. See
+(default No); step 4j also reports an installed-but-never-routed machine. The
+plugin is a **separate** opt-in — `headroom@headroom-marketplace` carries only
+the on-demand MCP tools (`headroom_compress`, `headroom_retrieve`), not the
+proxy, and step 4k offers it alongside the other personal plugins. Its
+marketplace registration is machine-local runtime state
+(`~/.claude/plugins/known_marketplaces.json`), so nothing in this repo carries
+it across machines: `claude plugin marketplace add chopratejas/headroom` runs
+once per machine. See
 [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) for the weekly
 savings-vs-quality loop this feeds.
 
