@@ -101,6 +101,10 @@ maybe_enable_claude_mouse
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
+# Idempotent `uv tool install` of the code-review-graph CLI (code intelligence
+# graph for AI code review, github.com/tirth8205/code-review-graph) → deps.sh.
+ensure_code_review_graph
+
 # Prune stale plugin-cache versions → lib/plugin_cache.sh. Marketplace
 # auto-update fetches new versions but never deletes the old ones, so the cache
 # grows without bound (e.g. omc 4.14.1 + 4.14.4 + 4.14.5). Keep only the newest

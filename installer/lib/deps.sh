@@ -51,6 +51,40 @@ check_runtime_deps() {
   fi
 }
 
+# ensure_code_review_graph — idempotent install of the code-review-graph CLI
+# (github.com/tirth8205/code-review-graph) via `uv tool install`. No sudo, no
+# platform branching needed (uv resolves its own Python), so this runs
+# unconditionally rather than gated behind INSTALL_TOOLS. Warn-and-skip if uv
+# itself is missing — same contract as jq/gemini above. Per-project setup
+# (`code-review-graph install --platform claude-code` + `build`) is NOT run
+# here: that's a per-repo decision, done inside each project that wants it.
+_code_review_graph_present() {
+  # uv tool install puts the shim in ~/.local/bin, which some shells (this
+  # user's .zshrc has the export commented out) never put on PATH — check the
+  # known install dir too, same pattern as the sync-claudebase skill's bun check.
+  command -v code-review-graph >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/code-review-graph" ]]
+}
+
+ensure_code_review_graph() {
+  if _code_review_graph_present; then
+    debug "code-review-graph present (skip)"
+    return 0
+  fi
+  if ! command -v uv >/dev/null 2>&1; then
+    printf '[install] WARNING: "code-review-graph" not found and uv is missing\n'
+    printf '[install]   install uv: https://docs.astral.sh/uv/getting-started/installation/\n'
+    return 0
+  fi
+  log "installing code-review-graph via uv tool install"
+  if run uv tool install code-review-graph; then
+    _code_review_graph_present \
+      && log "code-review-graph installed" \
+      || printf '[install] WARNING: code-review-graph install ran but binary still missing — check ~/.local/bin\n'
+  else
+    printf '[install] WARNING: uv tool install code-review-graph failed\n'
+  fi
+}
+
 # --- opt-in convenience-tool auto-install (INSTALL_TOOLS=1) ------------------
 #
 # tmux + a clipboard helper make tmux.conf's mouse-copy bindings work; without a
