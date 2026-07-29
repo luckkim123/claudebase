@@ -2,6 +2,11 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-07-29 — template: `code-review-graph` trust rules
+
+### Added
+- **`templates/project-code-review-graph.md`** — a `.claude/rules/` drop-in for projects carrying a [code-review-graph](https://github.com/tirth8205/code-review-graph) index. The tool answers structural questions from a local SQLite graph instead of reading files, but it indexes `git ls-files` only, so an **untracked file returns `0 results` rather than an error** — failure is indistinguishable from "this code is unused". The template names all three causes of an empty answer (untracked / stale graph via `_graph.head_matches_build` / multi-word query hitting the FTS fallback when no embeddings are built), pins `max_depth=1` on impact radius (measured on one repo: depth 1 returned the 3 real importers, depth 2 returned 8 files with 5 false positives), requires an explicit `repo_root` wherever the graph belongs to a nested repo rather than the outer checkout, and rules the graph out entirely for config files (no nodes ⇒ blast radius always empty) and for vendored-dominated repos (`cross_community_edges: 0` across several communities means disconnected vendor trees, not clean architecture). Closes with the class of coupling no code graph can represent: message-bus topic names and QoS, runtime-resolved service names, and orchestration wiring — verify those against the running system.
+
 ## [Unreleased] — 2026-07-26 — opt-in: AI-usage fitting loop, optional plugins
 
 Two opt-in additions, all per-machine and absent from the lab-forced
