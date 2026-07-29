@@ -199,7 +199,7 @@ This file loads into **every session on every machine and project**, so an Opera
 - **Date Awareness**: ALWAYS check current date (shown in `<env>` tags). When year not specified, assume current year or future. NEVER create past-dated artifacts (commits, calendar events, task deadlines, file timestamps) unless explicitly requested. Before creating a new dated artifact, scan for an existing one — update rather than duplicate.
 - **Compound Learnings**: when a task surfaces a non-obvious decision, surprising result, or hard-won fix, log a one-line entry to the auto-memory system (`~/.claude/projects/<project>/memory/`) before ending the task. Reference past learnings when starting similar work — each task should make the next one easier, not harder.
 - **Clear on Loop**: if you've corrected the same issue more than twice in one session, the context is polluted with failed approaches. Run `/clear` and restart with a more specific prompt incorporating what you learned. A fresh session with a better prompt almost always outperforms a long session with accumulated corrections.
-- **AI usage fitting**: periodically audit always-on injection (routing hooks, `MEMORY.md`) vs dynamic input (tool/file output), turn repeated judgments into terse gated rules, compress the dynamic half with `headroom` (opt-in), and review savings % **and** answer quality together each week. Playbook: [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md).
+- **AI usage fitting**: periodically audit always-on injection (routing hooks, `MEMORY.md`) vs dynamic input (tool/file output), turn repeated judgments into terse gated rules, and review token cost **and** answer quality together each week. Playbook: [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md).
 
 ---
 

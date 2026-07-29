@@ -91,8 +91,9 @@ clone already does that.
 - **2026-07-27** — Evaluated against the alternative of leaving the repo as-is.
   Diagnosis was that the repo already *is* a hardened runtime (5,388 lines of
   Python, 8 wired hooks, 3 platforms, test suite) but the README presented it as
-  an install guide: 133 of 258 lines were headroom proxy troubleshooting nested
+  an install guide: 133 of 258 lines were optional-tooling troubleshooting nested
   under "Quick start", while the hooks were not mentioned once. Chose to fix the
-  framing first (README reframe + `docs/headroom.md` split) and defer packaging.
+  framing first (README reframe + splitting that tooling into its own doc) and
+  defer packaging.
   Rationale: nobody installs a plugin they were never told the value of, so the
   README work is a prerequisite for this one regardless.

@@ -183,7 +183,7 @@ git diff config/settings.json | grep -E '^\+' | grep -E 'enabledPlugins|extraKno
 When it does carry plugin state, delete just the leaked pref keys from `~/.claude/settings.json` and leave the plugin entries in place, then confirm nothing was collaterally disabled:
 
 ```bash
-claude plugin list | grep -A3 -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem|headroom' | grep Status
+claude plugin list | grep -A3 -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' | grep Status
 # every one the user opted into must read "enabled", not "disabled"
 ```
 
@@ -536,155 +536,9 @@ code that *needs* a reinstall (e.g. omx-core's `console_scripts` changed), the
 step **surfaces** that as a follow-up for the user to run, but does not execute
 it. Same push-gate as step 8: this sweep never pushes in any repo.
 
-**4j. `headroom` token-compression CLI present? (detect-then-ask install)**
-
-`headroom` (opt-in — see `docs/headroom.md` in claudebase) wraps Claude
-Code through a local compression proxy to cut input tokens. It's a per-machine
-pip tool that `install.sh` does **not** install, so a freshly-synced machine may
-be missing it. Detect and offer, never auto-install (pip is non-idempotent and
-needs Python >=3.10):
-
-```bash
-if command -v headroom >/dev/null 2>&1; then
-  echo "(4j) headroom present: $(headroom --version 2>/dev/null)"
-  headroom doctor 2>&1 || true   # present != active — read the proxy/wrap_marker/savings rows
-else
-  echo "(4j) headroom not installed"
-fi
-```
-
-**Present is not active — check both.** `pip install` puts the CLI on the machine
-but changes nothing about how `claude` launches, so the common state is
-*installed and never routed*: `command -v headroom` succeeds while every request
-still bypasses the proxy. `headroom doctor` names it — `proxy: not reachable` +
-`wrap_marker: no wrap marker found` + `savings: no savings recorded yet` together
-mean the tool has never been used on this machine. Report that in the summary
-(installed but inactive) rather than treating a successful `command -v` as done;
-the fix is a launch-time `headroom wrap claude`, not a reinstall.
-
-**`claude: not routed` alone is NOT proof of inactive — but check whether this
-machine has been re-rendered first.** `check_claude_routing` reads
-`~/.claude/settings.json` only (`headroom/cli/doctor.py`) and never opens
-`settings.local.json`. Since `installer/scripts/render_settings.py` landed, the
-installer merges the two, so on a machine that has run `install.sh` since adding
-the env block, `~/.claude/settings.json` *does* contain the proxy URL and doctor
-reports it accurately. The false negative survives only where the render has not
-run yet — and there the env block is not routing anything either, so the fix is
-the same: run `installer/install.sh`.
-
-`settings.local.json` remains **the correct place to write it**: `config/settings.json`
-is synced to every machine and would ship the proxy URL to hosts with no proxy
-running. Read the rows together before concluding:
-
-| doctor rows | verdict |
-|:---|:---|
-| `proxy: not reachable` + `savings: no savings recorded yet` | genuinely never used |
-| `proxy: pass` + `savings: pass` (non-zero, "last request just now") | **routing fine** — the `claude` warn is a false negative |
-
-The authoritative check is whether a NEW `claude` process increments the proxy's
-request counter (`curl -s http://127.0.0.1:8787/stats` → `.summary.api_requests`
-before/after) — `savings` being non-zero is the same evidence after the fact.
-Report "active via settings.local.json (doctor's claude row is a false negative
-on a machine that has not re-rendered)", not "installed but inactive".
-
-Caveat to carry into the summary: with this env set, a **dead proxy fails every
-request**. The proxy is not a service — it dies with the container/host, so
-`headroom proxy` must be running. Rollback is deleting the `env` block.
-
-If missing, **ask** (same governance as 4e/4f — detect-then-ask, never
-auto-apply):
-
-> "`headroom` (token-compression proxy for `claude`) isn't installed on this
-> machine. Install it now? (`pip install "headroom-ai[all]"`, needs Python >=3.10)"
-
-On yes, install with a Python >=3.10 interpreter (macOS system `python3` is 3.9 —
-prefer a real `python3.1x`; add `--break-system-packages` only if the chosen
-interpreter is PEP-668 externally-managed):
-
-```bash
-PY="$(command -v python3.13 || command -v python3.12 || command -v python3.11 || echo python3)"
-"$PY" -m pip install "headroom-ai[all]"
-headroom doctor      # confirm the integration after install
-```
-
-Then point at the two ways to actually route through it, and pick by how
-`claude` gets launched on this machine:
-
-| Launch style | How to route |
-|:---|:---|
-| Human types `claude` in a terminal | `headroom wrap claude` — per-launch, nothing persisted, easiest to undo |
-| `claude` is started by something else (container entrypoint, harness, daemon) | `"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"}` in **`settings.local.json`**, then `installer/install.sh` to render it, + a running `headroom proxy` |
-
-There is no wrap point to hook when a harness spawns `claude` for you, so the
-env route is the only option there — and it must go in `settings.local.json`,
-never `config/settings.json` (a synced file: the proxy URL would ship to every
-machine and break the ones with no proxy running).
-
-**Name what routing costs before the user picks either row: Remote Control and
-the 1M context window both stop working.** Claude Code gates them on the base URL
-client-side, so *any* routing disables them — `wrap` included, since it sets the
-same variable for its child — for as long as it is in effect (upstream
-#746/#1158). Compression and RC + 1M cannot both be on. On a machine driven
-remotely, or one running a 1M-context model, the honest recommendation is to
-leave it unrouted and reach for `headroom wrap claude` only on the sessions that
-want compression. Report the outcome in the summary.
-
-**If the user does route, check the port before anything else: one port per
-machine, from the `18787+` block, never the default `8787` on two machines.**
-VS Code Remote-SSH forwards a remote machine's listening ports to the *same*
-local port, so a second machine on the default finds `localhost:8787` already
-answering — with the **other** machine's proxy. A persistent deployment bound
-there cannot bind and keepalive-respawns forever (`last exit code = 3`) while
-`headroom install status` still reports `healthy`, because the forward answers
-the health probe. So `status: healthy` is not proof the local proxy is the one
-replying — confirm with `lsof -nP -iTCP:<port> -sTCP:LISTEN` that a `Python`
-process owns the socket, not the editor's helper. There is no central allocation
-list — the port is per-machine state, so pick any free number in the block and
-let that `lsof` check settle ownership; it catches a forward that a stale list
-would have called free. Record the choice in this machine's own
-`settings.local.json`. Bind `127.0.0.1` only (on a flat overlay network — Tailscale,
-WireGuard, ZeroTier — `0.0.0.0` publishes an unauthenticated
-credential-forwarding proxy to every node), and point `ANTHROPIC_BASE_URL` at
-this machine's own loopback, never another host's address.
-
-**If present, check whether it is stale (same detect-then-ask gate).** `install.sh`
-never installs or upgrades headroom, so a machine can sit on an old version
-indefinitely. Compare against PyPI using the interpreter that owns the installed CLI:
-
-```bash
-# Derive the interpreter from the installed CLI's shebang — do NOT reuse the
-# python3.1x probe from the install path above. headroom often lives in its own
-# venv (e.g. ~/.claude/.headroom-venv), so probing picks an interpreter that has
-# no headroom-ai and the check silently reports "up to date".
-HPY="$(sed -n '1s|^#!||p' "$(command -v headroom)")"
-if "$HPY" -m pip show headroom-ai >/dev/null 2>&1; then
-  "$HPY" -m pip list --outdated 2>/dev/null | grep -i '^headroom-ai' \
-    || echo "(4j) headroom up to date"
-else
-  echo "(4j) cannot resolve headroom's interpreter — check the upgrade manually"
-fi
-```
-
-If a newer version shows, **ask** before upgrading — never auto-run it (same reason as
-the install gate below):
-
-> "`headroom` is on vX, vY is available. Upgrade now? (`pip install -U "headroom-ai[all]"`)"
-
-On yes: `"$HPY" -m pip install -U "headroom-ai[all]"`, then `headroom doctor`. **Restart the
-proxy before reading the result** — a running `headroom proxy` keeps serving the old code
-until it is restarted, so doctor's `version` row (which compares the live proxy against the
-installed package) reports a mismatch that is stale-process, not a real drift. Report the
-outcome in the summary.
-
-
-**Why ask, not auto:** pip install is non-idempotent and pulls a large
-dependency set, and headroom changes how `claude` launches. Folding it into
-step 5's install.sh would break that step's idempotency contract — same reason
-`--update` (4g) stays opt-in.
-
 **4k. Optional personal plugins enabled? (detect-then-ask, per plugin)**
 
-Five non-core plugins are opt-in personal extras — deliberately **not** in
+Four non-core plugins are opt-in personal extras — deliberately **not** in
 `config/settings.json` (never forced lab-wide) and their marketplaces **not** in
 `extraKnownMarketplaces` (so `install.sh`'s plugin sync won't register them; it
 resolves marketplaces from `config/settings.json` only — `plugin_sync.py`
@@ -697,24 +551,13 @@ on explicit yes. Candidates:
 | `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | `ui-ux-pro-max@ui-ux-pro-max-skill` |
 | `marketing-skills` | `coreyhaines31/marketingskills` | `marketing-skills@marketingskills` |
 | `claude-mem` | `thedotmack/claude-mem` | `claude-mem@thedotmack` |
-| `headroom` | `chopratejas/headroom` | `headroom@headroom-marketplace` |
 
 Detect which are already installed:
 
 ```bash
-claude plugin list 2>/dev/null | grep -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem|headroom' \
+claude plugin list 2>/dev/null | grep -E 'remotion|ui-ux-pro-max|marketing-skills|claude-mem' \
   || echo "(4k) none of the optional extras installed"
 ```
-
-**`headroom` here is the plugin, not the CLI of step 4j — they are separate
-installs and neither implies the other.** The plugin ships the on-demand MCP
-tools (`headroom_compress`, `headroom_retrieve`); the pip CLI runs the proxy that
-compresses automatically. The marketplace registration lives in
-`~/.claude/plugins/known_marketplaces.json`, which is machine-local runtime state
-that nothing in this repo syncs — so on a fresh machine an
-`"headroom@headroom-marketplace": true` line copied into `settings.local.json` is
-a dead entry until `claude plugin marketplace add chopratejas/headroom` runs
-here. Offer it independently of 4j's answer.
 
 **Ask per plugin** for each missing one (they serve different purposes — video,
 design, marketing, memory — the user may want some and not others):
@@ -779,9 +622,9 @@ were found installed-but-disabled two days after a sweep because the only record
 of them was in a file nothing read.
 
 **Caution — `claude-mem`:** it injects prior-session context at session start,
-which *adds* to the always-on input that headroom (4j) is cutting, and overlaps
-the existing memory stack (`MEMORY.md`, OMC wiki, omp secretary). Offer it as a
-measured experiment, not a default — see `docs/ai-usage-fitting.md`.
+which *adds* to the always-on input, and overlaps the existing memory stack
+(`MEMORY.md`, OMC wiki, omp secretary). Offer it as a measured experiment, not a
+default — see `docs/ai-usage-fitting.md`.
 
 **Prerequisite check — `claude-mem` needs the `bun` runtime (2026-07-27 gap,
 found live).** `claude-mem`'s own `hooks/hooks.json` routes every hook
@@ -956,7 +799,6 @@ A short summary table:
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
-| headroom CLI (4j) | `<"active (vX, routed via settings.local.json)" / "present (vX) but never routed" / "installed" / "upgraded vX -> vY" / "upgrade offered, deferred" / "offered, declined" / "not installed">` |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |

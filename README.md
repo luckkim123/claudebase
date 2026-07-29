@@ -60,7 +60,7 @@ Seven skills are the repo's own, under `runtime/skills/`: `sync-claudebase`, `ch
 | `secrets/` | `secrets.env` (gitignored), `secrets.example.env` | Substituted into `mcp.json` at render time |
 | `templates/` | Per-project `CLAUDE.md`, settings, gitignore starters | Copied on demand |
 | `tests/` | Hook tests, installer tests, install smoke test | `pytest` |
-| `docs/` | Architecture, rationale, changelog, headroom guide | Read, not installed |
+| `docs/` | Architecture, rationale, changelog | Read, not installed |
 
 Adding a file under `config/`, `shell/`, or `runtime/skills/` means adding a `link_or_copy` line to **both** installers and a row to this table.
 
@@ -132,7 +132,6 @@ lab-wide (they're absent from `config/settings.json`):
 | `ui-ux-pro-max` | `nextlevelbuilder/ui-ux-pro-max-skill` | UI/UX design intelligence |
 | `marketing-skills` | `coreyhaines31/marketingskills` | 60+ marketing skills |
 | `claude-mem` | `thedotmack/claude-mem` | cross-session memory (adds session-start injection — measure it, see fitting doc) |
-| `headroom` | `chopratejas/headroom` | on-demand MCP compression tools — the **plugin**, not the pip CLI proxy of [docs/headroom.md](docs/headroom.md); separate installs, neither implies the other |
 
 Enable them by running `/sync-claudebase` (step 4k detects, asks per plugin, then
 registers the marketplace + installs each at user scope), or manually:
@@ -177,8 +176,7 @@ Put machine-specific plugins / permissions / model choice (e.g. `"model": "opus[
 ## Learn more
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — directory layout, symlink model, plugin sync, secrets, drift detection
-- [docs/headroom.md](docs/headroom.md) — optional local proxy for token compression, and the fidelity tradeoff it carries
-- [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) — the weekly savings-vs-quality loop
+- [docs/ai-usage-fitting.md](docs/ai-usage-fitting.md) — the weekly input-token audit and quality loop
 - [docs/operating-rationale.md](docs/operating-rationale.md) — why each operational limit in `config/CLAUDE.md` exists
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — what changed and when
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — fork / PR guide
