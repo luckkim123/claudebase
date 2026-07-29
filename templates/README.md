@@ -19,6 +19,7 @@ cat ~/claudebase/templates/project-gitignore >> .gitignore
 | `project-CLAUDE.md` | `<project>/CLAUDE.md` | Project-specific instructions. Loaded automatically by Claude Code |
 | `project-gitignore` | append to `<project>/.gitignore` | Excludes machine-specific files like `.claude/settings.local.json` |
 | `project-refactor-workflow.md` | `<project>/.claude/rules/refactor-workflow.md` | Discipline for tracking the 4 axes of multi-stage refactoring (branch/commit/CHANGELOG/PR) |
+| `project-code-review-graph.md` | `<project>/.claude/rules/code-review-graph.md` | When to trust a `code-review-graph` index and when it silently returns nothing. Only for projects that have one |
 
 ## Principles
 
