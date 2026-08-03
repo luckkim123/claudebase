@@ -392,6 +392,30 @@ plugin was actually updated. If a plugin fails to update (network, bad
 marketplace), `apply()` logs `WARNING: failed to update: <plugin>` and continues
 — surface it but don't abort the rest.
 
+**claude-mem worker after an upgrade — kill it; a session relaunch is not
+enough.** `claude-mem` runs one background worker on a fixed port
+(`CLAUDE_MEM_WORKER_PORT` in `~/.claude-mem/settings.json`, default `37701`)
+shared across every host that has it enabled (Claude Desktop, the VS Code
+extension, the terminal CLI). When a sync bumps its version the *old* worker
+keeps running and squatting the port; claude-mem sees the version mismatch but
+**cannot kill a worker a different host spawned** (the PID file reads `null`, so
+it only logs `Stale worker is serving the port but the PID file does not
+identify it`). It then reports `worker unreachable` and, after
+`CLAUDE_MEM_HOOK_FAIL_LOUD_THRESHOLD` (3) consecutive hooks, **blocks every
+prompt loudly**. Relaunching the session does *not* fix it — the stale daemon
+outlives the session. So **only if `claude-mem` was among the N updated**, kill
+the stale worker so the next hook respawns the new version:
+
+```bash
+port=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.claude-mem/settings.json'))).get('CLAUDE_MEM_WORKER_PORT','37701'))" 2>/dev/null || echo 37701)
+pid=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)
+[ -n "$pid" ] && kill "$pid" && echo "claude-mem: killed stale worker pid $pid on :$port (respawns fresh next hook)"
+echo '{"consecutiveFailures":0,"lastFailureAt":0}' > ~/.claude-mem/state/hook-failures.json 2>/dev/null || true  # clear the loud-fail counter
+```
+
+Don't run it when claude-mem did *not* update — killing a healthy same-version
+worker just forces a needless respawn.
+
 **Why opt-in, not folded into step 5's install.sh:** keeping `--update` off the
 default install path preserves install.sh's idempotency contract (a second run
 prints zero action lines — step 6 depends on this). Bundling auto-update would
