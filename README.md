@@ -159,11 +159,22 @@ libraries: `python-pptx`, `python-docx`, `python-hwpx`, `matplotlib`,
 environment at `~/.claude/.venv` built on Python ≥3.10 (required by
 `python-hwpx`; the system `python3` may be older, and Homebrew Python is PEP
 668 externally-managed). Prepend the venv's `bin` to the session `PATH` so
-the skills' bare `python3` calls resolve to it:
+the skills' bare `python3` calls resolve to it.
+
+**Write the full absolute PATH — Claude Code does NOT expand variables in the
+`env` block.** A value like `".venv/bin:$PATH"` is passed *literally*: the
+`$PATH` becomes a bogus path component, so the venv dir effectively *replaces*
+your PATH instead of prepending to it. Every hook subprocess then loses
+`/opt/homebrew/bin`, `/bin`, `/usr/bin`, so `node`/`bash`/`security` become
+"command not found" — which silently breaks `/login` too (it can't run
+`security` to persist the token). Neither `$PATH` nor `${PATH}` is interpolated
+([Claude Code env-vars docs](https://code.claude.com/docs/en/env-vars.md)), so
+list every dir explicitly, venv first:
 
 ```jsonc
 // ~/.claude/settings.local.json  (machine-local, gitignored)
-{ "env": { "PATH": "/Users/<you>/.claude/.venv/bin:$PATH" } }
+// Apple Silicon Homebrew shown; on Intel Homebrew lives in /usr/local/bin.
+{ "env": { "PATH": "/Users/<you>/.claude/.venv/bin:/Users/<you>/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" } }
 ```
 
 The venv is machine-local (not git-synced) — re-running `installer/install.sh`
