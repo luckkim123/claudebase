@@ -763,6 +763,52 @@ For each new template:
   - Commit with `docs: adopt <name> rule from claudebase template` body referencing the source SHA.
   - Do NOT push — that repo's remote is separate (often org-owned) and outside this skill's authority.
 
+### 9.5. Pre-completion ask audit (MANDATORY — run before writing the Outputs summary)
+
+This step exists because of a real failure (2026-08-03, obsidian-vault Mac):
+the optional-plugins sub-step (4k) and an install.sh WARNING about a missing
+optional CLI tool (`code-review-graph`, needs `uv`) were both detected and
+even diagnosed in depth — then only written into the Outputs table as a
+prose note ("not proposed", "warn-only, skip"). The run was reported
+**complete** with two live decisions still open, silently defaulted to
+"skip". The user had to notice the gap and demand both be asked before
+either got surfaced — on a less attentive machine this would have shipped
+with claude-mem and code-review-graph permanently un-offered, no one the
+wiser.
+
+**A summary-table mention is NOT a substitute for asking.** Disclosure ≠
+consent — a decision buried as one row in a nine-row table is easy to skim
+past, and the user can only redirect a choice they were actually asked
+about. Before writing the Outputs table, walk this checklist. For each item,
+either (a) an actual `AskUserQuestion` call (or, in a harness without one,
+an explicit prose question that blocks completion until answered) happened
+in *this* run, or (b) the item is genuinely not applicable — there is no
+third option, and "I mentioned it in the summary" is not (b).
+
+- [ ] 4e (claude CLI upgrade) — asked if drift found, or N/A (no drift)
+- [ ] 4f (OMC upgrade) — asked if drift found, or N/A (no drift)
+- [ ] 4g (other plugin updates) — asked if candidates found, or N/A (0 candidates)
+- [ ] 4k (each of the 4 optional plugins) — asked **individually, one
+      question per missing plugin**, or N/A (already installed/enabled).
+      "Not proposed because it seemed unwanted" is not N/A — that judgment
+      call belongs to the user, not to this skill. This is the exact box
+      that got silently unchecked in the 2026-08-03 incident.
+- [ ] Any `[install] WARNING: ... not found ...` / `... is missing ...` line
+      in the install.sh output about an optional tool it can auto-install —
+      this list is intentionally NOT closed (install.sh grows new optional
+      deps over time: `jq`, `gemini`, `bun`, `code-review-graph`, whatever
+      comes next). Treat every such WARNING as a detect-then-ask candidate
+      by default, same governance tier as 4e/4f/4g, unless it is already a
+      documented warn-only informational case named elsewhere in this skill
+      (e.g. the marketplace cold-start race in 4b). Asked, or N/A (no such
+      WARNING appeared).
+- [ ] Step 9 template adoption — asked if `templates/` changed, or N/A
+
+If any box can't be checked yet, **ask now** — do not write the Outputs
+table first on the theory that you'll circle back to it. The Outputs table
+is written *after* every open item on this list has actually been asked,
+never as a way of discharging the obligation to ask.
+
 ## Red flags (STOP if you catch yourself thinking these)
 
 | Thought | Reality |
@@ -785,6 +831,7 @@ For each new template:
 | "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
 | "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
 | "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
+| "I'll note this optional plugin / install.sh WARNING in the Outputs summary instead of asking" | That's disclosure, not consent — the user can't redirect a decision they were never actually asked about, and a row in a nine-row table is easy to skim past. This exact shortcut (4k's optional plugins + a `code-review-graph`/`uv` WARNING both downgraded to summary notes) shipped a run reported "complete" with two live decisions silently defaulted to "skip" (2026-08-03). Run the Step 9.5 pre-completion ask audit before writing the Outputs table — every detect-then-ask item needs an actual question, not a mention. |
 
 ## Outputs the user expects after a run
 
