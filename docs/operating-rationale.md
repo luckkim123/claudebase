@@ -101,3 +101,23 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 - **Disjoint ownership** for a split task: "session A owns `/api`, B owns `/ui`", claimed before editing, never negotiated after colliding.
 - **Shared-tree fallback:** a PreToolUse `flock`/`O_EXCL` lock; the contender exits 2 and retries (yield, not negotiate). `session_id` is already in every hook's stdin JSON.
 - **Caps & gotchas.** 2–4 parallel sessions (5+ hits rate limits, review breaks down); worktrees do *not* isolate runtime (ports/DBs/caches) and fragment `~/.claude/projects/` history per path. Never carry coordination state in commit trailers — they're unreadable at write-time.
+
+---
+
+## objective-verbatim
+
+**Rule (see `config/CLAUDE.md`):** Write the requester's objective into the plan verbatim before designing. Every decision to hold or change something argues against *that* line. Redefining the objective mid-document is a re-ask, not an edit — and anything your own analysis marks as needing a decision belongs to the user.
+
+**The incident (2026-08, `dgx-final-scaleup`, ~3 days of a reserved DGX).** The user stated repeatedly and emphatically, during planning, that the coupled parameters must be identified and the *best-performing* setting found. The plan that resulted told the executing session: "Change NOTHING except `num_envs` and `max_iterations`."
+
+**The analysis was not skipped — that is the whole point.** The plan carried a section literally titled `## 3b. Parameter coupling under scale-up — derived from code, not asserted`, with three tiers, and its Tier 2 named `step_interval` and predicted the consequence exactly: *"si=250: box saturates at iter 7748, then 12,252 iterations at fixed maximum difficulty."* It even offered the alternative: *"if the user prefers shape (b), it is a one-line change."* The prediction came true (saturation at 7250) and the run spent ~11× the compute of its 4096-env reference to land 2% away from it.
+
+Three failures compounded, and only the first two are avoidable by discipline alone:
+
+- **The objective was never transcribed.** A grep of the 535-line plan finds no statement of what the user asked for. Instead §0b silently *redefined* what the run was FOR. With no original to compare against, the redefinition read as a clarification rather than a substitution.
+- **So the decision was resolved against the wrong criterion.** Tier 2 chose shape (a) partly because it "keeps the run a clean ONE-variable dose-response" — measurement readability. That is a legitimate goal, but it was not *the user's* goal, and nothing in the document forced the conflict into the open. **A substituted objective makes every downstream trade look correct.**
+- **A decision the plan itself called necessary was classified as the program's.** The section titled "Open questions for the user (decisions this program cannot make)" listed nine items; `step_interval` was not among them. Its escape hatch lived inside a table cell in a 535-line document, phrased as a conditional that assumed the user would read that cell and object.
+
+Then the handoff compressed six reasoned dispositions into six prohibitions ("`step_interval` stays 250"), which removed the receiving session's ability to see that any of them had ever been a choice. Carry a held decision as **decision / alternative considered / why held / what it costs**, never as a bare "stays".
+
+**Mechanized where possible.** `omx program-lint` (oh-my-experiments v0.11.0) gates exactly this for experiment plans: objective present as a blockquote, a canonical decision section, every `[DECISION-REQUIRED: <slug>]` escalated into it, and a stated predicted outcome. It reports four findings on the plan above. But a lint cannot catch *"the user said it and nobody wrote it down"* — an objective section filled with the wrong goal passes. That part is discipline, which is why the rule lives here too.

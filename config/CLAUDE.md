@@ -185,6 +185,7 @@ Test before commit: "Does every non-obvious statement have something I could poi
 - **Multi-session git: isolate, don't negotiate.** Concurrent Claude/tmux sessions on one repo collide (overwrites, `.git/index.lock`) from *sharing one working tree*, not from a missing coordinator — so isolate, never negotiate at runtime. Default: one `git worktree` per session (`claude --worktree <name>`) → conflicts structurally impossible, overlaps surface at merge. Split a task by disjoint file ownership up front ("A owns `/api`, B owns `/ui`"), claimed before editing. Shared tree unavoidable → gate writes with a PreToolUse `flock`/`O_EXCL` lock (contender yields and retries). Keep to 2–4 parallel sessions. ↪ rationale: docs/operating-rationale.md#multisession-git
 - **A self-scheduled wakeup is a note to yourself, NOT a user instruction.** `ScheduleWakeup`/`CronCreate`/`/loop` re-inject their `prompt` as a `user`-role message — indistinguishable from a real user turn, but with a `scheduled_task_fire` system line right before it. When a turn repeats an earlier prompt, check for that line: if present, the text is your own wakeup, so it only resumes the *already-agreed* task, never authorizes new scope. If the last genuine user message was an unanswered decision, wait for the human. Put a *resume marker* in the wakeup `prompt`, never a full re-issued brief. ↪ rationale: docs/operating-rationale.md#self-scheduled-wakeup-not-instruction
 - **A recommendation is not approval; confirming a fact is not a "yes, do it".** When a decision is genuinely the user's (you'd have asked via `AskUserQuestion`), the answer comes *from the user*. Abandoning the `AskUserQuestion` tool means keep talking, NOT start editing on the branch you recommended. And if the user replies "that's correct, but…" to a fact you proposed, they *verified the fact*, not *authorized the action* — re-confirm what to *do* before doing it. The tell: you're about to write "proceeding" right after a fact-only acknowledgement. ↪ rationale: docs/operating-rationale.md#recommendation-not-approval
+- **Write the requester's objective into the plan verbatim, before designing.** Every decision to hold or change something argues against *that* line. Redefining it mid-document is a re-ask, not an edit — a substituted objective makes every downstream trade look correct. Whatever your analysis marks as needing a decision is the user's, not yours. ↪ rationale: docs/operating-rationale.md#objective-verbatim
 
 ### Adding an Operational Limit (keep this file lean)
 
@@ -266,5 +267,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-07-09
+**Last Updated**: 2026-08-09
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
