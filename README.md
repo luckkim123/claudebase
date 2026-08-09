@@ -40,7 +40,6 @@ Fourteen plugins are common — enabled on **every** machine. Anything one machi
 | `context7` | official | Current library and framework docs, in preference to recalled API surfaces. |
 | `claude-md-management` | official | Auditing and improving `CLAUDE.md` files. |
 | `claude-code-setup` | official | Automation recommendations for a new codebase (hooks, skills, subagents). |
-| `learning-output-style` | official | Explanatory output style. |
 | `pyright-lsp` | official | Python language server. |
 | `clangd-lsp` | official | C/C++ language server. |
 
@@ -53,6 +52,7 @@ Seven skills are the repo's own, under `runtime/skills/`: `sync-claudebase`, `ch
 | `config/` | `CLAUDE.md`, `settings.json`, `settings.critical.json`, `mcp.template.json` | `CLAUDE.md` symlinked; `settings.json` **rendered** with `settings.local.json` merged on top |
 | `runtime/hooks/` | The eight guard hooks plus utilities | Referenced by absolute path from rendered settings |
 | `runtime/skills/` | Seven repo-owned skills | Symlinked into `~/.claude/skills/` |
+| `runtime/output-styles/` | `concise.md` — answer-first response style | Symlinked into `~/.claude/output-styles/`; activated by `outputStyle` in `config/settings.json` |
 | `runtime/omc-patches/` | Patches applied to the OMC plugin after install | Applied by the installer |
 | `installer/` | `install.sh` / `install.ps1`, 15 `lib/` modules, render and plugin-sync scripts, git hooks | Run once per machine |
 | `platform/` | `macos/`, `linux/`, `windows/` specifics | Selected by the installer |
@@ -62,7 +62,7 @@ Seven skills are the repo's own, under `runtime/skills/`: `sync-claudebase`, `ch
 | `tests/` | Hook tests, installer tests, install smoke test | `pytest` |
 | `docs/` | Architecture, rationale, changelog | Read, not installed |
 
-Adding a file under `config/`, `shell/`, or `runtime/skills/` means adding a `link_or_copy` line to **both** installers and a row to this table.
+Adding a file under `config/`, `shell/`, `runtime/skills/`, or `runtime/output-styles/` means adding a `link_or_copy` line to **both** installers and a row to this table.
 
 ## Quick start
 

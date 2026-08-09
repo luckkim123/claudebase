@@ -131,3 +131,16 @@ link_skills_and_agents() {
     done
   fi
 }
+
+# Stage 4d — symlink each user-scope output style .md. Same per-file linking as
+# agents above so user-authored styles under ~/.claude/output-styles/ survive.
+# The style is only *offered*; `outputStyle` in config/settings.json selects it.
+link_output_styles() {
+  [[ -d "$REPO_DIR/runtime/output-styles" ]] || return
+  run mkdir -p "$CLAUDE_HOME/output-styles"
+  for style_file in "$REPO_DIR/runtime/output-styles"/*.md; do
+    [[ -f "$style_file" ]] || continue
+    local style_name="${style_file##*/}"
+    link_or_copy "$style_file" "$CLAUDE_HOME/output-styles/$style_name"
+  done
+}

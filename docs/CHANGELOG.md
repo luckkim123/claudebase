@@ -2,6 +2,21 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-09 — output style: `Concise` replaces the `learning-output-style` plugin
+
+### Added
+- **`runtime/output-styles/concise.md`** — a custom output style, linked into `~/.claude/output-styles/` by new stage 4d in both installers and selected by `"outputStyle": "Concise"` in `config/settings.json`. Answer-first (the first sentence is the conclusion), headings over prose walls, tables for anything compared on shared axes, `path:line` citations instead of pasted blocks, and an explicit ban on preamble, process narration, hedging filler, emoji, and box-drawing frames. It carries `keep-coding-instructions: true`: **a custom output style drops Claude Code's built-in software-engineering instructions unless that key is set**, so omitting it would have silently removed the scoping, commenting, and verification guidance along with the verbosity. The `★ Insight` block survives as a rationed element — at most one per response, appended after the answer, skipped entirely on mechanical work — so the teaching value of the old plugin is kept without letting it lead.
+
+### Removed
+- **`learning-output-style@claude-plugins-official`** — dropped from `enabledPlugins` and uninstalled at user scope. The plugin was not an output style at all: it was a `SessionStart` hook injecting ~2 KB of `additionalContext` every session that mandated `★ Insight` boxes, educational asides, and `TODO(human)` markers asking the user to write pieces of the code themselves. That injection was the actual source of response verbosity, and it lands as session context — a channel an output style in the system prompt does not override — so shipping `Concise` while leaving the plugin enabled would have left the two giving opposite instructions every turn. Its README row is gone; the upstream marketplace clone under `~/.claude/plugins/marketplaces/` is deliberately untouched (it is a git checkout the CLI restores on update, and the plugin there is inert once unenabled).
+
+### Changed
+- **`config/settings.critical.json`** — `learning-output-style@claude-plugins-official` removed from `requiredPlugins` (the pre-commit shrink guard correctly blocked the commit until the manifest matched the intent), and `outputStyle` added to `requiredScalars`. Without that pin, a CLI re-serialization dropping the key would silently revert the style to Default, which presents as "the verbosity came back" with no visible cause — exactly the failure class this manifest exists to catch.
+
+### Notes
+- `installer/scripts/plugin_sync.py` **never uninstalls** — a plugin dropped from `enabledPlugins` is reported as `DRIFT` and left alone by design. Other machines will therefore keep the plugin active after a `git pull` until `claude plugin uninstall -s user -y learning-output-style@claude-plugins-official` is run there.
+- An output style is read once at session start; `outputStyle` changes take effect only after `/clear` or a new session.
+
 ## [Unreleased] — 2026-07-29 — template: `code-review-graph` trust rules
 
 ### Added

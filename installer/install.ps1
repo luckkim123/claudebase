@@ -220,6 +220,20 @@ if (Test-Path -LiteralPath $SkillsRoot) {
     }
 }
 
+# 4d. user-scope output styles — one .md per style, linked individually so any
+#     style the user authored under ~/.claude/output-styles/ survives. Linking
+#     only offers the style; `outputStyle` in config/settings.json selects it.
+$StylesRoot = "$RepoDir/runtime/output-styles"
+if (Test-Path -LiteralPath $StylesRoot) {
+    $StylesDest = Join-Path $ClaudeHome "output-styles"
+    if (-not (Test-Path -LiteralPath $StylesDest)) {
+        Run { New-Item -ItemType Directory -Path $StylesDest -Force | Out-Null }
+    }
+    Get-ChildItem -LiteralPath $StylesRoot -Filter *.md -File | ForEach-Object {
+        Link-OrCopy $_.FullName (Join-Path $StylesDest $_.Name)
+    }
+}
+
 # 5. platform-specific (Windows extras, if any)
 $PlatformInstaller = "$RepoDir/platform/windows/install.ps1"
 if (Test-Path $PlatformInstaller) {

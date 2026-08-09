@@ -42,9 +42,10 @@ link_settings_and_md
 source "$REPO_DIR/installer/lib/secrets.sh"
 render_mcp_json
 
-# Stages 4 + 4b + 4c handled by lib/link.sh helpers.
+# Stages 4 + 4b + 4c + 4d handled by lib/link.sh helpers.
 link_tmux_conf
 link_skills_and_agents
+link_output_styles
 
 # Stages 5 / 5b / 6 → lib/platform.sh, lib/project_hooks.sh, lib/plugins.sh (P3-T6/T7/T8).
 # shellcheck source=lib/platform.sh

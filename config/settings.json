@@ -97,7 +97,6 @@
     "claude-md-management@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "learning-output-style@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "oh-my-claudecode@omc": true,
@@ -139,6 +138,7 @@
     }
   },
   "language": "한국",
+  "outputStyle": "Concise",
   "alwaysThinkingEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
