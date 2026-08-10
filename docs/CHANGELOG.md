@@ -33,10 +33,15 @@ that nobody updates is worse than no index: it answers confidently with yesterda
   for the `claude-cli` backend, so extraction runs serially — measured 5.3 min/chunk over 58 chunks,
   about five hours on one vault. graphify reached the same split itself: `check-update` is described
   as cron-safe and *notifies* rather than extracting.
-- **The extraction guard is per-repo, not per-machine.** The first draft skipped on
+- **The extraction guard is per-repo, and took two corrections.** The first draft skipped on
   `pgrep -f 'graphify extract'`, which would have frozen the refresh in *every* repository for the
-  five hours one vault was indexing. It now checks whether that repo's own `cache/` was touched in
-  the last two minutes.
+  five hours one vault was indexing. The replacement — this repo's own `cache/` mtime, two-minute
+  window — then failed live: chunks land in nested per-corpus subdirectories, so the top-level mtime
+  lags, and a window narrower than the 5.3 min chunk interval sees an idle cache between chunks and
+  concludes the run has ended. It now looks for any file written under `cache/` in the last ten
+  minutes (`-print -quit`, so a large cache costs nothing), verified against the live extraction.
+  Nothing was lost in the meantime: graphify's default refusal to shrink `graph.json` is what kept
+  a 10,650-node semantic graph from being replaced by a code-only rebuild.
 - **tokensave is deliberately absent.** It re-indexes itself when files change, and its CLI mutates
   `~/.claude/settings.json` even on read-only looking commands, so no automation may execute it.
 

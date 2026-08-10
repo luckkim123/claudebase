@@ -71,13 +71,21 @@ launch() {
 # sets .graphify on claudebase machines); fall back to the upstream default.
 gout="${GRAPHIFY_OUT:-graphify-out}"
 if [ -f "$repo/$gout/graph.json" ]; then
-  # A semantic extraction runs for hours and writes graph.json only at the end,
-  # streaming chunks into cache/ as it goes. Its output is expensive enough not
-  # to race with, so a cache directory touched in the last two minutes means
-  # "extraction in flight, leave it alone". Checking the directory rather than
-  # `pgrep graphify extract` keeps this per-repo: a long run in one repository
-  # must not freeze the refresh in every other repository on the machine.
-  if [ -z "$(find "$repo/$gout/cache" -maxdepth 0 -mmin -2 2>/dev/null)" ]; then
+  # A semantic extraction runs for hours, streaming per-chunk results into
+  # cache/ as it goes. Racing it is not worth the CPU, so recent write activity
+  # anywhere under cache/ means "in flight, leave it alone". Two details are
+  # load-bearing, both learned by getting them wrong:
+  #
+  #   - Recursive, not the directory's own mtime. Chunks land in nested
+  #     per-corpus subdirectories, so the top-level mtime lags arbitrarily.
+  #   - Ten minutes, not two. One chunk took 5.3 min on the vault that prompted
+  #     this, so a window narrower than the chunk interval sees an idle cache
+  #     between chunks and concludes the run has finished.
+  #
+  # Checking files rather than `pgrep graphify extract` keeps it per-repo: a
+  # long run in one repository must not freeze the refresh everywhere else on
+  # the machine. `-quit` stops at the first hit, so a large cache costs nothing.
+  if [ -z "$(find "$repo/$gout/cache" -type f -mmin -10 -print -quit 2>/dev/null)" ]; then
     gbin="$(resolve graphify)"
     if [ -n "$gbin" ] && should_refresh "$repo/$gout/.last-refresh"; then
       launch "$gbin" update .

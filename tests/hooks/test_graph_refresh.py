@@ -106,18 +106,40 @@ class TestRefresh:
         assert calls(log, 2) == ["code-review-graph update --brief"]
 
     def test_graphify_defers_to_a_running_extraction(self, sandbox):
-        # A semantic extract streams into cache/ for hours and writes graph.json
-        # only at the end. A freshly touched cache dir means "in flight" — and
-        # the check is per-repo, so a long run in one repository must not stop
-        # code-review-graph from updating in this one.
+        # A semantic extract streams into cache/ for hours. Recent write
+        # activity there means "in flight" — and the check is per-repo, so a
+        # long run in one repository must not stop code-review-graph from
+        # updating in this one.
+        #
+        # The chunk lands in a nested per-corpus directory on purpose: that is
+        # where graphify actually writes, and a check on cache/'s own mtime
+        # missed it in production.
         repo, bin_dir, log = sandbox
-        (repo / ".graphify" / "cache").mkdir(parents=True)
+        chunk_dir = repo / ".graphify" / "cache" / "semantic" / "pf33081f95084"
+        chunk_dir.mkdir(parents=True)
+        (chunk_dir / "abc123.json").write_text("{}")
         (repo / ".graphify" / "graph.json").write_text("{}")
         (repo / ".code-review-graph").mkdir()
 
         run_hook(repo, bin_dir)
 
         assert calls(log, 1) == ["code-review-graph update --brief"]
+
+    def test_a_finished_extraction_stops_blocking_the_refresh(self, sandbox):
+        # The mirror image: a cache left behind by a run that ended must not
+        # freeze this repository's graph forever. Backdated well past the
+        # ten-minute window.
+        repo, bin_dir, log = sandbox
+        chunk = repo / ".graphify" / "cache" / "semantic" / "old" / "abc123.json"
+        chunk.parent.mkdir(parents=True)
+        chunk.write_text("{}")
+        stale = time.time() - 3600
+        os.utime(chunk, (stale, stale))
+        (repo / ".graphify" / "graph.json").write_text("{}")
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 1) == ["graphify update ."]
 
     def test_graphify_out_relocation_is_honoured(self, sandbox):
         # GRAPHIFY_OUT moves the whole output tree; the hook reads it so the
