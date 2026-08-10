@@ -102,6 +102,19 @@ fi
 
 GOUT="${GRAPHIFY_OUT:-graphify-out}"
 
+# Every output directory graphify might have used here, not just the one this
+# process would pick. `GRAPHIFY_OUT=.graphify` lives in claudebase's rendered
+# settings.json, so a Claude Code session builds into `.graphify` while a plain
+# shell — which inherits no such env — defaults to `graphify-out`. Measured in a
+# container 2026-08-10: a purge run from bash deleted `graphify-out/` and left
+# `.graphify/graph.json` behind, which is precisely the empty-shell graph the
+# PreToolUse guards go on consulting. A purge that leaves a graph is not a purge.
+OUT_DIRS=()
+for _d in "$GOUT" .graphify graphify-out; do
+  case " ${OUT_DIRS[*]-} " in *" $_d "*) continue ;; esac
+  OUT_DIRS+=("$_d")
+done
+
 # ~/.local/bin is where uv puts the shims and this user's shells do not always
 # export it (same reason as graph-refresh.sh:42).
 resolve() {
@@ -116,7 +129,7 @@ GFY="$(resolve graphify)"
 
 if [ "$PURGE" -eq 1 ]; then
   removed=0
-  for d in "$ROOT/.code-review-graph" "$ROOT/$GOUT"; do
+  for d in "$ROOT/.code-review-graph" "${OUT_DIRS[@]/#/$ROOT/}"; do
     [ -e "$d" ] || continue
     rm -rf "$d" && say "삭제: ${d#"$ROOT"/}" && removed=1
   done
@@ -165,14 +178,14 @@ fi
 # The check that matters is WHERE the nodes came from, not how many there are.
 # A big node count in a repo of prose usually means the extractor found somebody
 # else's node_modules, and the guards then force every session to consult it.
-python3 - "$ROOT" "$GOUT" <<'PY'
+python3 - "$ROOT" "${OUT_DIRS[@]}" <<'PY'
 import collections
 import json
 import os
 import sqlite3
 import sys
 
-root, gout = sys.argv[1], sys.argv[2]
+root, out_dirs = sys.argv[1], sys.argv[2:]
 
 # ponytail: a fixed name list plus a 30% share is the whole heuristic. It
 # catches the measured failures (.obsidian, node_modules) and nothing subtler;
@@ -230,8 +243,13 @@ if os.path.exists(db):
     else:
         ok = report("code-review-graph", counter) and ok
 
-gj = os.path.join(root, gout, "graph.json")
-if os.path.exists(gj):
+# The first candidate that exists wins; the list is ordered so this process's
+# own GRAPHIFY_OUT is checked before the two defaults.
+gj = next(
+    (p for p in (os.path.join(root, d, "graph.json") for d in out_dirs) if os.path.exists(p)),
+    None,
+)
+if gj:
     seen = True
     counter = collections.Counter()
     try:

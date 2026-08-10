@@ -50,8 +50,16 @@ if [ -z "$repo" ]; then
 fi
 
 # Nothing to offer where a graph already exists — that project has answered.
+#
+# Both output names, not just this process's. `GRAPHIFY_OUT=.graphify` comes from
+# the rendered settings.json, so a graph built inside a Claude Code session lands
+# in `.graphify` while one built from a plain shell lands in `graphify-out`.
+# Checking only one re-offers a project that already has a graph, and the offer
+# is once-per-project — that wasted question is the only one it ever gets.
 gout="${GRAPHIFY_OUT:-graphify-out}"
-[ -f "$repo/$gout/graph.json" ] && exit 0
+for d in "$gout" .graphify graphify-out; do
+  [ -f "$repo/$d/graph.json" ] && exit 0
+done
 [ -d "$repo/.code-review-graph" ] && exit 0
 
 if [ "$is_git" -eq 1 ]; then

@@ -2,6 +2,36 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — a purge that leaves a graph is not a purge
+
+`GRAPHIFY_OUT=.graphify` lives in the rendered `settings.json`, so a Claude Code session — and every
+hook it launches — builds into `.graphify`. A plain shell inherits none of that and falls back to
+graphify's own default, `graphify-out`. Both `graph-init` and `graph-offer.sh` looked at exactly one of
+those names: whichever their own process resolved.
+
+Measured in the `stonefish_dev` container, 2026-08-10, on the first real use of `graph-init` outside a
+session. It correctly refused the workspace (0 nodes — the code lives in nested vcstool repos the outer
+`git ls-files` cannot see) and printed the purge instruction. Running that purge from bash deleted
+`graphify-out/` and left `.graphify/graph.json` sitting there, 176 bytes of empty graph. That is the
+precise object this whole line of work exists to prevent: the PreToolUse guards go on requiring every
+session to consult it, and nothing anywhere reports a problem.
+
+### Fixed
+- **`runtime/bin/graph-init.sh`** — resolves an `OUT_DIRS` list (this process's `GRAPHIFY_OUT`, then
+  `.graphify`, then `graphify-out`, deduplicated) and uses it for both `--purge` and the verification
+  read. Purge now clears every output directory graphify might have written here, not just the one it
+  would write today.
+- **`runtime/hooks/graph-offer.sh`** — the "already has a graph" check tests the same three names. It
+  was re-offering projects that already had one under the other name, and since the offer fires once
+  per project, that wasted question was the only one they were ever going to get.
+
+### Notes
+- Suite: 244 passed (was 243). shellcheck clean.
+- `TestPurge::test_purge_clears_the_other_output_name_too` was mutation-checked, not watched to go
+  green: restoring the single-name loop fails it, and the fix passes it.
+- The list is ordered, not a set, so the verification reads this process's own output directory first
+  when more than one exists.
+
 ## [Unreleased] — 2026-08-10 — the binding layer stops binding one directory down
 
 The `PreToolUse` guards are documented as the only *binding* layer of the three, the one that survives

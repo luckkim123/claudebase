@@ -119,6 +119,27 @@ class TestPurge:
     def test_purge_on_a_clean_directory_is_not_an_error(self, project):
         assert run(project, "--purge").returncode == 0
 
+    def test_purge_clears_the_other_output_name_too(self, project):
+        # Measured in a container 2026-08-10. GRAPHIFY_OUT=.graphify lives in the
+        # rendered settings.json, so a Claude Code session builds into .graphify
+        # while a plain shell defaults to graphify-out. A purge that only knows
+        # its own name leaves the other graph behind — and the guards go on
+        # consulting it, which is the exact failure a purge exists to end.
+        run(project)                                    # builds into .graphify
+        stale = project / "graphify-out"
+        stale.mkdir(exist_ok=True)
+        (stale / "graph.json").write_text('{"nodes": []}')
+
+        env_default = {**os.environ, "GRAPHIFY_OUT": ""}   # as a bare shell sees it
+        subprocess.run(
+            ["bash", str(SCRIPT), "--purge"], cwd=project, env=env_default,
+            capture_output=True, text=True,
+        )
+
+        assert not (project / ".graphify").exists()
+        assert not stale.exists()
+        assert not (project / ".code-review-graph").exists()
+
 
 class TestSkillStaysInSync:
     """The skill is where the exit codes get *interpreted*, so it goes stale
