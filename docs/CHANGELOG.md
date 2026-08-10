@@ -2,6 +2,39 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the graphify skill is rendered, not linked
+
+The previous entry symlinked graphify's skill and set `GRAPHIFY_OUT=.graphify` in the same change.
+Those two are incompatible, and the symlink is the half that had to give.
+
+### Fixed
+- **The shipped skill hardcodes `graphify-out` in 88 places and never reads `GRAPHIFY_OUT`**, while
+  the CLI reads it (`graphify/paths.py`). Symlinked as-is, the two halves of one tool disagreed: the
+  skill would `mkdir -p graphify-out` — recreating the visible directory the env var had just
+  removed — and look for `graphify-out/graph.json` while the CLI wrote to `.graphify/`. Worse, the
+  skill's fast path ("graph already exists → skip straight to querying") keys on exactly that file,
+  so with the index elsewhere **every invocation would fall through to a full rebuild** instead of
+  answering from the graph that was already there.
+- **`installer/scripts/render_graphify_skill.py`** now rewrites the skill at install time and
+  `ensure_graphify_skill` calls it. When `GRAPHIFY_OUT` is graphify's own default the installer
+  still symlinks — no rewrite is needed, and linking means an upgrade is picked up with no install
+  run at all.
+
+### Notes
+- **Blanket string replace, audited before adopting it.** All 88 occurrences in graphify 0.9.38 are
+  path-initial: 84 are followed by `/`, the rest by a newline or space, and each is preceded only by
+  a space, backtick, quote, or `/`. A word-boundary scan found zero occurrences inside a longer
+  identifier, so the replace cannot corrupt prose or a different token. Verified after rendering:
+  83 `.graphify` references, one `graphify-out` left (inside the generated banner, which names both
+  directories on purpose), frontmatter still on line 1, and the package's own `skill.md` unchanged
+  at 78 — the render never follows the old symlink back into site-packages.
+- **Upgrading graphify does not refresh the rendered copy on its own** — that is the one cost of
+  rendering over linking. `install.sh` does: the render is compared byte-for-byte and rewritten
+  whenever the package's `skill.md` changes, so a sync picks it up with no extra step. For the gap
+  in between, the generated banner records the graphify version it was built from, making a drift
+  visible (`graphify --version` to compare) rather than silent. Seven tests pin the rewrite, the
+  frontmatter placement, and the default-passthrough.
+
 ## [Unreleased] — 2026-08-10 — the `/graphify` skill, and a hidden index directory
 
 ### Added

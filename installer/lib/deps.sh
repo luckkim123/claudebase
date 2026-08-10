@@ -186,29 +186,71 @@ _graphify_pkg_dir() {
   "$py" -c 'import graphify, os; print(os.path.dirname(graphify.__file__))' 2>/dev/null
 }
 
-# ensure_graphify_skill — expose graphify's own SKILL.md at user scope.
+# _graphify_out_dir — the GRAPHIFY_OUT this machine will use, from the baseline
+# settings. Falls back to graphify's own default when unset or unreadable.
+_graphify_out_dir() {
+  python3 - "$REPO_DIR/config/settings.json" <<'PY' 2>/dev/null || echo "graphify-out"
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        print((json.load(fh).get("env") or {}).get("GRAPHIFY_OUT") or "graphify-out")
+except Exception:
+    print("graphify-out")
+PY
+}
+
+# ensure_graphify_skill — install graphify's own SKILL.md at user scope,
+# rewritten for this machine's GRAPHIFY_OUT.
 #
-# LINKED from the installed package rather than vendored into runtime/skills/:
+# RENDERED from the installed package rather than vendored into runtime/skills/:
 # the file is 41 KB of build runbook that ships with graphify and changes with
-# it, so a copy in this repo would be a second source of truth that silently
-# goes stale on every upgrade. The package is the SSOT; this just points at it.
+# it, so a copy in this repo would be a second source of truth going stale on
+# every upgrade. The package stays the SSOT.
 #
-# It is worth exposing because the skill is not documentation — it is the
+# Rendered rather than symlinked because the shipped skill hardcodes the literal
+# `graphify-out` in 88 places and never reads GRAPHIFY_OUT, while the CLI does
+# (graphify/paths.py). Left as-is the two halves of one tool disagree: the skill
+# would `mkdir -p graphify-out` and look for graphify-out/graph.json while the
+# CLI writes elsewhere — and its "graph already exists, just query it" fast path
+# keys on that same missing file, so every run would fall through to a rebuild.
+#
+# Cost of rendering over linking: an upgraded graphify does not refresh the copy
+# by itself. Re-running install.sh does — the render is compared byte-for-byte
+# and rewritten when the package's skill.md changed — and the generated banner
+# carries the source version so a mismatch is visible rather than silent.
+#
+# The skill is worth exposing at all because it is not documentation but the
 # *build* procedure (chunked semantic extraction dispatched to subagents).
-# Querying an existing graph needs only the CLI/MCP/hook, but building one
-# through the skill runs those chunks in parallel, where `graphify extract
-# --backend claude-cli` is forced to concurrency 1.
+# Querying needs only the CLI/MCP/hook; building through the skill parallelises
+# the chunks, where `graphify extract --backend claude-cli` is pinned to 1.
 #
-# Not done via `graphify install`: that also writes ~/.claude/CLAUDE.md through
+# Not done via `graphify install`, which also writes ~/.claude/CLAUDE.md through
 # a symlink into this repo's config/CLAUDE.md (see the note above).
 ensure_graphify_skill() {
-  local pkg src dst
+  local pkg src dst out ver
   pkg="$(_graphify_pkg_dir)" || { debug "graphify package not found (skip skill)"; return 0; }
   src="$pkg/skill.md"
   [[ -f "$src" ]] || { debug "graphify skill.md absent (skip)"; return 0; }
-  dst="$CLAUDE_HOME/skills/graphify"
-  run mkdir -p "$dst"
-  link_or_copy "$src" "$dst/SKILL.md"
+  out="$(_graphify_out_dir)"
+  local gbin
+  gbin="$(command -v graphify 2>/dev/null || true)"
+  [[ -n "$gbin" ]] || gbin="$HOME/.local/bin/graphify"
+  ver="$([[ -x "$gbin" ]] && "$gbin" --version 2>/dev/null | awk '{print $2}')"
+  [[ -n "$ver" ]] || ver="unknown"
+  dst="$CLAUDE_HOME/skills/graphify/SKILL.md"
+
+  if [[ "$out" == "graphify-out" ]]; then
+    # No rewrite needed — link so an upgrade is picked up with no install run.
+    run mkdir -p "$(dirname "$dst")"
+    link_or_copy "$src" "$dst"
+    return 0
+  fi
+
+  local dry=()
+  [[ ${DRY_RUN:-0} -eq 1 ]] && dry=(--dry-run)
+  python3 "$REPO_DIR/installer/scripts/render_graphify_skill.py" \
+    --src "$src" --dst "$dst" --out-dir "$out" --source-version "$ver" "${dry[@]}" \
+    || printf '[install] WARNING: graphify skill render failed — skill may reference the wrong output dir\n'
 }
 
 ensure_graphify() {
