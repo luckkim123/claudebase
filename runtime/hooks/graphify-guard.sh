@@ -40,6 +40,39 @@ graphify_bin="$(command -v graphify 2>/dev/null || true)"
 # Not installed (a machine that has not run install.sh yet) → stay out of the way.
 [ -x "$graphify_bin" ] || exit 0
 
+# Anchor the guard at the project root instead of wherever the shell happens to be.
+#
+# `graphify hook-guard` looks for graph.json at Path(GRAPHIFY_OUT)/"graph.json" —
+# a RELATIVE path (paths.py:293), resolved against the hook's cwd. Hooks run with
+# the working directory of the session, and the Bash tool's cwd persists across
+# calls, so one `cd sub/repo && ...` in any earlier command silently disables the
+# guard for the rest of the session. Measured on a 3-repo workspace: identical
+# greps nudged from the root and stayed silent one directory down, with nothing
+# reporting that the guard had switched off.
+#
+# CLAUDE_PROJECT_DIR would name the root but is not exported here (the same
+# finding graph-refresh.sh records), and `git rev-parse` fails in a workspace that
+# is not itself a repo. So walk up for the graph instead: it needs neither, and
+# the NEAREST graph wins, which is what a nested repo carrying its own graph
+# should get. No ancestor has one → no cd → exactly the previous behaviour.
+#
+# An absolute GRAPHIFY_OUT ("/shared/graphify-out", paths.py docstring) is already
+# cwd-independent, so leave it alone.
+out_name="${GRAPHIFY_OUT:-graphify-out}"
+case "$out_name" in
+  /*) ;;
+  *)
+    d="$PWD"
+    while [ "$d" != "/" ] && [ -n "$d" ]; do
+      if [ -f "$d/$out_name/graph.json" ]; then
+        cd "$d" || exit 0
+        break
+      fi
+      d="$(dirname "$d")"
+    done
+    ;;
+esac
+
 # `hook-guard search` never inspects what the command searches — it fires on any
 # grep/find token whenever cwd has a graph, so a grep against another repo gets a
 # "MANDATORY: query the graph first" about a graph that does not cover it (six

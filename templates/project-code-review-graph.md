@@ -142,6 +142,22 @@ dispatches — because hooks are enforced at the tool-call boundary rather than 
 the model reading an instruction. A subagent inherits none of your resolve and
 frequently not your `CLAUDE.md` reading; it does inherit the hook.
 
+**The hook is only binding where it can find the graph, and that is a cwd
+question.** `hook-guard` resolves `graph.json` through `Path(GRAPHIFY_OUT)` —
+relative (`paths.py:293`), so it lands wherever the hook's cwd happens to be, and
+hooks run with the *session's* working directory. The Bash tool's cwd persists
+across calls, so a single `cd sub/repo && …` in any earlier command disables the
+guard for the rest of the session. Measured on a three-repo workspace: identical
+greps nudged from the root and went silent one directory down, with nothing
+announcing that the binding layer had stopped binding.
+
+`runtime/hooks/graphify-guard.sh` closes this by walking up from cwd to the
+nearest ancestor holding `$GRAPHIFY_OUT/graph.json` and running there. It uses
+neither `CLAUDE_PROJECT_DIR` (not exported to hooks — the same finding
+`graph-refresh.sh` records) nor `git rev-parse` (a workspace of nested repos is
+often not itself a repo). Nearest wins, so a nested repo carrying its own graph
+still answers for itself; no ancestor has one and nothing changes.
+
 `--strict` (or `GRAPHIFY_HOOK_STRICT=1` at runtime, no reinstall needed) escalates
 the read hook from advisory to **blocking the first raw read of a session**. Start
 without it; add it only once the graph is genuinely current, since a stale graph

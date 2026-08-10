@@ -2,6 +2,39 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the binding layer stops binding one directory down
+
+The `PreToolUse` guards are documented as the only *binding* layer of the three, the one that survives
+an agent that has decided to grep anyway. They bind only where they can find the graph, and that turns
+out to be a question about the shell's working directory rather than about the project.
+
+`hook-guard` resolves the graph through `Path(GRAPHIFY_OUT)` — **relative** (`paths.py:293`) — against
+the hook process's cwd, and hooks run with the session's working directory. The Bash tool's cwd
+persists across calls, so one `cd sub/repo && …` in any earlier command switches the guard off for the
+rest of the session. Measured on a three-repo workspace with the graph at the root: an identical
+`grep` nudged from `/workspace` and produced nothing from `/workspace/constrained-albc`. Nothing
+errors, nothing warns — the failure mode is a guard that has silently stopped guarding, which is worse
+than one that was never installed, because the workspace `CLAUDE.md` hands out `cd <repo> && …`
+commands as its documented way to run things.
+
+Neither obvious anchor works here. `CLAUDE_PROJECT_DIR` is not exported to hooks — `graph-refresh.sh`
+already records that finding and routes around it — and `git rev-parse` fails in a workspace that is
+not itself a repo, which is exactly the multi-repo layout that makes cwd drift likely in the first
+place. So the anchor is the graph itself.
+
+### Fixed
+- **`runtime/hooks/graphify-guard.sh`** — walks up from cwd to the nearest ancestor holding
+  `$GRAPHIFY_OUT/graph.json` and runs there, for both the `search` and `read` modes. The nearest graph
+  wins, so a nested repo carrying its own graph still answers for itself instead of deferring to the
+  workspace root. An absolute `GRAPHIFY_OUT` is already cwd-independent and is left untouched; no
+  ancestor has a graph and there is no `cd`, so a machine without one behaves exactly as before.
+  Verified across nine cases — root, two sub-repos, a nested `source/` two levels down, a tree with no
+  graph, an absolute override, the out-of-project scope-filter suppression, and `read` mode.
+
+### Changed
+- **`templates/project-code-review-graph.md`** — the "three integration layers" section said the hook
+  binds, without saying under what condition. It now carries the cwd caveat and the walk-up fix, next
+  to the claim it qualifies.
 ## [Unreleased] — 2026-08-10 — a verb nobody can find is still no verb
 
 `graph-init` shipped with exactly one surface that named it: the SessionStart offer, which fires once
