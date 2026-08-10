@@ -35,7 +35,26 @@ is ~100–200 tokens) and fall back to graphify only when that returns nothing *
 you have confirmed the empty answer is real rather than one of the silent failures
 below.
 
-## Wiring graphify into a project
+## Giving a project its graphs
+
+One command, and it is the one the SessionStart offer points at:
+
+```bash
+graph-init            # exclusions → both free builds → verify the node distribution
+graph-init --purge    # if the verification says the graph is somebody else's code
+```
+
+It does everything the rest of this section describes — writes both ignore files
+from the templates, runs `code-review-graph build` and `graphify . --code-only`,
+then checks *where* the nodes came from and exits 2 when a vendored tree fills
+the graph. Reach for the manual steps below only when you need one half alone,
+or when `~/.local/bin` is not on PATH (then: `~/.local/bin/graph-init`).
+
+It works outside git too. Both builders walk a plain directory — CRG falls back
+from `git ls-files` to an rglob (`incremental.py:761-767`), graphify never needed
+git — so a container mount like `/workspace` is a legitimate target.
+
+## Wiring graphify into a project, by hand
 
 ```bash
 cp ~/claudebase/templates/project-graphifyignore .graphifyignore   # FIRST — see below
@@ -334,7 +353,11 @@ CRG's exclusion file is `.code-review-graphignore` at the repo root
 (`incremental.py:392`, `_load_ignore_patterns`). It takes `.gitignore` syntax and
 a bare `dir/` matches at any depth. It is a **third** ignore file, independent of
 the other two: excluding a path in `.graphifyignore` or `.gitignore` leaves CRG
-indexing it. When you write one, write the sibling.
+indexing it. When you write one, write the sibling — `graph-init` writes both
+from `~/claudebase/templates/project-{graphifyignore,code-review-graphignore}`,
+which is the reason to prefer it over a hand-run build.
+
+Project-specific rules go on the end of whatever the template seeded:
 
 ```
 .obsidian/       # bundled Obsidian plugin JS — nobody here wrote it

@@ -1,0 +1,45 @@
+# What code-review-graph should not index.
+#
+# Copy this to a project root as `.code-review-graphignore` BEFORE the first
+# build — `graph-init` does it for you:
+#
+#     cp ~/claudebase/templates/project-code-review-graphignore .code-review-graphignore
+#
+# CRG keeps its OWN exclusion file, independent of .gitignore and of
+# .graphifyignore. Excluding a path in either of those leaves CRG indexing it,
+# so when you write one, write the sibling.
+#
+# Syntax is gitignore's, with one difference that decides how these rules are
+# written (incremental.py:392-449). A bare `dir/` is rewritten to `**/dir/**`
+# and matches at any depth. A plain glob is matched with fnmatch against the
+# whole relative path, so `.*` would catch only *top-level* dotted entries and
+# miss `sub/.obsidian/`. Hence the trailing slashes below.
+#
+# node_modules/, vendor/, venv/, .venv/, dist/, build/, target/, __pycache__
+# and friends are already in DEFAULT_IGNORE_PATTERNS — they need no entry here.
+
+
+# Editor and harness state. Not code anybody in the project wrote, and the
+# biggest measured failure of the three graphs: one Obsidian vault tracked 367
+# files of bundled plugin JS under .obsidian/, which produced 21,865 of 21,865
+# nodes and a 222 MB graph.db describing somebody else's code. Nothing errored.
+# Excluding it left 568 nodes — the honest size of what was authored by hand.
+.obsidian/
+.claude/
+.omc/
+.omp/
+.omx/
+.oms/
+.omd/
+.sp/
+
+# The graphs' own output, for repos where it is tracked or where GRAPHIFY_OUT
+# still points at the pre-.graphify default.
+.graphify/
+graphify-out/
+.tokensave/
+
+# Add per-project exclusions below — a vendored tree .gitignore does not cover,
+# retired material an archive folder holds, a generated docs build. Those are
+# this project's call, not a portable default, so they live here and not in the
+# claudebase template.

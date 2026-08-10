@@ -123,6 +123,11 @@ ensure_tokensave
 # link_or_copy + CLAUDE_HOME, hence here rather than beside check_runtime_deps.
 ensure_graphify_skill
 
+# `graph-init` on PATH → deps.sh. The verb graph-offer.sh points at: exclusions,
+# both free builds, and the vendored-tree check, in one command. Must run after
+# the CLI installs above, since it is what those CLIs get driven by.
+ensure_graph_init
+
 # Register user-scope MCP servers with the CLI. This is separate from
 # render_mcp_json above because Claude Code does NOT read ~/.claude/mcp.json —
 # user-scope servers live in ~/.claude.json, reachable only via `claude mcp add`

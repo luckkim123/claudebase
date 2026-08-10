@@ -260,6 +260,28 @@ ensure_graphify_skill() {
     || printf '[install] WARNING: graphify skill render failed — skill may reference the wrong output dir\n'
 }
 
+# ensure_graph_init — put `graph-init` on PATH.
+#
+# runtime/bin/graph-init.sh is the one command that gives a project its graphs:
+# exclusions, both free builds, and the vendored-tree check that decides whether
+# the result is worth keeping. graph-offer.sh names it as a bare verb, so it has
+# to resolve without the session knowing where this checkout lives — hence a
+# link in ~/.local/bin, the same directory uv drops its shims in and the one
+# both graph hooks already fall back to when a shell has not exported it.
+#
+# Before this existed the offer hook carried the whole procedure as prose and
+# every session re-derived it into four commands by hand. That is the failure
+# being fixed here, so the link is not optional decoration: without it the hook
+# names a verb that does not exist.
+ensure_graph_init() {
+  local src="$REPO_DIR/runtime/bin/graph-init.sh"
+  [[ -f "$src" ]] || { debug "graph-init source missing (skip)"; return 0; }
+  # Modes survive git but not every extraction path — cheap and idempotent.
+  run chmod +x "$src"
+  run mkdir -p "$HOME/.local/bin"
+  link_or_copy "$src" "$HOME/.local/bin/graph-init"
+}
+
 ensure_graphify() {
   ensure_uv_tool graphify "graphifyy[mcp]" graphify
   # Self-heal machines that installed graphifyy before the extra was pinned here:
