@@ -40,4 +40,20 @@ graphify_bin="$(command -v graphify 2>/dev/null || true)"
 # Not installed (a machine that has not run install.sh yet) → stay out of the way.
 [ -x "$graphify_bin" ] || exit 0
 
+# `hook-guard search` never inspects what the command searches — it fires on any
+# grep/find token whenever cwd has a graph, so a grep against another repo gets a
+# "MANDATORY: query the graph first" about a graph that does not cover it (six
+# such misfires in one session). The read guard already skips out-of-project
+# targets (#1840); this supplies the missing search-side equivalent. Filter absent
+# or python3 missing → behave exactly as before.
+if [ "$mode" = "search" ]; then
+  filter="$(dirname "$0")/graphify_scope_filter.py"
+  if [ -f "$filter" ] && command -v python3 >/dev/null 2>&1; then
+    payload="$(cat)"
+    printf '%s' "$payload" | python3 "$filter" || exit 0
+    printf '%s' "$payload" | "$graphify_bin" hook-guard "$mode"
+    exit $?
+  fi
+fi
+
 exec "$graphify_bin" hook-guard "$mode"
