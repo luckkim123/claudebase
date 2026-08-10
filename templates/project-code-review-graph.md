@@ -139,9 +139,19 @@ to conclude "nothing here" from a healthy index. Query one token, then widen.
 repositories, not the vault.
 
 **It costs while idle.** The index is rewritten whenever files change, whether or
-not anything queries it, and each session starts a `tokensave serve` that does not
-exit with the session — they accumulate. If a machine has many stale ones,
-`pkill -f 'tokensave serve'` is safe; the next session starts a fresh one.
+not anything queries it. Measured on one vault: the DB was rewritten mid-session
+while the query count for that session was zero.
+
+**The process count is not a leak — do not "clean it up".** A stdio MCP server is
+a child of the `claude` process that launched it, so `ps` shows one per live
+session *and* one per background worker (`claude bg-spare`), and a busy machine
+shows a lot of them. They are not orphans: measured across 984 sessions in 30
+days, the count of `tokensave serve` processes reparented to init (`PPID 1`) was
+**zero**, and the live count fell on its own from 12 to 9 within an hour as
+sessions ended. The control group settles it — on the same machine at the same
+moment: claude-mem 21 processes, code-review-graph 14, tokensave 9. This is what
+stdio MCP looks like, not a defect in any one server. `pkill -f 'tokensave serve'`
+kills the servers of *live* sessions, including the one you are in.
 
 ## The premise everything follows from
 
