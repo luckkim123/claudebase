@@ -114,6 +114,12 @@ ensure_code_review_graph
 ensure_graphify
 ensure_tokensave
 
+# graphify ships its own /graphify skill — the chunked-extraction BUILD runbook,
+# not documentation. Linked from the installed package (never vendored) so it
+# tracks the installed version instead of going stale in this repo. Needs
+# link_or_copy + CLAUDE_HOME, hence here rather than beside check_runtime_deps.
+ensure_graphify_skill
+
 # Register user-scope MCP servers with the CLI. This is separate from
 # render_mcp_json above because Claude Code does NOT read ~/.claude/mcp.json —
 # user-scope servers live in ~/.claude.json, reachable only via `claude mcp add`

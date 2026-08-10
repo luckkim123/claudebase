@@ -19,6 +19,7 @@
 #   check_runtime_deps   — probe jq, gemini CLI, nano banana extension.
 #   ensure_code_review_graph  — uv tool install of the code-review-graph CLI.
 #   ensure_graphify           — uv tool install of the graphify CLI (pkg: graphifyy).
+#   ensure_graphify_skill     — link graphify's own SKILL.md to user scope.
 #   ensure_tokensave          — brew (macOS) / cargo (Linux) install of tokensave.
 #   ensure_convenience_tools  — opt-in best-effort install of tmux + clipboard.
 
@@ -176,6 +177,38 @@ ensure_tokensave() {
   _bin_present tokensave \
     && log "tokensave installed" \
     || printf '[install] WARNING: tokensave install ran but binary still missing\n'
+}
+
+# _graphify_pkg_dir — path of the installed graphify package, or non-zero.
+_graphify_pkg_dir() {
+  local py="$HOME/.local/share/uv/tools/graphifyy/bin/python"
+  [[ -x "$py" ]] || return 1
+  "$py" -c 'import graphify, os; print(os.path.dirname(graphify.__file__))' 2>/dev/null
+}
+
+# ensure_graphify_skill — expose graphify's own SKILL.md at user scope.
+#
+# LINKED from the installed package rather than vendored into runtime/skills/:
+# the file is 41 KB of build runbook that ships with graphify and changes with
+# it, so a copy in this repo would be a second source of truth that silently
+# goes stale on every upgrade. The package is the SSOT; this just points at it.
+#
+# It is worth exposing because the skill is not documentation — it is the
+# *build* procedure (chunked semantic extraction dispatched to subagents).
+# Querying an existing graph needs only the CLI/MCP/hook, but building one
+# through the skill runs those chunks in parallel, where `graphify extract
+# --backend claude-cli` is forced to concurrency 1.
+#
+# Not done via `graphify install`: that also writes ~/.claude/CLAUDE.md through
+# a symlink into this repo's config/CLAUDE.md (see the note above).
+ensure_graphify_skill() {
+  local pkg src dst
+  pkg="$(_graphify_pkg_dir)" || { debug "graphify package not found (skip skill)"; return 0; }
+  src="$pkg/skill.md"
+  [[ -f "$src" ]] || { debug "graphify skill.md absent (skip)"; return 0; }
+  dst="$CLAUDE_HOME/skills/graphify"
+  run mkdir -p "$dst"
+  link_or_copy "$src" "$dst/SKILL.md"
 }
 
 ensure_graphify() {

@@ -50,7 +50,14 @@ follows symlinks, and claudebase makes that path a symlink to the repo's own
 in place and ship to every other machine on the next sync. With `--project`, all
 of it lands under the project's `.claude/`.
 
-Optionally add the MCP server, which serves `graphify-out/graph.json` relative to
+The output directory here is **`.graphify/`**, not graphify's default
+`graphify-out/`: `GRAPHIFY_OUT` is set in `config/settings.json`, which puts the
+index in the same hidden-dot family as `.tokensave/` and `.code-review-graph/`
+rather than leaving a visible build directory at the project root. A repo indexed
+before that switch keeps its `graphify-out/` — rename it to `.graphify/` when the
+build is idle. Both are gitignored.
+
+Optionally add the MCP server, which serves `<GRAPHIFY_OUT>/graph.json` relative to
 the working directory — so it belongs in the **project's** `.mcp.json`, never in
 `~/.claude/mcp.json`, where it would launch against a nonexistent graph in every
 repo that has not built one:

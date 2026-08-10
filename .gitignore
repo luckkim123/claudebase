@@ -38,6 +38,10 @@ desktop.ini
 .omc/
 .tokensave
 
-# Code-graph indexes — build artifacts, rebuilt from source on demand
+# Code-graph indexes — build artifacts, rebuilt from source on demand.
+# .graphify/ is the GRAPHIFY_OUT value set in config/settings.json; graphify-out/
+# is graphify's own default, kept here for repos indexed before that switch.
+.graphify/
 graphify-out/
 .code-review-graph/
+.tokensave/

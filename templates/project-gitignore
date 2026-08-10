@@ -7,3 +7,12 @@
 # log files Claude Code may write
 .claude/*.jsonl
 .claude/*.log
+
+# --- Code-graph indexes ---
+# Build artifacts: megabytes, regenerated from source, and stale the moment
+# someone else commits. The IGNORE files that configure them (.graphifyignore)
+# are configuration and stay tracked.
+.graphify/
+graphify-out/
+.code-review-graph/
+.tokensave/

@@ -2,6 +2,38 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the `/graphify` skill, and a hidden index directory
+
+### Added
+- **`ensure_graphify_skill` in `installer/lib/deps.sh`** — symlinks graphify's own `skill.md` to
+  `~/.claude/skills/graphify/SKILL.md`. **Linked from the installed package, never vendored**: the
+  file is 41 KB that ships with graphify and changes with it, so a copy in `runtime/skills/` would be
+  a second source of truth going stale on every upgrade. Not installed via `graphify install`, which
+  would also write `~/.claude/CLAUDE.md` through the symlink into this repo's `config/CLAUDE.md`.
+- The skill is worth exposing because it is **not documentation — it is the build runbook**. Its 713
+  lines are the chunked semantic-extraction procedure (detect, chunk, dispatch to subagents, merge,
+  cluster, label, export). Querying an existing graph needs only the CLI, MCP, and hook; *building*
+  one through the skill runs chunks in parallel, whereas `graphify extract --backend claude-cli` is
+  forced to concurrency 1 — measured on this vault at roughly 4-5 minutes per chunk over 60 chunks.
+
+### Changed
+- **`GRAPHIFY_OUT=.graphify` in `config/settings.json`.** graphify defaults to a visible
+  `graphify-out/` at the project root, alone among the three graphs — `.tokensave/` and
+  `.code-review-graph/` are already hidden. The variable is read by `graphify/paths.py`, so one env
+  entry moves every output path. A repo indexed before this keeps its `graphify-out/` until renamed;
+  both names are gitignored so neither can be committed by accident.
+- **`.gitignore` and `templates/project-gitignore`** now cover all four index directories
+  (`.graphify/`, `graphify-out/`, `.code-review-graph/`, `.tokensave/`). The template had none, so a
+  new project started from it would have offered to commit a multi-megabyte index. `.graphifyignore`
+  stays tracked — it is configuration, not an artifact.
+
+### Notes
+- The rendered `~/.claude/settings.json` on this machine is **deliberately not re-rendered in this
+  commit**: a `graphify extract` run was writing into `graphify-out/` at the time, and switching
+  `GRAPHIFY_OUT` mid-build would leave the hook looking for `.graphify/` while the index lands
+  elsewhere. Rename and re-render once the build is idle. Other machines are unaffected — they have
+  no graphify index yet, so the new value simply applies from their first build.
+
 ## [Unreleased] — 2026-08-10 — tokensave's hooks, the half the previous entry deferred
 
 The distribution commit installed tokensave and registered its MCP server but left its three hooks
