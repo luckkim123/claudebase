@@ -9,7 +9,6 @@
   "requiredPlugins": [
     "clangd-lsp@claude-plugins-official",
     "claude-mem@thedotmack",
-    "context7@claude-plugins-official",
     "oh-my-claudecode@omc",
     "oh-my-docs@heroacademia",
     "oh-my-experiments@heroacademia",

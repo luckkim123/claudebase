@@ -94,7 +94,6 @@
   },
   "enabledPlugins": {
     "clangd-lsp@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "oh-my-claudecode@omc": true,
