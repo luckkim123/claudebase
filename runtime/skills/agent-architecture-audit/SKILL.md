@@ -14,8 +14,8 @@ triggers:
   - "메모리 오염"
 ---
 <!-- Vendored from Everything Claude Code (github.com/affaan-m/ECC), MIT,
-     Copyright (c) 2026 Affaan Mustafa. See runtime/skills/NOTICE.md.
-     Local edits are marked in NOTICE.md; do not re-sync blindly. -->
+     Copyright (c) 2026 Affaan Mustafa. See docs/third-party-skills.md.
+     Local edits are listed there; do not re-sync blindly. -->
 
 # Agent Architecture Audit
 

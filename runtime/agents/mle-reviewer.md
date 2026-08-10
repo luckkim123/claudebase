@@ -181,4 +181,12 @@ Tests run: commands and outcomes
 - **APPROVE WITH WARNINGS**: Medium issues only, with explicit follow-up.
 - **BLOCK**: Any plausible leakage, irreproducible promotion, unsafe serving behavior, missing rollback for production deployment, sensitive data exposure, or critical eval gap.
 
-Reference skill: `mle-workflow`.
+## Reference
+
+The checklist above is self-contained. Upstream pointed here at ECC's
+`mle-workflow` skill, which claudebase did not vendor: the lanes named at the top
+of this file already own those stages and own them harder — `oh-my-experiments`
+holds run identity, promotion gates, the campaign ledger, and the
+never-auto-launch rule, while `oh-my-project` holds dataset checksums, split
+leakage, and lineage in `.omp/manifest.json`. Route a finding to the lane that
+owns it instead of to a generic workflow card.

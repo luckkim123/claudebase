@@ -6,7 +6,7 @@ Blocks Claude from stopping when a complex task completed without learning captu
 
 Vendored into claudebase — it already sits at its final path, so nothing needs
 copying. Not registered in config/settings.json; see SKILL.md to wire it.
-Local edits are marked `LOCAL EDIT (claudebase)` below and in runtime/skills/NOTICE.md.
+Local edits are marked `LOCAL EDIT (claudebase)` below and in docs/third-party-skills.md.
 """
 from __future__ import annotations
 

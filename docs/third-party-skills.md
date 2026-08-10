@@ -1,10 +1,18 @@
-# Vendored skills — attribution and local edits
+# Third-party skills
 
-Ten of the skills in this directory came from [Everything Claude Code](https://github.com/affaan-m/ECC)
-(MIT, Copyright (c) 2026 Affaan Mustafa), vendored 2026-08-10 from a shallow clone
-of `main`. The rest (`changelog`, `gen-image`, `graph-init`, `invoice-organizer`,
+Ten of the seventeen skills in `runtime/skills/` are vendored from **Everything
+Claude Code** ([github.com/affaan-m/ECC](https://github.com/affaan-m/ECC)), MIT
+licensed, Copyright (c) 2026 Affaan Mustafa, taken 2026-08-10 from a shallow clone
+of `main`. The upstream `LICENSE` text applies; this file is the attribution notice
+it requires — the skill-side counterpart of `docs/third-party-agents.md`.
+
+The other seven (`changelog`, `gen-image`, `graph-init`, `invoice-organizer`,
 `memory-update`, `sync-claudebase`, `video-downloader`) are ours and are not
-covered by this file.
+covered here.
+
+284 ECC skills were read, 87,639 lines, of which **17 carry any code at all**. The
+filter that decided the ten was not category but "is this a binding layer we
+lack" — this repo's rules are instructions, and only a hook reaches a subagent.
 
 ECC's own `metadata.origin` field credits a third party for several of them, so
 the upstream-of-the-upstream is recorded here too. **Do not re-sync any of these
@@ -91,16 +99,26 @@ and nothing fires.
 | `python-patterns`, `python-testing`, `pytorch-patterns` | Textbook reference cards; Context7 serves the same content on demand. |
 | `eval-harness`, `recursive-decision-ledger`, `agent-eval` | Weaker than `oh-my-experiments` already is (circuit check, deadline gate, launch never auto-fired, probe-novelty ledger). |
 
-## Two dangling references left in `runtime/agents/`
+## Sibling notice, and the two agent references this repaired
 
-Found while checking whether the language skills were worth importing; not fixed
-here because that directory belongs to a different work stream:
+Agent attribution lives in **`docs/third-party-agents.md`** — same repo, same
+license, written by the pass that vendored `runtime/agents/`. This file is its
+skill-side counterpart, and both are reached from a header comment inside every
+vendored file. A vendored file naming neither is ours.
 
-- `python-reviewer.md` sends the reader to skill `python-patterns`, which we did
-  not vendor (a PEP 8 / idiom reference card Context7 serves on demand).
-- `mle-reviewer.md` sends the reader to skill `mle-workflow`, likewise absent.
-- `runtime/agents/NOTICE.md` does not exist, yet `cpp-reviewer.md` and
-  `mle-reviewer.md` both delegate their MIT attribution to it.
+Two agents pointed at ECC skills the skill selection deliberately rejected, which
+left them dangling. Both were one line, and both were rewritten rather than
+satisfied by vendoring 751 and 348 lines of reference card:
 
-Each of the first two is one line to delete or rewrite — cheaper than vendoring
-751 and 348 lines to satisfy a cross-reference.
+- `python-reviewer.md` → `python-patterns`. Now states the checklist is
+  self-contained and sends a reader wanting library specifics to Context7, which
+  serves that content current rather than from a snapshot.
+- `mle-reviewer.md` → `mle-workflow`. Now routes to the lanes that own those
+  stages harder than a workflow card could — `oh-my-experiments` for run identity,
+  promotion gates, and the ledger; `oh-my-project` for checksums, split leakage,
+  and lineage in `.omp/manifest.json`.
+
+The four other names that read like dangling references in `mle-reviewer.md`
+(`database-reviewer`, `performance-optimizer`, `silent-failure-hunter`,
+`a11y-architect`) are **not** references — they are that file's own record of which
+upstream agents were deliberately dropped. Do not "fix" them.

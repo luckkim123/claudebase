@@ -104,7 +104,13 @@ Fix: What to change
 
 ## Reference
 
-For detailed Python patterns, security examples, and code samples, see skill: `python-patterns`.
+The checklist above is self-contained; nothing else must be loaded to run a review.
+
+Upstream pointed here at ECC's `python-patterns` skill, which claudebase did not
+vendor — it is a PEP 8 / idiom reference card, and Context7 serves that content on
+demand and current (`mcp__claude_ai_Context7__query-docs`) rather than from a
+snapshot. For a library's actual API, ask Context7; for this repo's own
+conventions, read its `CLAUDE.md` and the code next to the change.
 
 ---
 
