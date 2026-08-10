@@ -4,8 +4,8 @@
     "_comment": "Each marker string must appear in some hooks[].hooks[].command. These are the defense hooks the CLI shrink drops first.",
     "PreToolUse": ["ASKUSERQUESTION_GUARD", "GRAPHIFY_SEARCH_GUARD", "GRAPHIFY_READ_GUARD", "TOKENSAVE_PRE_TOOL_USE"],
     "UserPromptSubmit": ["TOKENSAVE_PROMPT_SUBMIT"],
-    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD", "EMOJI_GUARD", "TOKENSAVE_STOP"],
-    "SessionStart": ["SURROGATE_AUTO_REPAIR_ON_START"]
+    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD", "EMOJI_GUARD", "TOKENSAVE_STOP", "GRAPH_REFRESH"],
+    "SessionStart": ["SURROGATE_AUTO_REPAIR_ON_START", "GRAPH_OFFER"]
   },
   "requiredPlugins": [
     "clangd-lsp@claude-plugins-official",

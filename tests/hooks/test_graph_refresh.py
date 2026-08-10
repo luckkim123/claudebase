@@ -1,0 +1,131 @@
+"""Tests for runtime/hooks/graph-refresh.sh.
+
+The hook keeps existing code graphs current so the PreToolUse guards never route
+a session through a stale index. Everything worth pinning down is a decision
+about *when not to run*: the hook must stay out of repositories that never asked
+for a graph, must not re-run once a minute has not passed, and must not race a
+multi-hour semantic extraction. Stub binaries stand in for graphify and
+code-review-graph so the assertions are about the hook's logic, not theirs.
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+import time
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+HOOK = REPO_ROOT / "runtime" / "hooks" / "graph-refresh.sh"
+
+# The updates are detached on purpose (a turn must never wait on them), so the
+# call log lands shortly after the hook returns rather than before.
+SETTLE_TIMEOUT = 5.0
+
+
+@pytest.fixture
+def sandbox(tmp_path: Path):
+    """A git repo plus stub graphify / code-review-graph that log their argv."""
+    bin_dir, repo = tmp_path / "bin", tmp_path / "repo"
+    bin_dir.mkdir()
+    repo.mkdir()
+    log = tmp_path / "calls.log"
+
+    for name in ("graphify", "code-review-graph"):
+        stub = bin_dir / name
+        stub.write_text(f'#!/bin/sh\necho "$(basename "$0") $*" >> "{log}"\n')
+        stub.chmod(0o755)
+
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    return repo, bin_dir, log
+
+
+def run_hook(repo: Path, bin_dir: Path, out_dir: str = ".graphify"):
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "GRAPHIFY_OUT": out_dir,
+    }
+    return subprocess.run(
+        ["bash", str(HOOK)], cwd=repo, env=env, input="", capture_output=True, text=True
+    )
+
+
+def calls(log: Path, expected: int) -> list[str]:
+    """Read the detached stubs' log once it has `expected` lines, or give up."""
+    deadline = time.monotonic() + SETTLE_TIMEOUT
+    while time.monotonic() < deadline:
+        lines = log.read_text().splitlines() if log.exists() else []
+        if len(lines) >= expected:
+            return lines
+        time.sleep(0.05)
+    return log.read_text().splitlines() if log.exists() else []
+
+
+class TestOptInByExistence:
+    def test_repo_without_a_graph_is_left_alone(self, sandbox):
+        # The whole point of keying on existence: this hook ships at user scope,
+        # so it runs in every repository the user ever opens. One that never
+        # built a graph must come away with no new directories and no calls.
+        repo, bin_dir, log = sandbox
+        assert run_hook(repo, bin_dir).returncode == 0
+        assert calls(log, 1) == []
+        assert {p.name for p in repo.iterdir()} == {".git"}
+
+    def test_outside_a_git_repo_it_does_nothing(self, tmp_path):
+        # `git rev-parse` fails here; the hook must exit clean rather than let
+        # the Stop event surface an error.
+        result = subprocess.run(
+            ["bash", str(HOOK)], cwd=tmp_path, input="", capture_output=True, text=True
+        )
+        assert result.returncode == 0
+
+
+class TestRefresh:
+    def test_both_graphs_are_updated_when_both_exist(self, sandbox):
+        repo, bin_dir, log = sandbox
+        (repo / ".graphify").mkdir()
+        (repo / ".graphify" / "graph.json").write_text("{}")
+        (repo / ".code-review-graph").mkdir()
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 2) == ["graphify update .", "code-review-graph update --brief"]
+
+    def test_a_second_run_within_the_minute_is_debounced(self, sandbox):
+        # A chatty session fires Stop after every turn; re-parsing each time buys
+        # nothing and would eventually overlap with itself.
+        repo, bin_dir, log = sandbox
+        (repo / ".code-review-graph").mkdir()
+
+        run_hook(repo, bin_dir)
+        assert calls(log, 1) == ["code-review-graph update --brief"]
+
+        run_hook(repo, bin_dir)
+        assert calls(log, 2) == ["code-review-graph update --brief"]
+
+    def test_graphify_defers_to_a_running_extraction(self, sandbox):
+        # A semantic extract streams into cache/ for hours and writes graph.json
+        # only at the end. A freshly touched cache dir means "in flight" — and
+        # the check is per-repo, so a long run in one repository must not stop
+        # code-review-graph from updating in this one.
+        repo, bin_dir, log = sandbox
+        (repo / ".graphify" / "cache").mkdir(parents=True)
+        (repo / ".graphify" / "graph.json").write_text("{}")
+        (repo / ".code-review-graph").mkdir()
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 1) == ["code-review-graph update --brief"]
+
+    def test_graphify_out_relocation_is_honoured(self, sandbox):
+        # GRAPHIFY_OUT moves the whole output tree; the hook reads it so the
+        # hidden-directory machines are not silently skipped.
+        repo, bin_dir, log = sandbox
+        (repo / "custom-out").mkdir()
+        (repo / "custom-out" / "graph.json").write_text("{}")
+
+        run_hook(repo, bin_dir, out_dir="custom-out")
+
+        assert calls(log, 1) == ["graphify update ."]

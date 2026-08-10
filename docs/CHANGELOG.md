@@ -2,6 +2,44 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — graphs refresh themselves, and offer themselves once
+
+The `PreToolUse` guards made every session consult the code graph, and nothing was keeping that
+graph current or telling a graph-less repository that it could have one. A required-to-consult index
+that nobody updates is worse than no index: it answers confidently with yesterday's code.
+
+### Added
+- **`runtime/hooks/graph-refresh.sh`** (`Stop` → `GRAPH_REFRESH`) — refreshes the graphs a repository
+  *already has*. Opt in by existence, never by configuration: no graph directory, no work, so this
+  can ship at user scope without creating anything in repositories the user merely opened. Updates
+  are double-forked so a turn never waits on them (measured 0.46 s for `code-review-graph update
+  --brief`, 1.0 s for `graphify update .`), and debounced to once per graph per minute.
+- **`runtime/hooks/graph-offer.sh`** (`SessionStart` → `GRAPH_OFFER`) — tells the session, **once per
+  repository ever**, that this repo has no graph, and hands the decision to the user via
+  `AskUserQuestion`. The marker is written when the offer is *emitted*, not when it is answered, so
+  ignoring the prompt is itself a durable answer and no repository nags twice. It lives in `.git/`,
+  which is per-repository, never committed, and disappears with the clone — unlike a central list
+  under `~/.claude/`, which goes stale the first time a repository moves.
+- 13 tests (`tests/hooks/test_graph_refresh.py`, `tests/hooks/test_graph_offer.py`). Suite: 195.
+
+### Notes
+- **Creation stays a decision, and cost is not why.** The free tree-sitter builds take seconds. The
+  reason is that a blindly built graph is worse than none, because the guards then *require* the
+  agent to consult it — this vault produced 0 nodes from 746 tracked `.md` while 101 files of
+  vendored plugin JS produced 21,425 "functions" and a 212 MB index, with no error anywhere. So the
+  offer carries its own verification step: check node count and language list, confirm the nodes are
+  not vendored, delete the graph if they are.
+- **The prose pass is never offered or triggered from a hook.** `--max-concurrency` is forced to 1
+  for the `claude-cli` backend, so extraction runs serially — measured 5.3 min/chunk over 58 chunks,
+  about five hours on one vault. graphify reached the same split itself: `check-update` is described
+  as cron-safe and *notifies* rather than extracting.
+- **The extraction guard is per-repo, not per-machine.** The first draft skipped on
+  `pgrep -f 'graphify extract'`, which would have frozen the refresh in *every* repository for the
+  five hours one vault was indexing. It now checks whether that repo's own `cache/` was touched in
+  the last two minutes.
+- **tokensave is deliberately absent.** It re-indexes itself when files change, and its CLI mutates
+  `~/.claude/settings.json` even on read-only looking commands, so no automation may execute it.
+
 ## [Unreleased] — 2026-08-10 — the graphify skill is rendered, not linked
 
 The previous entry symlinked graphify's skill and set `GRAPHIFY_OUT=.graphify` in the same change.

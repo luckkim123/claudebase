@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Stop hook — refresh the code graphs this repository already has.
+#
+# The problem this closes: the PreToolUse guards route every session (and every
+# subagent) through the graph, but nothing was refreshing it. A graph that the
+# agent is now *required* to consult and that nobody updates is worse than no
+# graph, because a stale index answers confidently with yesterday's code.
+#
+# Design, in three rules:
+#
+#   1. Opt in by existence, never by configuration. A repo that has no graph
+#      directory gets nothing built here — this hook only keeps current what
+#      somebody already chose to create. That is the difference between
+#      "automatic" and "creates directories in every repo you cd into", and it
+#      is also why this can ship at user scope for people who have never heard
+#      of an MCP server.
+#
+#   2. Only the free half. `graphify update` re-extracts *code* with tree-sitter:
+#      offline, no key, ~1 s. The semantic pass that indexes prose costs money
+#      and hours (measured: 58 chunks, ~7 h on one vault), so it is never
+#      triggered from a hook. Prose graphs therefore drift, on purpose; refresh
+#      them deliberately with /graphify.
+#
+#   3. Detached, so a turn never waits. Both updates run in a double-forked
+#      subshell and this script returns immediately; the Stop hook's timeout can
+#      never be hit by a slow repo. graphify's own git hook uses the same shape.
+#
+# tokensave is deliberately absent: it re-indexes itself whenever files change,
+# and its CLI has side effects on ~/.claude/settings.json even for read-only
+# looking commands, so nothing here may execute it.
+#
+# Usage: graph-refresh.sh   (no arguments; Stop hook payload on stdin, ignored)
+
+set -u
+
+# Hooks run with the working directory of the session, so the repo root comes
+# from git rather than from a variable Claude Code does not export
+# (CLAUDE_PROJECT_DIR is unset in the Stop hook environment on this platform).
+repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$repo" ] || exit 0
+
+resolve() {
+  # ~/.local/bin is where uv puts the shims, and this user's shells do not
+  # always export it (same reason as graphify-guard.sh).
+  local found
+  found="$(command -v "$1" 2>/dev/null || true)"
+  [ -n "$found" ] || found="$HOME/.local/bin/$1"
+  [ -x "$found" ] && printf '%s' "$found"
+}
+
+# Debounce: one refresh per graph per minute. A chatty session would otherwise
+# re-run the update after every single turn for no gain.
+#
+# simplified: the marker is stamped before the launch, not after, so two
+# refreshes can overlap if an update ever exceeds the window (measured 0.46 s
+# and 1.0 s here, so the window is ~60x the cost). Take a lock if a repo is ever
+# large enough for that to stop being true.
+should_refresh() {
+  local marker="$1"
+  [ -n "$(find "$marker" -mmin -1 2>/dev/null)" ] && return 1
+  : >"$marker" 2>/dev/null || return 1
+  return 0
+}
+
+launch() {
+  # Double fork so the update outlives this hook and the shell that spawned it.
+  ( cd "$repo" && "$@" >/dev/null 2>&1 & ) &
+}
+
+# graphify — GRAPHIFY_OUT relocates the whole output tree (config/settings.json
+# sets .graphify on claudebase machines); fall back to the upstream default.
+gout="${GRAPHIFY_OUT:-graphify-out}"
+if [ -f "$repo/$gout/graph.json" ]; then
+  # A semantic extraction runs for hours and writes graph.json only at the end,
+  # streaming chunks into cache/ as it goes. Its output is expensive enough not
+  # to race with, so a cache directory touched in the last two minutes means
+  # "extraction in flight, leave it alone". Checking the directory rather than
+  # `pgrep graphify extract` keeps this per-repo: a long run in one repository
+  # must not freeze the refresh in every other repository on the machine.
+  if [ -z "$(find "$repo/$gout/cache" -maxdepth 0 -mmin -2 2>/dev/null)" ]; then
+    gbin="$(resolve graphify)"
+    if [ -n "$gbin" ] && should_refresh "$repo/$gout/.last-refresh"; then
+      launch "$gbin" update .
+    fi
+  fi
+fi
+
+# code-review-graph — per-repo SQLite under .code-review-graph/. --brief keeps
+# the (discarded) output small; the work is the same incremental re-parse.
+if [ -d "$repo/.code-review-graph" ]; then
+  cbin="$(resolve code-review-graph)"
+  if [ -n "$cbin" ] && should_refresh "$repo/.code-review-graph/.last-refresh"; then
+    launch "$cbin" update --brief
+  fi
+fi
+
+exit 0

@@ -1,11 +1,15 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "GRAPHIFY_OUT": ".graphify"
+    "GRAPHIFY_OUT": ".graphify",
+    "OMD_ROUTE_GATE": "on",
+    "OMX_ROUTE_GATE": "observe"
   },
   "permissions": {
     "defaultMode": "auto",
-    "allow": ["mcp__tokensave__*"]
+    "allow": [
+      "mcp__tokensave__*"
+    ]
   },
   "hooks": {
     "PreToolUse": [
@@ -108,6 +112,12 @@
             "command": "# TOKENSAVE_STOP\nbash ~/claudebase/runtime/hooks/tokensave-guard.sh stop",
             "timeout": 10,
             "statusMessage": "Recording tokensave savings for the turn"
+          },
+          {
+            "type": "command",
+            "command": "# GRAPH_REFRESH\nbash ~/claudebase/runtime/hooks/graph-refresh.sh",
+            "timeout": 10,
+            "statusMessage": "Refreshing this repo's code graphs"
           }
         ]
       }
@@ -126,6 +136,12 @@
             "command": "# HUD_ENSURE_ON_START\nbash ~/claudebase/runtime/hooks/hud-ensure.sh 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Ensuring OMC HUD customization is in sync"
+          },
+          {
+            "type": "command",
+            "command": "# GRAPH_OFFER\nbash ~/claudebase/runtime/hooks/graph-offer.sh 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking whether this repo wants a code graph"
           }
         ]
       }

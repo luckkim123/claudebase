@@ -104,6 +104,44 @@ routes that extraction through the `claude` CLI you already pay for instead of a
 separate API key; it is not in `detect_backend`'s auto-detect list, so it only
 takes effect when passed explicitly.
 
+What that pass actually produces, and why it is the only way to graph prose:
+tree-sitter has no symbol concept for a note, so the LLM is asked for the
+entities and relations instead, one chunk at a time, emitting
+`{"nodes": [...], "edges": [...], "hyperedges": [...]}` — concept nodes carrying
+a `label` and a `source_file`. That is the difference between an index of
+headings (tokensave, free) and a graph of ideas across notes.
+
+Budget it in hours, not dollars. `--max-concurrency` defaults to 4 but is forced
+to **1** for the `claude-cli` and `ollama` backends, so the chunks run serially:
+measured on one 774-note vault, 5.3 min per chunk over 58 chunks, about five
+hours. Nothing about that fits inside a hook.
+
+### Who keeps it current, and who decides it exists
+
+Three separate lifecycle questions, and conflating them is how a repo ends up
+either nagged or silently stale:
+
+| Stage | Cost | Who does it |
+|:---|:---|:---|
+| **Consult** | ~51 ms per guarded tool call | Automatic — `PreToolUse` guards, every repo, every subagent |
+| **Update** (code) | 0.46 s (CRG), 1.0 s (graphify) | Automatic — `Stop` hook, detached, debounced to once a minute |
+| **Update** (prose) | hours | Deliberate `/graphify`; `graphify check-update` is the cron-safe *detector* |
+| **Create** | seconds (tree-sitter) | Offered once per repo, then the user decides |
+
+tokensave is absent from the update row on purpose: it re-indexes itself when
+files change, and its CLI mutates `~/.claude/settings.json` even on read-only
+looking commands, so no automation may execute that binary.
+
+Creation is the one that must not be automatic, and cost is not the reason —
+the free builds take seconds. The reason is that a blindly built graph is
+**worse than none**, because the guards then require the agent to consult it.
+The vault above is the proof: 746 tracked `.md` produced 0 nodes while 101 files
+of vendored plugin JS produced 21,425 "functions" and a 212 MB index, with no
+error anywhere. Auto-building would mass-produce that. So the offer carries the
+verification step with it — check `code-review-graph status` for node count and
+language list, confirm the nodes are not vendored, and delete the graph if they
+are.
+
 ## tokensave: the only one that reads prose without a bill
 
 tokensave runs from `~/.claude.json` (user scope, absolute path — it is not on
