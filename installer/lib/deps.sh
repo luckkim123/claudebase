@@ -19,6 +19,7 @@
 #   check_runtime_deps   — probe jq, gemini CLI, nano banana extension.
 #   ensure_code_review_graph  — uv tool install of the code-review-graph CLI.
 #   ensure_graphify           — uv tool install of the graphify CLI (pkg: graphifyy).
+#   ensure_tokensave          — brew (macOS) / cargo (Linux) install of tokensave.
 #   ensure_convenience_tools  — opt-in best-effort install of tmux + clipboard.
 
 check_runtime_deps() {
@@ -64,11 +65,12 @@ check_runtime_deps() {
 # inside each project that wants one. See templates/project-code-review-graph.md
 # for the routing rules and the per-project `.mcp.json` snippet.
 
-# _uv_tool_present BIN — is BIN on PATH, or present in uv's shim dir?
-# uv tool install puts the shim in ~/.local/bin, which some shells (this user's
-# .zshrc has the export commented out) never put on PATH — check the known
-# install dir too, same pattern as the sync-claudebase skill's bun check.
-_uv_tool_present() {
+# _bin_present BIN — is BIN on PATH, or present in ~/.local/bin?
+# uv tool install (and tokensave's own installer) put shims in ~/.local/bin,
+# which some shells (this user's .zshrc has the export commented out) never put
+# on PATH — check the known install dir too, same pattern as the
+# sync-claudebase skill's bun check.
+_bin_present() {
   command -v "$1" >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/$1" ]]
 }
 
@@ -77,7 +79,7 @@ _uv_tool_present() {
 # LABEL defaults to BIN (they differ when the PyPI name is not the command name).
 ensure_uv_tool() {
   local bin="$1" pkg="$2" label="${3:-$1}"
-  if _uv_tool_present "$bin"; then
+  if _bin_present "$bin"; then
     debug "$label present (skip)"
     return 0
   fi
@@ -91,7 +93,7 @@ ensure_uv_tool() {
     # In dry-run nothing actually ran, so skip the post-check (it would always
     # "fail" and emit a misleading WARNING) — same guard as ensure_tool below.
     [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
-    _uv_tool_present "$bin" \
+    _bin_present "$bin" \
       && log "$label installed" \
       || printf '[install] WARNING: %s install ran but binary still missing — check ~/.local/bin\n' "$label"
   else
@@ -129,6 +131,51 @@ ensure_code_review_graph() {
 _graphify_mcp_ready() {
   local py="$HOME/.local/share/uv/tools/graphifyy/bin/python"
   [[ -x "$py" ]] && "$py" -c 'import mcp' >/dev/null 2>&1
+}
+
+# ensure_tokensave — the tokensave CLI, github.com/aovestdipaperino/tokensave
+# (MIT). The third graph, and the only one that indexes markdown without an LLM
+# pass, which is why it earns a place next to the two uv tools.
+#
+# Not a uv tool: it is a Rust binary, so macOS gets the tap (a ~155 MB download,
+# but seconds) and Linux falls back to `cargo install`, which COMPILES 34
+# tree-sitter grammars and takes many minutes — hence the explicit log line
+# rather than a silent stall. No cargo, no install: a prebuilt binary from the
+# releases page is the manual path, and the warning names it.
+#
+# MCP registration is NOT done here — installer/scripts/register_mcp.py owns it,
+# because ~/.claude/mcp.json is not a file Claude Code reads.
+ensure_tokensave() {
+  if _bin_present tokensave; then
+    debug "tokensave present (skip)"
+    return 0
+  fi
+  case "$PLATFORM" in
+    macos)
+      if ! command -v brew >/dev/null 2>&1; then
+        printf '[install] WARNING: "tokensave" not found and brew is missing\n'
+        printf '[install]   install: https://github.com/aovestdipaperino/tokensave/releases/latest\n'
+        return 0
+      fi
+      log "installing tokensave via brew (tap: aovestdipaperino/tap)"
+      run brew install aovestdipaperino/tap/tokensave \
+        || printf '[install] WARNING: brew install tokensave failed\n'
+      ;;
+    linux)
+      if ! command -v cargo >/dev/null 2>&1; then
+        printf '[install] WARNING: "tokensave" not found and cargo is missing\n'
+        printf '[install]   install: https://github.com/aovestdipaperino/tokensave/releases/latest\n'
+        return 0
+      fi
+      log "installing tokensave via cargo (compiles from source — expect several minutes)"
+      run cargo install tokensave \
+        || printf '[install] WARNING: cargo install tokensave failed\n'
+      ;;
+  esac
+  [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
+  _bin_present tokensave \
+    && log "tokensave installed" \
+    || printf '[install] WARNING: tokensave install ran but binary still missing\n'
 }
 
 ensure_graphify() {

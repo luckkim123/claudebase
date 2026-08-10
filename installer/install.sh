@@ -102,14 +102,29 @@ maybe_enable_claude_mouse
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
-# Idempotent `uv tool install` of the two code-graph CLIs → deps.sh.
+# Idempotent install of the three code-graph CLIs → deps.sh.
 # code-review-graph (github.com/tirth8205/code-review-graph) answers structural
 # queries over a SQLite index via MCP; graphify (github.com/Graphify-Labs/graphify,
-# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts.
+# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts;
+# tokensave (github.com/aovestdipaperino/tokensave) indexes symbols AND markdown
+# headings, the only one of the three that reads prose without an LLM pass.
 # Complementary, not redundant — routing rules in templates/project-code-review-graph.md.
-# Neither builds a graph here: that is a per-repo decision.
+# None of them builds a graph here: that is a per-repo decision.
 ensure_code_review_graph
 ensure_graphify
+ensure_tokensave
+
+# Register user-scope MCP servers with the CLI. This is separate from
+# render_mcp_json above because Claude Code does NOT read ~/.claude/mcp.json —
+# user-scope servers live in ~/.claude.json, reachable only via `claude mcp add`
+# (measured 2026-08-10; see config/mcp.template.json). Runs after the installs
+# above so a freshly-installed binary resolves to an absolute path. Idempotent:
+# a server already registered is left untouched, never re-added.
+if [[ $DRY_RUN -eq 1 ]]; then
+  run python3 "$REPO_DIR/installer/scripts/register_mcp.py" --config "$CLAUDE_HOME/mcp.json" --dry-run
+else
+  python3 "$REPO_DIR/installer/scripts/register_mcp.py" --config "$CLAUDE_HOME/mcp.json" || true
+fi
 
 # Prune stale plugin-cache versions → lib/plugin_cache.sh. Marketplace
 # auto-update fetches new versions but never deletes the old ones, so the cache

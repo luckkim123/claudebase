@@ -422,6 +422,9 @@ prints zero action lines — step 6 depends on this). Bundling auto-update would
 make every install non-idempotent and could swap a plugin's commit at a moment
 the user didn't choose. Detect-then-ask keeps the choice explicit.
 
+**MCP servers are not plugins** and `claude plugin update` does not reach
+them — they are step 4j.
+
 **4h. HUD wrapper integrity (syntax valid + customization present?)**
 
 `install_omc_hud()` (`installer/lib/omc.sh`) self-heals a broken
@@ -559,6 +562,84 @@ failure mode (`feedback_editable_install_namespace` memory). If a pull lands new
 code that *needs* a reinstall (e.g. omx-core's `console_scripts` changed), the
 step **surfaces** that as a follow-up for the user to run, but does not execute
 it. Same push-gate as step 8: this sweep never pushes in any repo.
+
+**4j. MCP servers up-to-date?**
+
+4f and 4g cover plugins. MCP servers are the gap, and they are a harder one:
+**there is no `claude mcp update`** — verified 2026-08-10, `claude mcp --help`
+lists `add`, `add-json`, `get`, `list`, `login`, `logout`, `remove`,
+`reset-project-choices`, `serve` and nothing else. A server is just a command
+someone wired into a config file, so whatever installed it decides how it
+upgrades. Nothing enumerates them for you, which is how a server sits nine minor
+versions behind for months without a single line of output saying so (tokensave
+was on v7.0.2 against v7.9.0 when this step was written).
+
+So the step is: enumerate, classify by launch command, apply the matching check.
+
+```bash
+cd <the project you are syncing> && python3 ~/claudebase/installer/scripts/mcp_inventory.py
+```
+
+Detection only — it never upgrades. It reads `~/.claude.json` (user scope *and*
+every `projects[*].mcpServers`) plus the current directory's `.mcp.json`, so run
+it from a project to see that project's servers. Classification:
+
+| Launch command | Kind | Check |
+|:---|:---|:---|
+| `uvx <pkg>` , or a path resolving into `.../uv/tools/<pkg>/` | uv | `uv tool list --outdated` (verified: `--outdated` is a real `uv tool list` flag) |
+| `npx -y <pkg>` , `bunx` | npx | none — refetched every launch, so always latest and never pinned |
+| any other absolute path | binary | ask the tool itself: `--version`, then its own upgrade verb |
+| `https://…` | remote | claude.ai connector; the server is theirs, only the auth can go stale |
+
+**Resolve the symlink before classifying.** A uv-installed server is launched
+through `~/.local/bin/<cmd>`, which looks like a plain binary until `realpath`
+lands in the uv tool directory — and only that path carries the PyPI name, which
+need not match the command. graphify's package is `graphifyy`; classifying on the
+command alone both misses the uv upgrade path and reports the wrong package name.
+
+Same governance as 4e/4f/4g — **surface the gap and ask, never auto-upgrade**:
+
+```bash
+uv tool upgrade <pkg>     # uv-managed
+<tool> upgrade            # self-updating binary, if it has such a verb
+```
+
+**A version bump is not the end of it — re-run the server's own installer.**
+Verified on tokensave 7.0.2 → 7.9.0 (2026-08-10): the upgrade succeeded and the
+binary reported 7.9.0, but every subsequent tool call printed `81 new tokensave
+tool(s) not yet permitted`. New tools ship with a new version and land outside
+the permission list written at install time. The fix is the tool's own
+reconfigure step (`tokensave reinstall`); a session restart does not do it.
+
+Two things to know before running one of those reconfigure steps:
+
+- **Prefer a wildcard permission when the tool offers one.** `tokensave reinstall
+  --wildcard-permissions` writes a single `mcp__tokensave__*` entry instead of
+  enumerating every tool; the explicit form would have put ~250 lines into
+  `permissions.allow`, and would need rewriting on every future version.
+- **They write into `~/.claude/` — check what they touched.** These installers
+  configure "MCP server, permissions, hooks, prompt rules", which means
+  `~/.claude/settings.json` (rendered by *this* repo — a foreign write can drop
+  keys) and potentially `~/.claude/CLAUDE.md` (a **symlink to
+  `config/CLAUDE.md`**, so a write there follows the link and ships to every
+  machine — the same trap documented for `graphify install --project`). Take a
+  checksum first, and verify after:
+
+```bash
+shasum ~/claudebase/config/CLAUDE.md            # before, and again after
+python3 ~/claudebase/installer/lib/settings_verify.py ~/.claude/settings.json
+git -C ~/claudebase status --short              # must show no new config/ changes
+```
+
+tokensave passed this on 2026-08-10 — it wrote its rules to a separate
+`~/.claude/rules/tokensave.md` and left `config/CLAUDE.md` byte-identical. That
+is the outcome to confirm, not to assume.
+
+**Adding a new MCP server later?** Nothing here is per-server — the classifier
+keys off the launch command, so a server added tomorrow is picked up by the same
+run with no edit to this skill. Extend the table only if a genuinely new *kind*
+of launcher appears (a `docker run` server, say). If a new server's installer
+writes into `~/.claude/`, add it to the checksum list above.
 
 **4k. Optional personal plugins enabled? (detect-then-ask, per plugin)**
 
@@ -812,6 +893,10 @@ third option, and "I mentioned it in the summary" is not (b).
 - [ ] 4e (claude CLI upgrade) — asked if drift found, or N/A (no drift)
 - [ ] 4f (OMC upgrade) — asked if drift found, or N/A (no drift)
 - [ ] 4g (other plugin updates) — asked if candidates found, or N/A (0 candidates)
+- [ ] 4j (MCP server updates) — inventory run, and asked per stale server, or
+      N/A (none stale). There is no `claude mcp update` and nothing else in this
+      skill enumerates MCP servers, so an unchecked box here is how one goes
+      nine minor versions behind without a single line of output saying so.
 - [ ] 4k (each of the 4 optional plugins) — asked **individually, one
       question per missing plugin**, or N/A (already installed/enabled).
       "Not proposed because it seemed unwanted" is not N/A — that judgment
@@ -870,6 +955,7 @@ A short summary table:
 | claude CLI version | `<current — or "X → Y (upgraded)" / "X → Y (deferred)">` |
 | OMC version | `<current — or "X → Y (updated)" / "X → Y (deferred)">` |
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
+| MCP servers (4j) | per server: `<name>: up to date / X → Y (upgraded) / X → Y (deferred) / always-latest (npx) / remote` — plus `reconfigure run: <tool>` if a version bump needed one |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |

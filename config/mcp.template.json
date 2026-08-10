@@ -1,11 +1,15 @@
 {
-  "$comment": "MCP servers — rendered to ~/.claude/mcp.json by install.sh. Add VAR_NAME-style placeholders (with the dollar-brace syntax) here and define them in secrets/secrets.env when a server needs an API key.",
-  "$caveat": "2026-08-10 measured: Claude Code does NOT read ~/.claude/mcp.json — it loads user-scope servers from ~/.claude.json (mcpServers). Tested with both the globalServers and the mcpServers key; neither appeared in `claude mcp list`. So entries below are a record of intent, not an active config. Until the renderer is wired to feed `claude mcp add -s user`, each machine must register them by hand (see the per-entry note).",
+  "$comment": "User-scope MCP servers. install.sh registers each entry below with `claude mcp add --scope user` (installer/scripts/register_mcp.py), which is what actually reaches Claude Code. Add VAR_NAME-style placeholders (with the dollar-brace syntax) and define them in secrets/secrets.env when a server needs an API key; they are substituted before registration.",
+  "$caveat": "2026-08-10 measured: Claude Code does NOT read ~/.claude/mcp.json — user-scope servers load from ~/.claude.json (mcpServers) only. Tested with both the globalServers and the mcpServers key; neither appeared in `claude mcp list`. The rendered mcp.json is therefore a record, not an active config, and registration goes through the `claude mcp add` path instead. Bare command names are resolved to an absolute path at registration time (PATH, then ~/.local/bin), because hooks and MCP servers do not inherit a login shell's PATH.",
   "globalServers": {
     "arxiv": {
-      "$note": "register manually: claude mcp add --transport stdio --scope user arxiv -- uvx arxiv-mcp-server",
       "command": "uvx",
       "args": ["arxiv-mcp-server"]
+    },
+    "tokensave": {
+      "$note": "Code/prose index over 34 languages; the only one of the three graphs that indexes markdown for free. Binary install is handled by ensure_tokensave in installer/lib/deps.sh.",
+      "command": "tokensave",
+      "args": ["serve"]
     }
   }
 }

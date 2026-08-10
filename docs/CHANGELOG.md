@@ -2,6 +2,56 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — third graph (`tokensave`), and MCP registration that reaches the CLI
+
+The routing card already claimed "all three are installed by claudebase". Two were. tokensave lived
+on one machine only — installed by hand, registered by hand — so a second machine got the card's
+advice without the tool it names. Closing that meant fixing the reason no MCP server could ever be
+distributed: the installer wrote a file nothing reads.
+
+### Added
+- **`ensure_tokensave` in `installer/lib/deps.sh`** — [tokensave](https://github.com/aovestdipaperino/tokensave)
+  (MIT), the third graph and the only one that indexes markdown headings without a paid LLM pass.
+  Not a uv tool but a Rust binary, so macOS takes the tap (`brew install aovestdipaperino/tap/tokensave`)
+  and Linux falls back to `cargo install tokensave`, which compiles 34 tree-sitter grammars — the log
+  line says so, because an unannounced multi-minute stall reads as a hang. Neither path available →
+  warn with the releases URL, never block.
+- **`installer/scripts/register_mcp.py`**, called from `install.sh` after the CLI installs so a
+  freshly-installed binary resolves. Reads the rendered `mcp.json` (secrets already substituted) and
+  registers each entry with `claude mcp add --transport stdio --scope user`. Idempotent **by name**:
+  an already-registered server is skipped entirely rather than re-added, because re-adding means
+  remove+add and would silently discard a deliberate per-machine edit. Bare command names resolve to
+  an absolute path (PATH, then `~/.local/bin`) since hooks and MCP servers are spawned without a
+  login shell — `tokensave` resolves interactively here but would not from the CLI. Entries with an
+  unresolved `${...}` are refused rather than registered with the literal placeholder, which would
+  fail later at connect time instead of loudly now. Ten tests cover the decision layer.
+- **`tokensave` in `config/mcp.template.json`**, alongside the `arxiv` entry recorded earlier.
+
+### Fixed
+- **`render_mcp_json` produced a file nothing consumes.** Measured 2026-08-10 (previous commit):
+  Claude Code does not read `~/.claude/mcp.json` at all — user-scope servers load from
+  `~/.claude.json`, and writing the entry into the rendered file under either `globalServers` or
+  `mcpServers` never appeared in `claude mcp list`. The render stays as the tracked record of intent;
+  `register_mcp.py` is the half that actually reaches the CLI, which is what the previous commit's
+  caveat said was missing ("until the renderer is wired to feed `claude mcp add -s user`"). The
+  by-hand step per machine is gone.
+
+### Notes
+- **Do not run `tokensave install --agent claude` on a claudebase machine.** It writes three hooks
+  (`PreToolUse` on `Agent|Grep|Bash`, `UserPromptSubmit`, `Stop`) plus a `permissions.allow` list
+  into `~/.claude/settings.json` — a **rendered** file here, so the next `install.sh` overwrites them
+  and they vanish without an error. Same class as graphify's `--project` hazard but worse: graphify
+  edits a symlink target and leaves visible git drift, whereas this simply disappears. If those hooks
+  are wanted they belong in `config/settings.json`, next to the graphify guards.
+- Those tokensave hooks are **deliberately not wired** in this commit. tokensave works fully without
+  them (this machine has run months with `doctor` reporting both as not installed), and the `Stop`
+  hook would join four existing ones — worth its own change with its own verification, not a rider on
+  a distribution fix.
+- Verified: `ensure_tokensave` and `register_mcp.py` each idempotent across two runs (`present (skip)`
+  / `already registered (skip)`); a simulated fresh machine emits both `claude mcp add` commands with
+  absolute paths; unresolved-placeholder and missing-binary entries warn and are skipped with exit 0;
+  all three CLIs resolve; suite 175 passing.
+
 ## [Unreleased] — 2026-08-10 — the graph routing becomes binding: user-scope `PreToolUse` guards
 
 Installing two graph CLIs and writing a routing card left the actual behaviour unchanged, because

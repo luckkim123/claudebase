@@ -111,7 +111,12 @@ on one Obsidian vault, same 774 tracked `.md` files, three tools:
 |:---|---:|:---|
 | CRG | 0 | tree-sitter has no symbol concept for prose |
 | graphify `--code-only` | 0 | prose needs the paid semantic pass |
-| **tokensave** | **10,358** | 9,584 `module` (one per heading) + 774 `file` |
+| **tokensave** | **~10,356** | one node per heading (~9,582) + one per file (774) |
+
+Do not match on the heading nodes' `kind` string: it was `module` on v7.0.2 and
+`struct` on v7.9.0, for the same headings in the same vault. Filter by file
+extension, or by `kind = 'file'` for the file-level node, and treat everything
+else in a `.md` as a heading.
 
 So in a notes repo tokensave is a heading index with full-text search over the
 whole corpus, available offline and free. That is a different product from the
