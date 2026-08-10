@@ -21,6 +21,24 @@ that nobody updates is worse than no index: it answers confidently with yesterda
   which is per-repository, never committed, and disappears with the clone — unlike a central list
   under `~/.claude/`, which goes stale the first time a repository moves.
 - 13 tests (`tests/hooks/test_graph_refresh.py`, `tests/hooks/test_graph_offer.py`). Suite: 195.
+- **`templates/project-graphifyignore`** — what a graph must *not* index, as a portable default for
+  every machine. One rule does most of the work: `.*` excludes hidden directories and dotfiles at
+  any depth, so `.claude/`, `.omp/`, `.github/`, `.mcp.json`, and `.obsidian/` never enter the
+  corpus. Verified against graphify's own `detect()` on a fixture tree — it drops
+  `.claude/skills/SKILL.md`, `.mcp.json`, and `.obsidian/plugin.js` while keeping `README.md` and
+  `0_Project/run.py`, which is the check worth running before trusting a glob that starts with a
+  dot. Images and video follow, with the measurement behind them. Per-project exclusions (an archive
+  folder, a generated docs tree) stay in the project's own copy and out of the template.
+
+### Changed
+- **`runtime/hooks/graph-offer.sh`** now tells the session to copy that template *before* building,
+  not after. The ordering is the substance of the change: AST re-extraction is free, but the
+  semantic pass runs ~5 min per chunk serially on `claude-cli`, so a late exclusion buys back only
+  the chunks that have not started — everything already extracted was paid for at full price and
+  then discarded. Measured on one vault, three restarts: 648 → 775 excluded files as media, an
+  archive folder, and finally every hidden path were each remembered one at a time, mid-run.
+- **`templates/project-code-review-graph.md`** and **`templates/README.md`** carry the same ordering
+  rule, so a project that adopts the rules card gets it without reading the hook.
 
 ### Notes
 - **Creation stays a decision, and cost is not why.** The free tree-sitter builds take seconds. The

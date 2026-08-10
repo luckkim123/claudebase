@@ -38,10 +38,25 @@ below.
 ## Wiring graphify into a project
 
 ```bash
+cp ~/claudebase/templates/project-graphifyignore .graphifyignore   # FIRST — see below
 graphify .                                          # build (AST only — offline, no key)
 graphify install --platform claude --project        # wire it into THIS project
 graphify update .                                   # after edits, still no LLM
 ```
+
+**The ignore file comes first, and the order is the whole point.** The default
+scope is every tracked file, which means `.claude/`, `.omp/`, `.obsidian/`,
+`.mcp.json`, and every screenshot in the tree. None of that is corpus content —
+it is tooling config, harness state, vendored plugin JS, and images whose vision
+pass burns ten minutes per chunk to produce nothing. A single `.*` excludes
+hidden directories and dotfiles at any depth, verified against graphify's own
+`detect()` on a fixture tree: it drops `.claude/skills/SKILL.md`, `.mcp.json`,
+and `.obsidian/plugin.js` while keeping `README.md` and `0_Project/note.md`.
+
+Adding the rule afterwards is not equivalent. AST re-extraction is free, but the
+semantic pass runs about 5 minutes per chunk *serially* on the `claude-cli`
+backend, so a late exclusion buys back only the chunks that have not started —
+everything already extracted was paid for at full price and then discarded.
 
 **`--project` is not optional here.** Without it, `install.py` writes its
 CLAUDE.md block with `Path.write_text` into `~/.claude/CLAUDE.md`; `write_text`
@@ -66,6 +81,24 @@ repo that has not built one:
 // <project>/.mcp.json
 { "mcpServers": {
     "graphify": { "type": "stdio", "command": "graphify-mcp", "args": [] } } }
+```
+
+**Leave `args` empty — never pin `--graph` to a path.** The empty form is not a
+shortcut, it is the only form that survives the `GRAPHIFY_OUT` switch:
+`serve.py` falls back to `default_graph_json()`, which reads the env var
+(`paths.py:26`), and Claude Code does inject `config/settings.json`'s `env` block
+into MCP server processes — measured with `ps eww` on a live `graphify-mcp`,
+`GRAPHIFY_OUT=.graphify` was present. A hand-written
+`"args": ["--graph", ".../graphify-out/graph.json"]` overrides that fallback and
+pins the pre-switch path, so the server launches happily against a file that does
+not exist and every graphify MCP tool answers from nothing. Nothing errors —
+this is the silent-success class again. Measured on the obsidian vault
+2026-08-10: four `graphify-mcp` processes serving a missing `graphify-out/graph.json`
+while the real index sat in `.graphify/`. Audit with:
+
+```bash
+python3 -c "import json;print(json.load(open('.mcp.json'))['mcpServers'].get('graphify'))"
+ls -l "${GRAPHIFY_OUT:-graphify-out}/graph.json"     # the path that must exist
 ```
 
 That server needs the `mcp` extra — `uv tool install "graphifyy[mcp]"`, which is
@@ -240,6 +273,49 @@ empty answer:
 That last one bites quietly: `semantic_search_nodes_tool` uses vectors only when
 embeddings have been built (`code-review-graph embed`), and otherwise falls back
 to keyword + FTS5, where a natural-language phrase matches nothing.
+
+### The other edge of that premise: tracked vendored code
+
+`git ls-files` cuts both ways. CRG's `DEFAULT_IGNORE_PATTERNS`
+(`incremental.py:131`) covers the usual suspects — `node_modules`, `vendor`,
+`dist`, `build`, `*.min.js` — but a repo that **tracks** a third-party tree under
+any other name is indexed in full, and bundled JS is enormous per file. The graph
+then describes somebody else's code while reporting a healthy node count.
+
+CRG's exclusion file is `.code-review-graphignore` at the repo root
+(`incremental.py:392`, `_load_ignore_patterns`). It takes `.gitignore` syntax and
+a bare `dir/` matches at any depth. It is a **third** ignore file, independent of
+the other two: excluding a path in `.graphifyignore` or `.gitignore` leaves CRG
+indexing it. When you write one, write the sibling.
+
+```
+.obsidian/       # bundled Obsidian plugin JS — nobody here wrote it
+3_Archive/       # retired material, same call as .graphifyignore
+```
+
+Measured on the obsidian vault, 2026-08-10 — same repo, same commit, this file
+the only change:
+
+| | Nodes | Files | `graph.db` | Languages |
+|:---|---:|---:|---:|:---|
+| Before | 21,865 | 101 | 222 MB | bash, python, javascript, cpp, objc |
+| After | 568 | 85 | 12 MB | bash, python, cpp, objc |
+
+All 21,865 came from 34 tracked files under `.obsidian/plugins`; the vault's own
+code is the 568. `javascript` dropping out of the language list is the tell.
+
+So **check the distribution before trusting a fresh graph** instead of reading a
+large node count as coverage:
+
+```bash
+python3 -c "
+import sqlite3, collections
+d = collections.Counter()
+for p, n in sqlite3.connect('.code-review-graph/graph.db').execute(
+        'select file_path, count(*) from nodes group by 1'):
+    d[p.replace(__import__('os').getcwd() + '/', '').split('/')[0]] += n
+print(d.most_common(10))"
+```
 
 ## Pass `repo_root` explicitly when the graph is not at the repo root
 

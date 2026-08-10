@@ -9,6 +9,9 @@ Standard starting point for the `.claude/` directory when beginning a new projec
 cp ~/claudebase/templates/project-settings.json .claude/settings.json
 cp ~/claudebase/templates/project-CLAUDE.md CLAUDE.md
 cat ~/claudebase/templates/project-gitignore >> .gitignore
+
+# Only if this project will carry a graphify graph — copy BEFORE the first build:
+cp ~/claudebase/templates/project-graphifyignore .graphifyignore
 ```
 
 ## Files
@@ -20,6 +23,7 @@ cat ~/claudebase/templates/project-gitignore >> .gitignore
 | `project-gitignore` | append to `<project>/.gitignore` | Excludes machine-specific files like `.claude/settings.local.json` |
 | `project-refactor-workflow.md` | `<project>/.claude/rules/refactor-workflow.md` | Discipline for tracking the 4 axes of multi-stage refactoring (branch/commit/CHANGELOG/PR) |
 | `project-code-review-graph.md` | `<project>/.claude/rules/code-review-graph.md` | Routing between `code-review-graph` and `graphify`, how to wire graphify's MCP server per project, and when either index silently returns nothing. Only for projects that have one |
+| `project-graphifyignore` | `<project>/.graphifyignore` | What a graph must not index: hidden dirs and dotfiles (`.*`), images, video. Copy **before** the first build — the semantic pass runs ~5 min per chunk serially, and a later exclusion does not refund extraction already paid for |
 
 ## Principles
 

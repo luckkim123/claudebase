@@ -1,0 +1,72 @@
+# What a knowledge graph should not index.
+#
+# Copy this to a project root as `.graphifyignore` BEFORE the first build:
+#
+#     cp ~/claudebase/templates/project-graphifyignore .graphifyignore
+#
+# Order matters. graphify's semantic pass reads prose with an LLM at roughly
+# 5 min per chunk, serially on the claude-cli backend — an exclusion added after
+# the build does not refund the extraction it already paid for. Every rule below
+# was added mid-run on a live vault, which is the expensive way to learn them.
+#
+# Syntax is gitignore's, and graphify already honours .gitignore on top of this
+# file, so node_modules/ and friends need no entry here.
+
+
+# Everything hidden — dot-directories AND dotfiles, at any depth. None of it is
+# corpus content: it is tooling config and harness state (.claude/, .omp/,
+# .github/, .mcp.json) plus the graph's own artifacts under .graphify/. A single
+# `.*` covers files and directories both, and covers dot-dirs added later.
+#
+# Verified against graphify's own detect() on a fixture tree: `.*` drops
+# .claude/skills/SKILL.md, .mcp.json, and .obsidian/plugin.js while keeping
+# 0_Project/note.md, README.md, and 0_Project/run.py.
+#
+# The measured case for the biggest one, kept because it is the evidence:
+# .obsidian/ is vendored plugin and theme JS, and a --code-only build of one
+# vault produced 16,954 nodes of which 16,044 (94%) came from there, leaving 806
+# for everything actually written by hand. A graph that is 94% someone else's
+# bundled JS answers no question you would ask it.
+.*
+
+# Build artifacts of the graph itself, for repos predating GRAPHIFY_OUT=.graphify.
+graphify-out/
+
+# Images and video. Semantic extraction sends these through a vision pass, and
+# on one vault the chunk covering a project's photos/ and videos/ timed out
+# after the full 600 s and produced nothing — ten minutes burned for zero nodes,
+# with 681 such files tracked. A screenshot of a plot contributes almost nothing
+# to a graph of concepts, which is what the corpus is for.
+#
+# PDFs are deliberately NOT here: those are papers, and their text is exactly
+# the kind of content a concept graph should carry.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.webp
+*.svg
+*.heic
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# Matching is case-sensitive: the lowercase list above let 7 `.PNG` files
+# through on the first attempt. Uppercase variants for the extensions a camera
+# or a screenshot tool actually produces.
+*.PNG
+*.JPG
+*.JPEG
+*.HEIC
+*.MP4
+*.MOV
+
+# Add per-project exclusions below — retired material an archive folder holds,
+# a vendored tree .gitignore does not cover, a generated docs build. Those are
+# this project's call, not a portable default, so they live here and not in the
+# claudebase template.

@@ -78,6 +78,11 @@ ctx = f"""이 저장소(`{name}`)에는 코드 그래프가 없습니다 — 추
   code-review-graph build     # 호출자·영향범위·리뷰 컨텍스트 질의용
   graphify .                  # 코퍼스 전체 모양, 허브, 커뮤니티
 
+graphify를 만든다면 빌드 *전에* 제외 규칙부터 깔 것 — 순서가 중요합니다:
+  cp ~/claudebase/templates/project-graphifyignore .graphifyignore
+숨김 폴더와 숨김 파일(.claude/, .omp/, .obsidian/, .mcp.json), 이미지, 영상은
+코퍼스가 아닙니다. 나중에 빼도 이미 지불한 추출 비용은 돌아오지 않습니다.
+
 빌드 직후 결과를 반드시 검증하고, 쓸모없으면 지우세요. 빈 껍데기 그래프는 없는 것보다
 나쁩니다 — PreToolUse 가드가 매 턴 그걸 조회하라고 강제하기 때문입니다. 확인할 것:
   - `code-review-graph status`의 노드 수와 languages 목록에 이 저장소에서 실제로 쓰는
