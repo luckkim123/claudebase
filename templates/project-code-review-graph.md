@@ -328,18 +328,49 @@ not reported as missing; it produces `0 results`, which reads exactly like "this
 code is unused". Failure looks like success.
 
 So: **never conclude "not used anywhere" from an empty result.** Confirm with
-`git ls-files | grep <file>` first. Three different conditions produce the same
+`git ls-files | grep <file>` first. Four different conditions produce the same
 empty answer:
 
 | Cause | Tell | Fix |
 |:---|:---|:---|
 | File is untracked | `git ls-files` does not list it | Use `grep -rn`; the graph cannot help |
-| Graph is stale | `_graph.head_matches_build` is `false` | Re-run `code-review-graph update` |
+| Graph is stale | `_graph.head_matches_build` is `false` | `code-review-graph update` — but `build` if files were renamed or deleted (see below) |
 | Query had several words | Search ran in keyword/FTS mode | Query one identifier at a time |
+| You queried an empty graph | `code-review-graph status` says `Nodes: 0` | Pass `repo_root` — the graph you want is elsewhere |
 
-That last one bites quietly: `semantic_search_nodes_tool` uses vectors only when
-embeddings have been built (`code-review-graph embed`), and otherwise falls back
-to keyword + FTS5, where a natural-language phrase matches nothing.
+The keyword one bites quietly: `semantic_search_nodes_tool` uses vectors only
+when embeddings have been built (`code-review-graph embed`), and otherwise falls
+back to keyword + FTS5, where a natural-language phrase matches nothing.
+
+**The empty graph is one you created by asking.** Omitting `repo_root` does not
+raise: the server builds a fresh `graph.db` at its own cwd and answers from it,
+so a query in a workspace whose graphs live in nested repos both fabricates a
+0-node database and returns `status: "ok"` with 0 results. Deleting the
+directory does not help — the next such query recreates it. Two consequences
+before you read an empty answer as an answer: the reply is indistinguishable
+from a genuine "not found", and the stray directory looks like a graph to
+anything keying on existence. claudebase's own Stop hook did exactly that, and
+refreshed the empty one every turn while the real graphs went stale
+(`runtime/hooks/graph-refresh.sh`, fixed 2026-08-10 — it now gates on node
+count).
+
+### `update` adds and revises; it does not forget
+
+The opposite failure of an empty answer: nodes for code that no longer exists.
+`code-review-graph update` is incremental over changed and new files, and a file
+that was **deleted or renamed away** is simply never revisited — its nodes stay,
+and nothing in `status` marks them. Ask for the callers of a symbol in a
+directory that was renamed last week and the graph answers from the old tree,
+confidently.
+
+Measured on a repo mid-rename (2026-08-10): a graph built while
+`albc_bridge/ -> stonefish_albc_bridge/` was staged carried both paths at 70
+nodes each. `update --brief` left the duplicate untouched; only a full
+`code-review-graph build` cleared it (728 nodes, one path).
+
+So: after any rename, deletion, or branch switch that moves files, **rebuild
+rather than update**. `update` is for editing files in place, which is what a
+Stop hook does between rebuilds.
 
 ### The other edge of that premise: tracked vendored code
 
@@ -353,16 +384,27 @@ CRG's exclusion file is `.code-review-graphignore` at the repo root
 (`incremental.py:392`, `_load_ignore_patterns`). It takes `.gitignore` syntax and
 a bare `dir/` matches at any depth. It is a **third** ignore file, independent of
 the other two: excluding a path in `.graphifyignore` or `.gitignore` leaves CRG
-indexing it. When you write one, write the sibling — `graph-init` writes both
-from `~/claudebase/templates/project-{graphifyignore,code-review-graphignore}`,
-which is the reason to prefer it over a hand-run build.
+indexing it. When you write one, write the sibling — which is the single best
+reason to let `graph-init` do it, since it seeds both from the templates before
+either build runs:
 
-Project-specific rules go on the end of whatever the template seeded:
+```bash
+graph-init                                                        # seeds both, then builds
+cp ~/claudebase/templates/project-code-review-graphignore \
+   .code-review-graphignore                                       # or just this one, by hand
+```
+
+Project-specific rules go on the end of whatever seeded the file:
 
 ```
 .obsidian/       # bundled Obsidian plugin JS — nobody here wrote it
 3_Archive/       # retired material, same call as .graphifyignore
 ```
+
+**A leading-dot glob does not cover the hidden directories.** `.*/` reads like it
+excludes all of them and does not: on a Python repo (2026-08-10) it dropped a
+tracked `.omx/` while root-level `.vscode/` survived with 4 nodes. Name each
+directory explicitly — the template above ships the list.
 
 Measured on the obsidian vault, 2026-08-10 — same repo, same commit, this file
 the only change:

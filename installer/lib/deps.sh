@@ -243,6 +243,14 @@ ensure_graphify_skill() {
     # No rewrite needed — link so an upgrade is picked up with no install run.
     run mkdir -p "$(dirname "$dst")"
     link_or_copy "$src" "$dst"
+    # skill.md delegates its heavier flows (the extraction prompt, --update,
+    # query, exports) to a references/ dir. Linking skill.md alone leaves
+    # Step 3's semantic pass unable to load its own prompt. Note the dir does
+    # NOT sit beside skill.md: that is at the package root while references
+    # are per-platform under skills/<platform>/.
+    local refs="$pkg/skills/claude/references"
+    [[ -d "$refs" ]] || refs="$pkg/references"
+    [[ -d "$refs" ]] && link_or_copy "$refs" "$(dirname "$dst")/references"
     return 0
   fi
 

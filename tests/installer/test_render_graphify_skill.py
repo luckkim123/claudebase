@@ -66,6 +66,76 @@ class TestRewrite:
         assert 'description: "Use when .graphify/ exists."' in out
 
 
+REFERENCE = """# graphify reference: incremental update
+
+```bash
+$(cat graphify-out/.graphify_python) -c "..."
+```
+
+Reads `graphify-out/graph.json`.
+"""
+
+
+def _pkg(tmp_path: Path) -> Path:
+    """A graphify package laid out the way 0.9.38 actually ships it."""
+    pkg = tmp_path / "site-packages" / "graphify"
+    (pkg / "skills" / "claude" / "references").mkdir(parents=True)
+    (pkg / "skill.md").write_text(SKILL, encoding="utf-8")
+    (pkg / "skills" / "claude" / "references" / "update.md").write_text(REFERENCE, encoding="utf-8")
+    return pkg
+
+
+class TestFindReferences:
+    def test_looks_under_skills_platform_not_beside_skill_md(self, tmp_path):
+        # THE regression. skill.md sits at the package root while references are
+        # per-platform under skills/<platform>/. Resolving the obvious
+        # `skill.md.parent / "references"` yields a path that does not exist, so
+        # the copy silently does nothing and Step 3 cannot load its own
+        # extraction prompt.
+        pkg = _pkg(tmp_path)
+        assert not (pkg / "references").exists()
+        assert rgs.find_references(pkg) == pkg / "skills" / "claude" / "references"
+
+    def test_flat_layout_still_works(self, tmp_path):
+        pkg = tmp_path / "graphify"
+        (pkg / "references").mkdir(parents=True)
+        assert rgs.find_references(pkg) == pkg / "references"
+
+    def test_absent_returns_none(self, tmp_path):
+        assert rgs.find_references(tmp_path) is None
+
+
+class TestRenderReferences:
+    def test_references_get_the_same_rewrite(self, tmp_path):
+        # A reference that still says graphify-out is the same CLI-vs-skill split
+        # the whole script exists to close — update.md alone carries 20 of them.
+        pkg = _pkg(tmp_path)
+        dst = tmp_path / "out" / "references"
+        assert rgs.render_references(rgs.find_references(pkg), dst, ".graphify", "1.2.3", False) == 1
+        body = (dst / "update.md").read_text(encoding="utf-8").split("-->", 1)[1]
+        assert "graphify-out" not in body
+        assert ".graphify/graph.json" in body
+
+    def test_second_run_writes_nothing(self, tmp_path):
+        # install.sh runs this every time; a re-render would break the
+        # idempotency contract the smoke test asserts.
+        pkg = _pkg(tmp_path)
+        dst = tmp_path / "out" / "references"
+        src = rgs.find_references(pkg)
+        rgs.render_references(src, dst, ".graphify", "1.2.3", False)
+        assert rgs.render_references(src, dst, ".graphify", "1.2.3", False) == 0
+
+    def test_missing_source_is_not_an_error(self, tmp_path):
+        # An older graphify shipped skill.md alone.
+        assert rgs.render_references(tmp_path / "nope", tmp_path / "out", ".graphify", "1.2.3", False) == 0
+
+    def test_dry_run_counts_without_writing(self, tmp_path):
+        pkg = _pkg(tmp_path)
+        dst = tmp_path / "out" / "references"
+        assert rgs.render_references(rgs.find_references(pkg), dst, ".graphify", "1.2.3", True) == 1
+        assert not (dst / "update.md").exists()
+
+
 class TestInsertAfterFrontmatter:
     def test_no_frontmatter_puts_banner_first(self):
         assert rgs.insert_after_frontmatter("# Title\n", "BANNER\n") == "BANNER\n# Title\n"

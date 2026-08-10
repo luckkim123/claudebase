@@ -392,6 +392,22 @@ plugin was actually updated. If a plugin fails to update (network, bad
 marketplace), `apply()` logs `WARNING: failed to update: <plugin>` and continues
 — surface it but don't abort the rest.
 
+**If this dies on `FileNotFoundError: 'claude'`, just re-run it — 4f is why.**
+`omc update` reinstalls its npm package, and npm relinks the whole global bin
+directory while it works. Running 4g in the seconds after 4f can therefore find
+`claude` briefly absent, and the run aborts on the first `claude plugin update`
+with a raw traceback (observed 2026-08-10: `skip marketplace ensure: 'claude'
+not in PATH`, then `FileNotFoundError`). Nothing is broken and nothing is
+half-applied — the script fails before mutating anything. Confirm the binary is
+back (`claude --version`) and re-run the same command; it completed all 18
+plugins on the retry. This is reachable by following the skill exactly, since
+4f runs immediately before 4g.
+
+Do **not** "diagnose" this by inspecting `/usr/bin/claude`: on Linux the package
+legitimately ships its binary as `bin/claude.exe` (that is the `bin` mapping in
+`@anthropic-ai/claude-code`'s own `package.json`), so a symlink pointing at a
+`.exe` is correct and not the fault.
+
 **claude-mem worker after an upgrade — kill it; a session relaunch is not
 enough.** `claude-mem` runs one background worker on a fixed port
 (`CLAUDE_MEM_WORKER_PORT` in `~/.claude-mem/settings.json`, default `37701`)
@@ -868,6 +884,25 @@ For each new template:
   - Commit with `docs: adopt <name> rule from claudebase template` body referencing the source SHA.
   - Do NOT push — that repo's remote is separate (often org-owned) and outside this skill's authority.
 
+Three things bite between the `cp` and the commit (all three hit on 2026-08-10):
+
+- **The target may gitignore `.claude/` wholesale.** Then the adopted rule file
+  cannot be committed, and that is the repo's own decision — per-project Claude
+  config stays local there. Check first, and when it is ignored, leave the file
+  untracked rather than reaching for `git add -f`; say so in the commit body for
+  whatever *is* committable. `git -C <repo> check-ignore -v <path>` answers it in
+  one call.
+- **`git commit -- <paths>` cannot commit an untracked file.** The paths form is
+  the right tool under concurrency (it ignores whatever another session has
+  staged), but a brand-new file fails with `error: pathspec '<x>' did not match
+  any file(s) known to git` — and the commit does *not* happen, so re-read HEAD
+  before assuming it did. `git add <paths>` first, then `git commit -- <paths>`.
+- **The target may be a pristine vendored fork**, where adding any of our files
+  to the tracked tree is the thing the project forbids. Adopting is still
+  possible: write the file, and add it to `<repo>/.git/info/exclude` — a
+  local-only ignore that leaves the tracked tree byte-identical to upstream.
+  Verify with `git -C <repo> status --porcelain | wc -l` reading `0`.
+
 ### 9.5. Pre-completion ask audit (MANDATORY — run before writing the Outputs summary)
 
 This step exists because of a real failure (2026-08-03, obsidian-vault Mac):
@@ -918,6 +953,27 @@ table first on the theory that you'll circle back to it. The Outputs table
 is written *after* every open item on this list has actually been asked,
 never as a way of discharging the obligation to ask.
 
+**A yes to an optional tool needs one more install.sh run.** Installing the
+tool is not the same as wiring it in: `uv`, `cargo` and friends are
+*prerequisites* install.sh checks for, and the things that depend on them
+(`graphify`, `tokensave`, the `arxiv` and `tokensave` MCP registrations) are
+installed in the same pass that found the prerequisite missing — so they were
+skipped. Install the prerequisite, then run install.sh **again** and confirm
+the WARNING is gone before reporting the item as handled:
+
+```bash
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"   # uv / cargo shims
+cd ~/claudebase && INSTALL_TOOLS=1 installer/install.sh --verbose 2>&1 \
+  | grep -E '^\[install\] (WARNING|install(ing|ed))'
+```
+
+Measured 2026-08-10: after `uv` and `cargo` went in, the third pass installed
+`graphify` and `tokensave` and registered both MCP servers. Stopping at the
+second pass would have left the user with the tool on disk, nothing using it,
+and a run reported complete. Note this pass is *expected* to print action
+lines — it is not a step-6 idempotency check, and does not invalidate the one
+already done.
+
 ## Red flags (STOP if you catch yourself thinking these)
 
 | Thought | Reality |
@@ -940,6 +996,7 @@ never as a way of discharging the obligation to ask.
 | "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
 | "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
 | "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
+| "They said yes to `uv`/`cargo`, it installed cleanly, that item is done" | Installing the prerequisite is not installing the thing that needed it. install.sh skipped `graphify`/`tokensave`/the MCP registrations in the pass that found the prerequisite missing, so they are still absent — run install.sh once more and confirm the WARNING is gone. Reporting "installed" off the prerequisite alone leaves the tool on disk with nothing wired to it (measured 2026-08-10). |
 | "I'll note this optional plugin / install.sh WARNING in the Outputs summary instead of asking" | That's disclosure, not consent — the user can't redirect a decision they were never actually asked about, and a row in a nine-row table is easy to skim past. This exact shortcut (4k's optional plugins + a `code-review-graph`/`uv` WARNING both downgraded to summary notes) shipped a run reported "complete" with two live decisions silently defaulted to "skip" (2026-08-03). Run the Step 9.5 pre-completion ask audit before writing the Outputs table — every detect-then-ask item needs an actual question, not a mention. |
 
 ## Outputs the user expects after a run

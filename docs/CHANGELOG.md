@@ -2,6 +2,128 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the offer that named no verb
+
+`graph-offer.sh` told a session its project had no code graph and then had to explain, in 1,152
+characters of prose, how to make one: copy the exclusion template, run two builds, query the node
+distribution by directory, delete the result if it turned out to be somebody else's vendored JS. There
+was no command that did any of it. Every session re-derived that prose into four shell invocations, and
+a person meeting claudebase for the first time performed them by hand — which is the report that
+started this: *"일일이 처음 사용하는 사용자가 그런 식으로 해야 한다고?"*
+
+The same investigation found why the offer had never fired on the machine in question. The hook used
+"is this a git repository?" as a proxy for "can this be graphed", and the proxy is false: CRG falls
+back from `git ls-files` to an rglob walk (`incremental.py:761-767`) and graphify never needed git —
+both verified against a plain directory, which built 24 nodes from 12 files. A container mount like
+`/workspace` was therefore skipped in silence, indistinguishable from a healthy no-op.
+
+### Added
+- **`runtime/bin/graph-init.sh`** — the verb. Seeds `.graphifyignore` and `.code-review-graphignore`
+  from the templates *before* extracting anything (order matters for graphify: a rule added afterwards
+  refunds nothing), runs both free tree-sitter builds, then judges **where** the nodes came from —
+  exit 2 and a named warning when a vendored tree holds ≥30%, because the PreToolUse guards would
+  otherwise force every session to consult it. `--purge` removes both graphs and keeps the ignore
+  files, which may have been hand-edited. Works in and out of git; refuses `$HOME` and `/`.
+- **`installer/lib/deps.sh` `ensure_graph_init`** — links it into `~/.local/bin`, called from
+  `install.sh` after the three CLI installs it drives.
+- **`tests/bin/test_graph_init.py`** — 7 tests, skipped where neither CLI is installed.
+
+### Changed
+- **`runtime/hooks/graph-offer.sh`** — the message is now the verb and how to read its exit code, not
+  the procedure. Non-git projects are offered, bounded by the `$HOME` / `/` refusal, a depth-4 file
+  count capped at 50k paths, and a marker under `~/.claude/graph-offered/` rather than a dotfile
+  written into somebody's working tree.
+- **`templates/project-code-review-graph.md`** — leads with `graph-init`; the hand-run recipe stays
+  below it for the cases that need one half alone.
+
+### Fixed
+- The marker directory was created *before* the code-count gate, so a project the hook decided to skip
+  was left with state saying it had been considered. Caught by its own test, not by reading.
+- `~/.local/bin` is not on every login PATH — measured absent from this machine's zsh. A bare
+  `graph-init` would have been advice the reader could not paste, so the hook and the script both
+  check and print the form that resolves.
+
+### Notes
+- Suite: 241 passed. shellcheck clean on `graph-init.sh`, `graph-offer.sh`, `deps.sh`
+  (`install.sh`'s SC2034 on `ARGS_USAGE_FILE` predates this and is consumed by `lib/args.sh`).
+- `install.sh` run end to end: links the verb and reaches `done.`; `graph-init` then built, warned on a
+  90%-`third_party` tree, and purged correctly through the installed symlink.
+- Merged with `8ee228d`, which added `templates/project-code-review-graphignore` concurrently. That
+  version won on the merge — it carries the measurement this one lacked (`.*/` alone leaves a
+  root-level `.vscode/` indexed, 4 nodes on a Python repo) — and gained one line noting that
+  `graph-init` runs its verify snippet automatically.
+
+## [Unreleased] — 2026-08-10 — the graphify skill is a directory, and half of it never shipped
+
+`render_graphify_skill.py` rendered `skill.md` and stopped there. But the skill delegates its heavy
+flows to a sibling `references/` — and `extraction-spec.md` in that directory *is* the Step 3 subagent
+prompt, not documentation. So the semantic pass could not load its own prompt: running `/graphify` on a
+real corpus warned `could not read extraction prompt ... falls back to the unversioned layout`, and the
+cache could no longer attribute entries to a prompt version (#1939, the thing that keeps an upgraded
+prompt from replaying stale extractions).
+
+The cause is a layout that reads backwards. graphify 0.9.38 ships **one** `skill.md` at the package
+root and **per-platform** `skills/<platform>/references/`. The obvious `skill.md.parent / "references"`
+therefore names a path that does not exist — and a copy of a missing directory fails silently, which is
+why nothing pointed at it.
+
+Fixing the copy alone would have shipped the second half of the same bug: the references carry 62
+`graphify-out` occurrences of their own against 0.9.38, 20 in `update.md` and 17 in `query.md`. That is
+exactly the CLI-writes-here / skill-looks-there split this script exists to close, so they get the same
+rewrite rather than a verbatim copy.
+
+### Fixed
+- **`installer/scripts/render_graphify_skill.py`** — `find_references()` resolves
+  `skills/<platform>/references` first and keeps the flat layout as a fallback;
+  `render_references()` applies the same GRAPHIFY_OUT rewrite, file by file, skipping any whose content
+  already matches. It runs even when `skill.md` itself is unchanged, since a run that skipped the
+  references before must still be able to fill them in.
+- **`installer/lib/deps.sh`** — the `GRAPHIFY_OUT=graphify-out` branch links `skill.md` and returned;
+  it now links the references beside it. That branch needs no rewrite, but it needed the files.
+
+### Notes
+- Suite: 203 passed (was 196; 7 new across `TestFindReferences` / `TestRenderReferences`).
+  `tests/smoke/test_install_idempotent.sh` PASS.
+- The regression test was mutation-checked, not just watched to go green: reverting `find_references`
+  to the beside-`skill.md` assumption fails 4 of the 14, and restoring it passes all 14.
+
+## [Unreleased] — 2026-08-10 — the ignore file `code-review-graph` actually reads
+
+`templates/project-code-review-graph.md` already said the two ignore files are independent and that
+"when you write one, write the sibling" — but only one of them shipped as a template. Adopting the
+graph rules into three repositories on a live machine meant hand-writing the sibling three times,
+and the first build proved why it matters: 194 of 1,668 nodes came from a tracked `.omx/` registry
+that `.graphifyignore` had already excluded and CRG never saw.
+
+### Added
+- **`templates/project-code-review-graphignore`** — the missing sibling of `project-graphifyignore`.
+  Leads with what does *not* belong in it: CRG walks `git ls-files`, so an untracked tree is already
+  invisible and copying `.gitignore` into it buys nothing. What it must carry is the inverse — the
+  material a repository *tracks* that is not its source, which is where every measured blow-up came
+  from. Ships the hidden-directory list, the vendored-code warning, and the node-distribution query
+  to check a fresh graph against.
+
+### Changed
+- **`templates/project-code-review-graph.md`** — the sibling paragraph now names the template to copy
+  instead of leaving it as an instruction, and records a measurement that contradicts the obvious
+  glob: `.*/` dropped a tracked `.omx/` while root-level `.vscode/` survived with 4 nodes. The
+  directories have to be named.
+- **`templates/README.md`** — usage line and table row for the new template.
+- **`runtime/skills/sync-claudebase/SKILL.md`** — three things that cost a live run time today:
+  - 4g now says that a `FileNotFoundError: 'claude'` right after 4f is npm relinking the global bin
+    directory mid-`omc update`, not a broken install. Nothing is half-applied; re-run it. Also that
+    `/usr/bin/claude -> bin/claude.exe` is the package's own `bin` mapping on Linux and not a fault
+    worth chasing.
+  - Step 9 gains the three obstacles between `cp` and commit: a target that gitignores `.claude/`
+    wholesale (leave it untracked, do not `git add -f`), `git commit -- <paths>` refusing an
+    untracked file without committing anything, and adopting into a pristine vendored fork via
+    `.git/info/exclude` so the tracked tree stays byte-identical.
+
+### Notes
+- Suite: 196 passed. `tests/smoke/test_install_idempotent.sh` PASS.
+- `templates/` is not installer-wired (only `config/`, `shell/`, `runtime/skills/`, and
+  `runtime/output-styles/` are), so no `link_or_copy` line accompanies the new file.
+
 ## [Unreleased] — 2026-08-10 — graphs refresh themselves, and offer themselves once
 
 The `PreToolUse` guards made every session consult the code graph, and nothing was keeping that

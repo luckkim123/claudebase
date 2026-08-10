@@ -1,45 +1,84 @@
-# What code-review-graph should not index.
+# What code-review-graph must not index.
 #
-# Copy this to a project root as `.code-review-graphignore` BEFORE the first
-# build — `graph-init` does it for you:
+# Copy this to a project root as `.code-review-graphignore`:
 #
 #     cp ~/claudebase/templates/project-code-review-graphignore .code-review-graphignore
 #
-# CRG keeps its OWN exclusion file, independent of .gitignore and of
-# .graphifyignore. Excluding a path in either of those leaves CRG indexing it,
-# so when you write one, write the sibling.
+# This is the SIBLING of `.graphifyignore`, and writing one without the other is
+# the mistake this file exists to prevent. The three graphs read three different
+# ignore files and none of them falls back to another:
 #
-# Syntax is gitignore's, with one difference that decides how these rules are
-# written (incremental.py:392-449). A bare `dir/` is rewritten to `**/dir/**`
-# and matches at any depth. A plain glob is matched with fnmatch against the
-# whole relative path, so `.*` would catch only *top-level* dotted entries and
-# miss `sub/.obsidian/`. Hence the trailing slashes below.
+#   graphify           .graphifyignore
+#   code-review-graph  .code-review-graphignore   (incremental.py:392)
+#   git                .gitignore
 #
-# node_modules/, vendor/, venv/, .venv/, dist/, build/, target/, __pycache__
-# and friends are already in DEFAULT_IGNORE_PATTERNS — they need no entry here.
+# Syntax is gitignore's, and a bare `dir/` matches at any depth.
 
 
-# Editor and harness state. Not code anybody in the project wrote, and the
-# biggest measured failure of the three graphs: one Obsidian vault tracked 367
-# files of bundled plugin JS under .obsidian/, which produced 21,865 of 21,865
-# nodes and a 222 MB graph.db describing somebody else's code. Nothing errored.
-# Excluding it left 568 nodes — the honest size of what was authored by hand.
-.obsidian/
-.claude/
-.omc/
-.omp/
+# --- What you do NOT need to list ------------------------------------------
+#
+# CRG indexes `git ls-files` — tracked files only. So an untracked tree is
+# already invisible to it, and repeating your whole .gitignore here buys
+# nothing. `DEFAULT_IGNORE_PATTERNS` (incremental.py:131) additionally covers
+# node_modules, vendor, dist, build, and *.min.js.
+#
+# The gap this file closes is the opposite one: material that IS tracked but is
+# not this project's source. Two kinds show up in practice.
+
+
+# --- 1. Tracked hidden directories -----------------------------------------
+#
+# Harness state and tooling config, much of it tracked on purpose: an
+# experiment registry under .omx/, workflows under .github/, editor settings
+# under .vscode/. None of it answers a question about the code.
+#
+# MEASURED, and the reason the list below is explicit rather than one glob:
+# a leading-dot glob does NOT catch these. On a Python repo (2026-08-10), with
+# `.*/` as the only rule, `.omx/` was correctly dropped but root-level
+# `.vscode/` survived with 4 nodes. Name the directories; do not rely on the
+# glob alone.
+.*/
 .omx/
-.oms/
+.omp/
 .omd/
+.claude/
+.github/
 .sp/
+.vscode/
+.idea/
+.pytest_cache/
 
-# The graphs' own output, for repos where it is tracked or where GRAPHIFY_OUT
-# still points at the pre-.graphify default.
-.graphify/
-graphify-out/
-.tokensave/
 
-# Add per-project exclusions below — a vendored tree .gitignore does not cover,
-# retired material an archive folder holds, a generated docs build. Those are
-# this project's call, not a portable default, so they live here and not in the
-# claudebase template.
+# --- 2. Tracked vendored or generated code ---------------------------------
+#
+# The expensive case. A repo that TRACKS a third-party tree, bundled assets, or
+# generated sources hands all of it to CRG precisely because it is tracked — no
+# gitignore-based exclusion can reach it. The graph then reports a healthy node
+# count while describing somebody else's code.
+#
+# Measured on an Obsidian vault (2026-08-10), this file the only change:
+# 21,865 nodes / 222 MB -> 568 nodes / 12 MB. All 21,865 came from 34 tracked
+# files under `.obsidian/plugins`. The tell was `javascript` dropping out of
+# the language list.
+#
+# Add this project's own cases below — a vendored SDK, a Git LFS asset tree, a
+# generated protobuf directory, a docs build that is committed.
+
+
+# --- Verify, do not assume -------------------------------------------------
+#
+# `graph-init` runs this check itself and exits 2 when a vendored tree fills the
+# graph, so the snippet below is for a build you ran by hand.
+#
+# After the build, read the distribution rather than the node count:
+#
+#   python3 -c "
+#   import sqlite3, collections, os
+#   d = collections.Counter()
+#   for p, n in sqlite3.connect('.code-review-graph/graph.db').execute(
+#           'select file_path, count(*) from nodes group by 1'):
+#       d[p.replace(os.getcwd() + '/', '').split('/')[0]] += n
+#   print(d.most_common(10))"
+#
+# The source directory should dominate. Anything else at the top is a rule
+# missing from this file.
