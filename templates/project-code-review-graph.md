@@ -1,13 +1,94 @@
-# code-review-graph: when to trust the graph, and when not to
+# code graphs: when to trust them, and when not to
 
-Rules for a project that has a [code-review-graph](https://github.com/tirth8205/code-review-graph)
-index. The tool answers structural questions (callers, importers, blast radius)
-from a local SQLite graph instead of reading files, which is why it is worth
-reaching for first. It also fails **silently** in four specific conditions, and
-every rule below exists because of one of them.
+Rules for a project carrying a [code-review-graph](https://github.com/tirth8205/code-review-graph)
+index (CRG), a [graphify](https://github.com/Graphify-Labs/graphify) graph, or
+both. They answer structural questions (callers, importers, blast radius) from a
+local index instead of reading files, which is why they are worth reaching for
+first. They also fail **silently** in specific conditions, and every rule below
+exists because of one of them.
 
 Copy to `<project>/.claude/rules/code-review-graph.md` and point at it from
 `CLAUDE.md`. Delete it if the project has no graph.
+
+## Which of the two answers this question
+
+Both are installed by `claudebase`; neither builds a graph until a project asks
+for one. They are complementary, not redundant — CRG is a query runtime, graphify
+is a corpus builder — so the split is by *question*, not by preference:
+
+| You want | Tool | Why the other one is wrong |
+|:---|:---|:---|
+| Callers/importers of a symbol, blast radius, review context | **CRG** (MCP tools) | graphify has no incremental update; its graph is a build artifact |
+| A map of a corpus that is not just code — docs, PDFs, notes, schemas | **graphify** | CRG's tree-sitter pass emits no nodes for prose (see below) |
+| "What is connected to what" across a whole repo, communities, hubs | **graphify** (`god-nodes`, `query`) | CRG answers point queries, not neighbourhood shape |
+| An artifact a human opens — HTML, SVG, an Obsidian vault, a wiki | **graphify** (`export`) | CRG has no human-facing output |
+| Sub-second re-query while editing | **CRG** | graphify rebuilds; `graphify watch` helps but is not free |
+
+When both exist, ask CRG first (a point query is ~100 tokens) and fall back to
+graphify only when CRG returns nothing *and* you have confirmed the empty answer
+is real rather than one of the silent failures below.
+
+## Wiring graphify into a project
+
+```bash
+graphify .                                          # build (AST only — offline, no key)
+graphify install --platform claude --project        # wire it into THIS project
+graphify update .                                   # after edits, still no LLM
+```
+
+**`--project` is not optional here.** Without it, `install.py` writes its
+CLAUDE.md block with `Path.write_text` into `~/.claude/CLAUDE.md`; `write_text`
+follows symlinks, and claudebase makes that path a symlink to the repo's own
+`config/CLAUDE.md`. A machine-local tool install would edit tracked repo content
+in place and ship to every other machine on the next sync. With `--project`, all
+of it lands under the project's `.claude/`.
+
+Optionally add the MCP server, which serves `graphify-out/graph.json` relative to
+the working directory — so it belongs in the **project's** `.mcp.json`, never in
+`~/.claude/mcp.json`, where it would launch against a nonexistent graph in every
+repo that has not built one:
+
+```jsonc
+// <project>/.mcp.json
+{ "mcpServers": {
+    "graphify": { "type": "stdio", "command": "graphify-mcp", "args": [] } } }
+```
+
+That server needs the `mcp` extra — `uv tool install "graphifyy[mcp]"`, which is
+what `install.sh` does. The `graphify-mcp` shim ships either way, so a plain
+`graphifyy` install looks fine and fails only on connect, with
+`ModuleNotFoundError: No module named 'mcp'`.
+
+### Three layers, only one of which is binding
+
+A graph nobody consults is worth nothing, and the three integration layers differ
+enormously in how strongly they get consulted:
+
+| Layer | What it does | Binding? |
+|:---|:---|:---|
+| MCP server (`.mcp.json`) | Puts `query_graph`, `god_nodes`, `shortest_path` … in the tool list | **No** — offers a choice, nothing more |
+| `CLAUDE.md` block | "run `graphify query` first for codebase questions" | **Weak** — routinely ignored under momentum |
+| `PreToolUse` hooks (`.claude/settings.json`) | `graphify hook-guard` fires on `Bash\|Grep` and `Read\|Glob` | **Yes** — intercepts the call itself |
+
+Only the hook survives an agent that has decided to just grep. It is also the
+only layer that reaches **subagents** — OMC agents, `superpowers` subagents, `Task`
+dispatches — because hooks are enforced at the tool-call boundary rather than by
+the model reading an instruction. A subagent inherits none of your resolve and
+frequently not your `CLAUDE.md` reading; it does inherit the hook.
+
+`--strict` (or `GRAPHIFY_HOOK_STRICT=1` at runtime, no reinstall needed) escalates
+the read hook from advisory to **blocking the first raw read of a session**. Start
+without it; add it only once the graph is genuinely current, since a stale graph
+plus a blocking hook means the agent is forced to consult a wrong map.
+
+### What costs money and what does not
+
+Code is parsed with tree-sitter — deterministic, offline, free, no key. Prose,
+PDFs, and images are different: those go through an LLM, so pointing graphify at
+a large note corpus is a real bill, not a free index. `--backend claude-cli`
+routes that extraction through the `claude` CLI you already pay for instead of a
+separate API key; it is not in `detect_backend`'s auto-detect list, so it only
+takes effect when passed explicitly.
 
 ## The premise everything follows from
 
@@ -63,6 +144,18 @@ nothing else; depth 2 returned 8 files, 5 of them false positives.
   `cross_community_edges` is `0` while several communities exist — that is not a
   clean architecture, it is disconnected vendor trees. Read `README` / the build
   manifest instead.
+- **Prose corpora — a notes vault, a docs tree, anything mostly `.md`.** CRG is
+  tree-sitter all the way down, and tree-sitter has no notion of a symbol in
+  prose, so markdown contributes **zero nodes**. The graph does not report this;
+  it reports the code it *did* find, which in a prose repo is whatever incidental
+  code sits in the corners — a bundled editor plugin, a build script, `node_modules`.
+  Measured on one Obsidian vault: 746 tracked `.md` files produced 0 nodes, while
+  101 files of vendored plugin JS produced 21,425 "functions" and a 212 MB index.
+  Nothing errored. The tell is a `list_graph_stats_tool` whose `languages` list
+  does not contain the language you actually write here, or a file count far below
+  `git ls-files | wc -l`. **Check that before adopting a graph-first rule**, or
+  `CLAUDE.md` will instruct every session to consult an index that cannot see the
+  repo. This is graphify's case, not CRG's.
 
 ## What no code graph can see
 

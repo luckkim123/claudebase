@@ -37,3 +37,7 @@ desktop.ini
 # OMC runtime state (reviews, handoffs, sessions, project memory)
 .omc/
 .tokensave
+
+# Code-graph indexes — build artifacts, rebuilt from source on demand
+graphify-out/
+.code-review-graph/

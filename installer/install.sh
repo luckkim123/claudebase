@@ -102,9 +102,14 @@ maybe_enable_claude_mouse
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
-# Idempotent `uv tool install` of the code-review-graph CLI (code intelligence
-# graph for AI code review, github.com/tirth8205/code-review-graph) → deps.sh.
+# Idempotent `uv tool install` of the two code-graph CLIs → deps.sh.
+# code-review-graph (github.com/tirth8205/code-review-graph) answers structural
+# queries over a SQLite index via MCP; graphify (github.com/Graphify-Labs/graphify,
+# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts.
+# Complementary, not redundant — routing rules in templates/project-code-review-graph.md.
+# Neither builds a graph here: that is a per-repo decision.
 ensure_code_review_graph
+ensure_graphify
 
 # Prune stale plugin-cache versions → lib/plugin_cache.sh. Marketplace
 # auto-update fetches new versions but never deletes the old ones, so the cache
