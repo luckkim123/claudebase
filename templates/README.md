@@ -12,6 +12,10 @@ cat ~/claudebase/templates/project-gitignore >> .gitignore
 
 # Only if this project will carry a graphify graph — copy BEFORE the first build:
 cp ~/claudebase/templates/project-graphifyignore .graphifyignore
+
+# Only if this project will carry a code-review-graph. Write it as the SIBLING
+# of the one above: neither tool reads the other's ignore file.
+cp ~/claudebase/templates/project-code-review-graphignore .code-review-graphignore
 ```
 
 ## Files
@@ -24,6 +28,7 @@ cp ~/claudebase/templates/project-graphifyignore .graphifyignore
 | `project-refactor-workflow.md` | `<project>/.claude/rules/refactor-workflow.md` | Discipline for tracking the 4 axes of multi-stage refactoring (branch/commit/CHANGELOG/PR) |
 | `project-code-review-graph.md` | `<project>/.claude/rules/code-review-graph.md` | Routing between `code-review-graph` and `graphify`, how to wire graphify's MCP server per project, and when either index silently returns nothing. Only for projects that have one |
 | `project-graphifyignore` | `<project>/.graphifyignore` | What a graph must not index: hidden dirs and dotfiles (`.*`), images, video. Copy **before** the first build — the semantic pass runs ~5 min per chunk serially, and a later exclusion does not refund extraction already paid for |
+| `project-code-review-graphignore` | `<project>/.code-review-graphignore` | The **sibling** of the row above, for `code-review-graph`. CRG reads only this file (`incremental.py:392`) — excluding a path in `.graphifyignore` or `.gitignore` leaves CRG indexing it. CRG walks `git ls-files`, so what belongs here is *tracked* non-source material: hidden dirs like `.omx/`/`.github/`, and vendored or generated trees the repo commits |
 
 ## Principles
 

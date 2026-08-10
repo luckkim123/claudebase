@@ -334,12 +334,21 @@ CRG's exclusion file is `.code-review-graphignore` at the repo root
 (`incremental.py:392`, `_load_ignore_patterns`). It takes `.gitignore` syntax and
 a bare `dir/` matches at any depth. It is a **third** ignore file, independent of
 the other two: excluding a path in `.graphifyignore` or `.gitignore` leaves CRG
-indexing it. When you write one, write the sibling.
+indexing it. When you write one, write the sibling:
+
+```bash
+cp ~/claudebase/templates/project-code-review-graphignore .code-review-graphignore
+```
 
 ```
 .obsidian/       # bundled Obsidian plugin JS — nobody here wrote it
 3_Archive/       # retired material, same call as .graphifyignore
 ```
+
+**A leading-dot glob does not cover the hidden directories.** `.*/` reads like it
+excludes all of them and does not: on a Python repo (2026-08-10) it dropped a
+tracked `.omx/` while root-level `.vscode/` survived with 4 nodes. Name each
+directory explicitly — the template above ships the list.
 
 Measured on the obsidian vault, 2026-08-10 — same repo, same commit, this file
 the only change:

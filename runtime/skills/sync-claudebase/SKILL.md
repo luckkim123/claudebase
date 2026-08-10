@@ -392,6 +392,22 @@ plugin was actually updated. If a plugin fails to update (network, bad
 marketplace), `apply()` logs `WARNING: failed to update: <plugin>` and continues
 — surface it but don't abort the rest.
 
+**If this dies on `FileNotFoundError: 'claude'`, just re-run it — 4f is why.**
+`omc update` reinstalls its npm package, and npm relinks the whole global bin
+directory while it works. Running 4g in the seconds after 4f can therefore find
+`claude` briefly absent, and the run aborts on the first `claude plugin update`
+with a raw traceback (observed 2026-08-10: `skip marketplace ensure: 'claude'
+not in PATH`, then `FileNotFoundError`). Nothing is broken and nothing is
+half-applied — the script fails before mutating anything. Confirm the binary is
+back (`claude --version`) and re-run the same command; it completed all 18
+plugins on the retry. This is reachable by following the skill exactly, since
+4f runs immediately before 4g.
+
+Do **not** "diagnose" this by inspecting `/usr/bin/claude`: on Linux the package
+legitimately ships its binary as `bin/claude.exe` (that is the `bin` mapping in
+`@anthropic-ai/claude-code`'s own `package.json`), so a symlink pointing at a
+`.exe` is correct and not the fault.
+
 **claude-mem worker after an upgrade — kill it; a session relaunch is not
 enough.** `claude-mem` runs one background worker on a fixed port
 (`CLAUDE_MEM_WORKER_PORT` in `~/.claude-mem/settings.json`, default `37701`)
@@ -867,6 +883,25 @@ For each new template:
   - **Stage ONLY the new file** — `git add <project>/.claude/rules/<name>.md`. Never `git add -A` in someone else's repo.
   - Commit with `docs: adopt <name> rule from claudebase template` body referencing the source SHA.
   - Do NOT push — that repo's remote is separate (often org-owned) and outside this skill's authority.
+
+Three things bite between the `cp` and the commit (all three hit on 2026-08-10):
+
+- **The target may gitignore `.claude/` wholesale.** Then the adopted rule file
+  cannot be committed, and that is the repo's own decision — per-project Claude
+  config stays local there. Check first, and when it is ignored, leave the file
+  untracked rather than reaching for `git add -f`; say so in the commit body for
+  whatever *is* committable. `git -C <repo> check-ignore -v <path>` answers it in
+  one call.
+- **`git commit -- <paths>` cannot commit an untracked file.** The paths form is
+  the right tool under concurrency (it ignores whatever another session has
+  staged), but a brand-new file fails with `error: pathspec '<x>' did not match
+  any file(s) known to git` — and the commit does *not* happen, so re-read HEAD
+  before assuming it did. `git add <paths>` first, then `git commit -- <paths>`.
+- **The target may be a pristine vendored fork**, where adding any of our files
+  to the tracked tree is the thing the project forbids. Adopting is still
+  possible: write the file, and add it to `<repo>/.git/info/exclude` — a
+  local-only ignore that leaves the tracked tree byte-identical to upstream.
+  Verify with `git -C <repo> status --porcelain | wc -l` reading `0`.
 
 ### 9.5. Pre-completion ask audit (MANDATORY — run before writing the Outputs summary)
 

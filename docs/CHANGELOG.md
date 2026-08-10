@@ -2,6 +2,43 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the ignore file `code-review-graph` actually reads
+
+`templates/project-code-review-graph.md` already said the two ignore files are independent and that
+"when you write one, write the sibling" — but only one of them shipped as a template. Adopting the
+graph rules into three repositories on a live machine meant hand-writing the sibling three times,
+and the first build proved why it matters: 194 of 1,668 nodes came from a tracked `.omx/` registry
+that `.graphifyignore` had already excluded and CRG never saw.
+
+### Added
+- **`templates/project-code-review-graphignore`** — the missing sibling of `project-graphifyignore`.
+  Leads with what does *not* belong in it: CRG walks `git ls-files`, so an untracked tree is already
+  invisible and copying `.gitignore` into it buys nothing. What it must carry is the inverse — the
+  material a repository *tracks* that is not its source, which is where every measured blow-up came
+  from. Ships the hidden-directory list, the vendored-code warning, and the node-distribution query
+  to check a fresh graph against.
+
+### Changed
+- **`templates/project-code-review-graph.md`** — the sibling paragraph now names the template to copy
+  instead of leaving it as an instruction, and records a measurement that contradicts the obvious
+  glob: `.*/` dropped a tracked `.omx/` while root-level `.vscode/` survived with 4 nodes. The
+  directories have to be named.
+- **`templates/README.md`** — usage line and table row for the new template.
+- **`runtime/skills/sync-claudebase/SKILL.md`** — three things that cost a live run time today:
+  - 4g now says that a `FileNotFoundError: 'claude'` right after 4f is npm relinking the global bin
+    directory mid-`omc update`, not a broken install. Nothing is half-applied; re-run it. Also that
+    `/usr/bin/claude -> bin/claude.exe` is the package's own `bin` mapping on Linux and not a fault
+    worth chasing.
+  - Step 9 gains the three obstacles between `cp` and commit: a target that gitignores `.claude/`
+    wholesale (leave it untracked, do not `git add -f`), `git commit -- <paths>` refusing an
+    untracked file without committing anything, and adopting into a pristine vendored fork via
+    `.git/info/exclude` so the tracked tree stays byte-identical.
+
+### Notes
+- Suite: 196 passed. `tests/smoke/test_install_idempotent.sh` PASS.
+- `templates/` is not installer-wired (only `config/`, `shell/`, `runtime/skills/`, and
+  `runtime/output-styles/` are), so no `link_or_copy` line accompanies the new file.
+
 ## [Unreleased] — 2026-08-10 — graphs refresh themselves, and offer themselves once
 
 The `PreToolUse` guards made every session consult the code graph, and nothing was keeping that
