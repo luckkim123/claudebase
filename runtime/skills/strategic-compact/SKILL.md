@@ -48,31 +48,33 @@ The hook and its test sit beside this file at `hooks/suggest-compact.js` and
 they would not have travelled with the skill. Ignore the upstream "installed as
 a plugin, no setup needed" path — there is no ECC plugin here.
 
-**It is not registered in `config/settings.json`, so it does not fire yet.** To
-wire it, add the `PreToolUse` entries below to `config/settings.json` (the
-rendered `~/.claude/settings.json` is a build product — never hand-edit it), and
-measure against the 18 hooks already running first.
+**Registered in `config/settings.json` since 2026-08-10**, `PreToolUse` on
+`Edit|Write` — one matcher, not two, because the field takes a regex alternation
+and the upstream two-group form was redundant:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/skills/strategic-compact/hooks/suggest-compact.js" }]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/skills/strategic-compact/hooks/suggest-compact.js" }]
-      }
-    ]
-  }
-}
+```jsonc
+"command": "# STRATEGIC_COMPACT_SUGGEST\nnode ~/claudebase/runtime/skills/strategic-compact/hooks/suggest-compact.js 2>/dev/null || true"
 ```
 
-The reason this one is worth wiring on **this** machine: the context signal
-detects a 1M window from the `[1m]` model marker and raises its threshold to
-250k, and the session model here is `claude-opus-5[1m]`.
+Edit `config/settings.json`, never the rendered `~/.claude/settings.json` — that is
+a build product of `installer/scripts/render_settings.py`, which merges the tracked
+base with this machine's `settings.local.json`. Apply a change with:
+
+```bash
+python3 installer/scripts/render_settings.py --base config/settings.json \
+  --local ~/.claude/settings.local.json --out ~/.claude/settings.json
+```
+
+The `|| true` is deliberate, and is the opposite of the choice made for
+`delivery-gate`: this hook only ever *suggests*, so a defect in it must never
+interrupt a tool call. A hook whose job is to **block** must not be wrapped that
+way, or the block is swallowed and the gate becomes decoration.
+
+The reason this one is worth wiring on **this** machine: the context signal detects
+a 1M window from the `[1m]` model marker and raises its threshold to 250k, and the
+session model here is `claude-opus-5[1m]`. Observed firing live at 512k/1M.
+
+The test runs with `node hooks/suggest-compact.test.js` — 44 cases.
 
 ## Configuration
 

@@ -94,19 +94,40 @@ Triggers on: `rm -rf`, `git reset --hard`, `git push --force`, `drop table`, etc
 
 ## Quick Start
 
-### Option A: the vendored hook (claudebase)
+### Option A: the vendored hook (claudebase) — WIRED
 
-The hook and its test sit beside this file — `hooks/gateguard-fact-force.js` and
-`hooks/gateguard-fact-force.test.js`. Upstream keeps both at the ECC repo root,
-where they would not have travelled with the skill.
+Four files sit beside this one: `hooks/gateguard-fact-force.js` (the hook),
+`hooks/run.js` (**the runner — see below**), `hooks/smoke.test.js` (ours:
+`node smoke.test.js`, 5 cases), and `hooks/gateguard-fact-force.test.js`
+(upstream's, not runnable here).
 
-**It is not registered in `config/settings.json`, so nothing fires yet.** To wire
-it, add a `PreToolUse` entry pointing at
-`~/.claude/skills/gateguard/hooks/gateguard-fact-force.js` — and measure before
-you do: this machine already runs 18 hooks, the injection ceiling is counted in
-**characters** (overflow truncates to a 2 KB preview with no error), and a
-`PreToolUse` hook that resolves paths against the wrong cwd binds nothing while
-still exiting 0.
+**Registered in `config/settings.json` since 2026-08-10**, `PreToolUse` on
+`Edit|Write|MultiEdit|Bash`:
+
+```jsonc
+"command": "# GATEGUARD_FACT_FORCE\nnode ~/claudebase/runtime/skills/gateguard/hooks/run.js"
+```
+
+**Never point that at `gateguard-fact-force.js` directly.** That file ends at
+`module.exports = { run }` — no stdin read, no stdout write, no exit code — so
+`node gateguard-fact-force.js < payload` exits 0 with empty stdout and the gate
+silently never fires. Measured before wiring; `run.js` is the ~20-line adapter that
+turns `run()`'s return value into a real hook response without importing ECC's
+`run-with-flags.js` profile machinery.
+
+`GATEGUARD_EXEMPT_GLOBS` is set in `config/settings.json` to skip harness state and
+vendored trees (`.omp/**`, `.omx/**`, `.oms/**`, `.omd/**`, `.omha/**`, `.sp/**`,
+`.graphify/**`, `.tokensave/**`, `.code-review-graph/**`, `node_modules/**`,
+`.git/**`). A wiki page has no importers to list, so gating one costs a denial and
+buys nothing; a source file is the opposite.
+
+Behaviour measured on the live wiring: the first Edit/Write of a file denies and the
+retry passes; a destructive `Bash` denies per distinct command; read-only git
+introspection (`git status`, `git log`) is never gated; the routine-Bash gate fires
+**once per session** on the first non-git command.
+
+Kill switches, bluntest last: `OMC_SKIP_HOOKS=gateguard` (the runner exits
+immediately), `ECC_GATEGUARD=off` (the hook allows everything), `DISABLE_OMC=1`.
 
 If GateGuard blocks setup or repair work, start the session with
 `ECC_GATEGUARD=off`. For hook-level control, keep using

@@ -39,24 +39,43 @@ Over many sessions of "ship and forget," the human hasn't grown. This hook enfor
 ## Install (claudebase)
 
 The hook is already here at `hooks/quality-gate.py`; nothing needs copying.
-**It is not registered in `config/settings.json`, so it does not fire yet.** To
-wire it, add a `Stop` entry pointing at
-`~/.claude/skills/delivery-gate/hooks/quality-gate.py` — after measuring against
-the 18 hooks this machine already runs.
 
-```json
+**It is the one hook of the three still NOT registered in `config/settings.json`,
+and the reason is worth recording.** An attempt to add it on 2026-08-10 was refused
+by the harness's own permission classifier — twice, including after the two
+`PreToolUse` siblings had gone into the same file from the same session. The
+distinguishing property is that this hook can `exit 2` on the **Stop** event, i.e.
+it can prevent a session from ending, which is a self-modification that could trap
+the agent making it. That refusal is worth respecting rather than routing around,
+so the block below is left for a human to paste.
+
+Append this to the existing `Stop` group in `config/settings.json` (seven entries
+are already there), then render:
+
+```jsonc
 {
-  "hooks": {
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ~/.claude/skills/delivery-gate/hooks/quality-gate.py",
-        "timeout": 5000
-      }]
-    }]
-  }
+  "type": "command",
+  "command": "# DELIVERY_GATE\npython3 ~/claudebase/runtime/skills/delivery-gate/hooks/quality-gate.py",
+  "timeout": 10,
+  "statusMessage": "Checking that a complex session captured its learning"
 }
 ```
+
+```bash
+python3 installer/scripts/render_settings.py --base config/settings.json \
+  --local ~/.claude/settings.local.json --out ~/.claude/settings.json
+```
+
+Two details of that command line matter:
+
+- **No `2>/dev/null || true`.** Every other `Stop` hook here carries it because they
+  are advisory; this one blocks, and `|| true` would swallow the exit 2 and leave a
+  gate that looks wired and enforces nothing.
+- **A kill switch exists, and a blocking hook needs one.**
+  `OMC_SKIP_HOOKS=delivery_gate` or `DISABLE_OMC=1` makes it exit 0 immediately
+  (`skipped_by_env()`, a local edit). Without it, the one moment you need the gate
+  off is the moment you cannot finish the session that would turn it off. Verified
+  on all three paths: blocks without the switch, passes with either variable.
 
 ## Learning Libraries
 

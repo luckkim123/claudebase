@@ -137,7 +137,21 @@ def count_edits(text: str) -> int:
     return len(re.findall(r'"name":\s*"(?:Edit|Write)"', text))
 
 
+def skipped_by_env() -> bool:
+    """LOCAL EDIT (claudebase): a kill switch, because this hook can exit 2.
+
+    A blocking Stop hook with no escape hatch that does not require editing
+    settings.json is a trap: the one moment you need it off is the moment you
+    cannot finish the session that would turn it off. Mirrors the convention the
+    other claudebase hooks use, and gateguard/hooks/run.js reads the same vars."""
+    tokens = {t.strip() for t in os.environ.get('OMC_SKIP_HOOKS', '').split(',') if t.strip()}
+    return 'delivery_gate' in tokens or 'delivery-gate' in tokens or bool(os.environ.get('DISABLE_OMC'))
+
+
 def main() -> None:
+    if skipped_by_env():
+        sys.exit(0)
+
     raw = sys.stdin.read()
     # Stop hooks write feedback to stderr, not stdout.
     # Claude Code reads stderr as the hook's response message.

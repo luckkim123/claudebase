@@ -78,15 +78,46 @@ destructive `Bash` denies, and `ECC_GATEGUARD=off` disables the gate. It isolate
 `GATEGUARD_STATE_DIR` into a temp dir — without that the hook writes real state
 into `~/.gateguard` and a live session's history decides the test's outcome.
 
-## The three hooks are files, not behaviour
+## The three hooks: two wired, one left for a human
 
-`gateguard`, `delivery-gate`, and `strategic-compact` are all hooks, and none of
-them is registered in `config/settings.json`. That is deliberate: this machine
-already runs 18 hooks, the injection ceiling is counted in **characters** and
-overflow truncates to a 2 KB preview with no error, and a `PreToolUse` hook that
-lands in the wrong cwd binds nothing while still returning success. Wiring is a
-separate, measured decision — until then each skill's `SKILL.md` documents how,
-and nothing fires.
+Wired 2026-08-10, after measuring rather than before:
+
+| Hook | Event | Matcher | State |
+|:---|:---|:---|:---|
+| `gateguard` | `PreToolUse` | `Edit\|Write\|MultiEdit\|Bash` | **live** |
+| `strategic-compact` | `PreToolUse` | `Edit\|Write` | **live** |
+| `delivery-gate` | `Stop` | — | **not wired** — see below |
+
+`config/settings.json` is the tracked base; `~/.claude/settings.json` is a build
+product of `installer/scripts/render_settings.py` merging it with this machine's
+`settings.local.json`. Edit the base, then render — never hand-edit the rendered
+file.
+
+**Wiring gateguard needed a runner the skill does not ship.**
+`gateguard-fact-force.js` ends at `module.exports = { run }`: no stdin read, no
+stdout write, no exit code. Registering it directly would have exited 0 with empty
+stdout on every call — a gate that looks wired and never fires. `hooks/run.js` is
+the ~20-line adapter, written here, that turns `run()`'s return into a real hook
+response without importing ECC's `run-with-flags.js` profile machinery. Confirmed
+live: the first Edit of a source file denies and the retry passes, a destructive
+`Bash` denies, `.omp/**` is exempt, `OMC_SKIP_HOOKS=gateguard` bypasses, and the
+fourth denial of a session arrives condensed to one line exactly as the skill
+documents.
+
+**`delivery-gate` stays unwired because the harness refused it.** Its command was
+rejected by the permission classifier twice — after the two `PreToolUse` siblings
+had already landed in the same file from the same session. The distinguishing
+property is that it can `exit 2` on `Stop`, i.e. prevent a session from ending: a
+self-modification that could trap the agent making it. Respecting that refusal
+rather than routing around it is the point. `delivery-gate/SKILL.md` carries the
+exact block to paste, and the hook gained an `OMC_SKIP_HOOKS=delivery_gate` kill
+switch first, because a blocking hook without an escape is a trap.
+
+An earlier draft of this section said "this machine already runs 18 hooks".
+Measured: **17** in `config/settings.json` (19 now), plus 33 from plugin
+`hooks.json` files and more declared inline in plugin manifests. The
+character-counted injection ceiling and the cwd-resolution trap are both real and
+both were checked here — they simply were not what stopped `delivery-gate`.
 
 ## Rejected on inspection, so nobody re-litigates them
 
