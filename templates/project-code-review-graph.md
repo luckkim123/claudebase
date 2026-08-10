@@ -309,7 +309,7 @@ not reported as missing; it produces `0 results`, which reads exactly like "this
 code is unused". Failure looks like success.
 
 So: **never conclude "not used anywhere" from an empty result.** Confirm with
-`git ls-files | grep <file>` first. Three different conditions produce the same
+`git ls-files | grep <file>` first. Four different conditions produce the same
 empty answer:
 
 | Cause | Tell | Fix |
@@ -317,10 +317,23 @@ empty answer:
 | File is untracked | `git ls-files` does not list it | Use `grep -rn`; the graph cannot help |
 | Graph is stale | `_graph.head_matches_build` is `false` | Re-run `code-review-graph update` |
 | Query had several words | Search ran in keyword/FTS mode | Query one identifier at a time |
+| You queried an empty graph | `code-review-graph status` says `Nodes: 0` | Pass `repo_root` — the graph you want is elsewhere |
 
-That last one bites quietly: `semantic_search_nodes_tool` uses vectors only when
-embeddings have been built (`code-review-graph embed`), and otherwise falls back
-to keyword + FTS5, where a natural-language phrase matches nothing.
+The keyword one bites quietly: `semantic_search_nodes_tool` uses vectors only
+when embeddings have been built (`code-review-graph embed`), and otherwise falls
+back to keyword + FTS5, where a natural-language phrase matches nothing.
+
+**The empty graph is one you created by asking.** Omitting `repo_root` does not
+raise: the server builds a fresh `graph.db` at its own cwd and answers from it,
+so a query in a workspace whose graphs live in nested repos both fabricates a
+0-node database and returns `status: "ok"` with 0 results. Deleting the
+directory does not help — the next such query recreates it. Two consequences
+before you read an empty answer as an answer: the reply is indistinguishable
+from a genuine "not found", and the stray directory looks like a graph to
+anything keying on existence. claudebase's own Stop hook did exactly that, and
+refreshed the empty one every turn while the real graphs went stale
+(`runtime/hooks/graph-refresh.sh`, fixed 2026-08-10 — it now gates on node
+count).
 
 ### The other edge of that premise: tracked vendored code
 
