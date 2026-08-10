@@ -142,10 +142,36 @@ User-scope skills live under `runtime/skills/` and are auto-symlinked.
 | `changelog` | Record session decisions, experiments, lessons; commit the session changes | `/changelog` |
 | `gen-image` | Generate one image with Google nano banana (Gemini 2.5 Flash Image) | "그려줘", "draw", "generate image" |
 | `memory-update` | Compact and organize auto-memory files | `/memory-update` |
-| `readme-project` | Generate a project README by analyzing the codebase | `/readme-project` |
 | `sync-claudebase` | Sync this repo across machines (pull, drift-check, install, verify) | "settings sync", "plugin drift" |
 
 Skills from plugins are loaded automatically by Claude Code from `~/.claude/plugins/`.
+
+`readme-project` was removed on 2026-08-10: the vendored `opensource-packager`
+agent generates a README along with the rest of a release (`CLAUDE.md`,
+`setup.sh`, `LICENSE`, `CONTRIBUTING`), which covers the same ground from the
+side the skill was actually used for.
+
+## Agents catalog
+
+User-scope subagents live under `runtime/agents/` and are auto-symlinked one
+file at a time, same as skills, so agents the user writes by hand under
+`~/.claude/agents/` survive an install.
+
+All eight are vendored from [Everything Claude Code](https://github.com/affaan-m/ECC)
+(MIT) — none were written here. Provenance, the reason each one was kept, and
+the local edits that a blind re-sync would revert are in
+[third-party-agents.md](third-party-agents.md).
+
+| Agent | Purpose |
+|:---|:---|
+| `cpp-reviewer` | Memory safety, RAII, concurrency review for C++ |
+| `python-reviewer` | Error handling, typing, Pythonic-pattern review |
+| `pytorch-build-resolver` | Tensor shape, device placement, CUDA/cuDNN, AMP failures |
+| `mle-reviewer` | ML reproducibility, promotion gates, train/serve equivalence |
+| `conversation-analyzer` | Mine a transcript for corrections worth turning into hooks |
+| `opensource-forker` | Stage a private tree for release (strip secrets, fresh history) |
+| `opensource-sanitizer` | Independent audit of a staged tree, git history included |
+| `opensource-packager` | Generate the release scaffolding around a sanitized tree |
 
 ## Per-machine overrides
 

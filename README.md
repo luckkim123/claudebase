@@ -43,7 +43,9 @@ Fourteen plugins are common — enabled on **every** machine. Anything one machi
 | `pyright-lsp` | official | Python language server. |
 | `clangd-lsp` | official | C/C++ language server. |
 
-Seven skills are the repo's own, under `runtime/skills/`: `sync-claudebase`, `changelog`, `memory-update`, `readme-project`, `gen-image`, `video-downloader`, `invoice-organizer`.
+Six skills are the repo's own, under `runtime/skills/`: `sync-claudebase`, `changelog`, `memory-update`, `gen-image`, `video-downloader`, `invoice-organizer`.
+
+Eight subagents live under `runtime/agents/`, vendored from [Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) rather than written here — two language reviewers, a PyTorch error resolver, an ML-engineering reviewer, a transcript-mining hook finder, and the three-stage open-source release pipeline. Attribution and the local edits are in [docs/third-party-agents.md](docs/third-party-agents.md).
 
 ## What lives where
 
