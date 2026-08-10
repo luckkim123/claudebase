@@ -248,8 +248,15 @@ ensure_graphify_skill() {
 
   local dry=()
   [[ ${DRY_RUN:-0} -eq 1 ]] && dry=(--dry-run)
+  # ${dry[@]+...} guard, not a bare "${dry[@]}": macOS ships bash 3.2 (3.2.57
+  # here), where expanding an EMPTY array under `set -u` is itself an
+  # unbound-variable error — so the guard is needed exactly on the non-dry path,
+  # the common one. This branch only became reachable when GRAPHIFY_OUT moved to
+  # .graphify; measured 2026-08-10, install.sh exited 1 here on every non-dry
+  # run, skipping stages 6+ (this line is 124, prune is 51 — which is why the
+  # earlier stages looked healthy).
   python3 "$REPO_DIR/installer/scripts/render_graphify_skill.py" \
-    --src "$src" --dst "$dst" --out-dir "$out" --source-version "$ver" "${dry[@]}" \
+    --src "$src" --dst "$dst" --out-dir "$out" --source-version "$ver" ${dry[@]+"${dry[@]}"} \
     || printf '[install] WARNING: graphify skill render failed — skill may reference the wrong output dir\n'
 }
 
