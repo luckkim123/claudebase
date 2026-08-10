@@ -953,6 +953,27 @@ table first on the theory that you'll circle back to it. The Outputs table
 is written *after* every open item on this list has actually been asked,
 never as a way of discharging the obligation to ask.
 
+**A yes to an optional tool needs one more install.sh run.** Installing the
+tool is not the same as wiring it in: `uv`, `cargo` and friends are
+*prerequisites* install.sh checks for, and the things that depend on them
+(`graphify`, `tokensave`, the `arxiv` and `tokensave` MCP registrations) are
+installed in the same pass that found the prerequisite missing — so they were
+skipped. Install the prerequisite, then run install.sh **again** and confirm
+the WARNING is gone before reporting the item as handled:
+
+```bash
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"   # uv / cargo shims
+cd ~/claudebase && INSTALL_TOOLS=1 installer/install.sh --verbose 2>&1 \
+  | grep -E '^\[install\] (WARNING|install(ing|ed))'
+```
+
+Measured 2026-08-10: after `uv` and `cargo` went in, the third pass installed
+`graphify` and `tokensave` and registered both MCP servers. Stopping at the
+second pass would have left the user with the tool on disk, nothing using it,
+and a run reported complete. Note this pass is *expected* to print action
+lines — it is not a step-6 idempotency check, and does not invalidate the one
+already done.
+
 ## Red flags (STOP if you catch yourself thinking these)
 
 | Thought | Reality |
@@ -975,6 +996,7 @@ never as a way of discharging the obligation to ask.
 | "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
 | "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
 | "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
+| "They said yes to `uv`/`cargo`, it installed cleanly, that item is done" | Installing the prerequisite is not installing the thing that needed it. install.sh skipped `graphify`/`tokensave`/the MCP registrations in the pass that found the prerequisite missing, so they are still absent — run install.sh once more and confirm the WARNING is gone. Reporting "installed" off the prerequisite alone leaves the tool on disk with nothing wired to it (measured 2026-08-10). |
 | "I'll note this optional plugin / install.sh WARNING in the Outputs summary instead of asking" | That's disclosure, not consent — the user can't redirect a decision they were never actually asked about, and a row in a nine-row table is easy to skim past. This exact shortcut (4k's optional plugins + a `code-review-graph`/`uv` WARNING both downgraded to summary notes) shipped a run reported "complete" with two live decisions silently defaulted to "skip" (2026-08-03). Run the Step 9.5 pre-completion ask audit before writing the Outputs table — every detect-then-ask item needs an actual question, not a mention. |
 
 ## Outputs the user expects after a run
