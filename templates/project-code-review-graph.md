@@ -1,8 +1,9 @@
 # code graphs: when to trust them, and when not to
 
 Rules for a project carrying a [code-review-graph](https://github.com/tirth8205/code-review-graph)
-index (CRG), a [graphify](https://github.com/Graphify-Labs/graphify) graph, or
-both. They answer structural questions (callers, importers, blast radius) from a
+index (CRG), a [graphify](https://github.com/Graphify-Labs/graphify) graph, a
+[tokensave](https://github.com/aovestdipaperino/tokensave) index, or any mix.
+They answer structural questions (callers, importers, blast radius) from a
 local index instead of reading files, which is why they are worth reaching for
 first. They also fail **silently** in specific conditions, and every rule below
 exists because of one of them.
@@ -10,23 +11,29 @@ exists because of one of them.
 Copy to `<project>/.claude/rules/code-review-graph.md` and point at it from
 `CLAUDE.md`. Delete it if the project has no graph.
 
-## Which of the two answers this question
+## Which of the three answers this question
 
-Both are installed by `claudebase`; neither builds a graph until a project asks
+All three are installed by `claudebase`; none builds a graph until a project asks
 for one. They are complementary, not redundant — CRG is a query runtime, graphify
-is a corpus builder — so the split is by *question*, not by preference:
+is a corpus builder, tokensave is a symbol-and-heading index with code-health
+metrics — so the split is by *question*, not by preference:
 
-| You want | Tool | Why the other one is wrong |
+| You want | Tool | Why the others are wrong |
 |:---|:---|:---|
 | Callers/importers of a symbol, blast radius, review context | **CRG** (MCP tools) | graphify has no incremental update; its graph is a build artifact |
 | A map of a corpus that is not just code — docs, PDFs, notes, schemas | **graphify** | CRG's tree-sitter pass emits no nodes for prose (see below) |
 | "What is connected to what" across a whole repo, communities, hubs | **graphify** (`god-nodes`, `query`) | CRG answers point queries, not neighbourhood shape |
 | An artifact a human opens — HTML, SVG, an Obsidian vault, a wiki | **graphify** (`export`) | CRG has no human-facing output |
 | Sub-second re-query while editing | **CRG** | graphify rebuilds; `graphify watch` helps but is not free |
+| Find the note/section that discusses X, in a repo of prose | **tokensave** (`search`, `read mode=map`) | CRG sees no prose at all; graphify sees it only after a paid LLM pass |
+| The body of a symbol by name, without knowing its file | **tokensave** (`body`, `signature`) | CRG returns locations, not source; graphify's nodes carry no bodies |
+| Code health — dead code, god classes, complexity, coupling, DSM | **tokensave** | neither of the others computes metrics |
+| Per-symbol git history or blame across renames | **tokensave** (`log`, `blame`) | the others are snapshot-only |
 
-When both exist, ask CRG first (a point query is ~100 tokens) and fall back to
-graphify only when CRG returns nothing *and* you have confirmed the empty answer
-is real rather than one of the silent failures below.
+When several exist, ask the cheapest point query first (CRG or `tokensave_search`
+is ~100–200 tokens) and fall back to graphify only when that returns nothing *and*
+you have confirmed the empty answer is real rather than one of the silent failures
+below.
 
 ## Wiring graphify into a project
 
@@ -89,6 +96,47 @@ a large note corpus is a real bill, not a free index. `--backend claude-cli`
 routes that extraction through the `claude` CLI you already pay for instead of a
 separate API key; it is not in `detect_backend`'s auto-detect list, so it only
 takes effect when passed explicitly.
+
+## tokensave: the only one that reads prose without a bill
+
+tokensave runs from `~/.claude.json` (user scope, absolute path — it is not on
+`PATH` under the Bash tool, so `which tokensave` says "not found" on a machine
+where it is installed and working). It writes one SQLite index per repository at
+`<repo>/.tokensave/`, which belongs in `.gitignore`.
+
+It indexes markdown, and that is what separates it from the other two. Measured
+on one Obsidian vault, same 774 tracked `.md` files, three tools:
+
+| Tool | Nodes from the prose | What they are |
+|:---|---:|:---|
+| CRG | 0 | tree-sitter has no symbol concept for prose |
+| graphify `--code-only` | 0 | prose needs the paid semantic pass |
+| **tokensave** | **10,358** | 9,584 `module` (one per heading) + 774 `file` |
+
+So in a notes repo tokensave is a heading index with full-text search over the
+whole corpus, available offline and free. That is a different product from the
+call graph it builds over real code, and it is the reason to reach for it here.
+
+**One identifier per query — never a phrase.** Same index, same session:
+
+```
+tokensave_search "runaway"        → 2 hits, file:line, 2703 → 194 tokens (93% less)
+tokensave_search "joint runaway"  → []
+```
+
+Multi-word input drops into keyword/FTS mode and matches nothing, returning `[]`
+rather than an error — the same silent failure CRG has, and the most common way
+to conclude "nothing here" from a healthy index. Query one token, then widen.
+
+**What it is not for in a prose repo.** `dead_code`, `god_class`, `complexity`,
+`coupling`, and `dsm` are real tools, but they need code to measure; in a repo of
+774 notes and 56 scripts they report on the corners. Run those against the code
+repositories, not the vault.
+
+**It costs while idle.** The index is rewritten whenever files change, whether or
+not anything queries it, and each session starts a `tokensave serve` that does not
+exit with the session — they accumulate. If a machine has many stale ones,
+`pkill -f 'tokensave serve'` is safe; the next session starts a fresh one.
 
 ## The premise everything follows from
 
@@ -155,7 +203,16 @@ nothing else; depth 2 returned 8 files, 5 of them false positives.
   does not contain the language you actually write here, or a file count far below
   `git ls-files | wc -l`. **Check that before adopting a graph-first rule**, or
   `CLAUDE.md` will instruct every session to consult an index that cannot see the
-  repo. This is graphify's case, not CRG's.
+  repo. This is graphify's case, not CRG's — or tokensave's, which is the one
+  that indexes the headings for free (above).
+
+  The same vault makes the vendored-code trap concrete for graphify too: a
+  `--code-only` build produced 16,954 nodes, of which **16,044 (94%) came from
+  `.obsidian/plugins`** — bundled plugin JS nobody in the repo wrote. Excluding
+  `.obsidian/` via `.graphifyignore` left 908 nodes, which is the honest size of
+  what we actually authored. Check the path distribution of a fresh graph before
+  wiring it to anything; a big node count in a prose repo usually means the
+  extractor found somebody else's `node_modules`.
 
 ## What no code graph can see
 
