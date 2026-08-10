@@ -118,6 +118,12 @@
             "command": "# GRAPH_REFRESH\nbash ~/claudebase/runtime/hooks/graph-refresh.sh",
             "timeout": 10,
             "statusMessage": "Refreshing this repo's code graphs"
+          },
+          {
+            "type": "command",
+            "command": "# USAGE_TRACKER\npython3 ~/claudebase/runtime/hooks/usage_tracker.py 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Recording session token usage"
           }
         ]
       }
