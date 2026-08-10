@@ -26,6 +26,26 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# GRAPHIFY_SEARCH_GUARD\nbash ~/claudebase/runtime/hooks/graphify-guard.sh search",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# GRAPHIFY_READ_GUARD\nbash ~/claudebase/runtime/hooks/graphify-guard.sh read",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

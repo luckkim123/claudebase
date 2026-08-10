@@ -133,6 +133,27 @@ class TestPlan:
         assert rendered["enabledPlugins"]["ponytail@ponytail"] is True
         assert rendered["enabledPlugins"]["remotion@remotion"] is True
 
+    def test_new_baseline_hook_is_not_shadowed_by_the_previous_render(self):
+        # Adding a hook to the baseline must reach a machine whose previous
+        # render predates it. `hooks` values are lists, so a captured old list
+        # would REPLACE the new one on merge and silence the hook forever —
+        # observed 2026-08-10 with the graphify guards.
+        base = {**BASE, "hooks": {"PreToolUse": [{"matcher": "A"}, {"matcher": "B"}]}}
+        existing = {**BASE, "hooks": {"PreToolUse": [{"matcher": "A"}]}}
+        rendered, new_local = rs.plan(base, {}, existing=existing)
+        assert rendered["hooks"] == base["hooks"]
+        assert "hooks" not in new_local
+
+    def test_cli_shrunk_hooks_never_become_a_per_machine_override(self):
+        # The CLI drops hook blocks it does not recognise. Capturing that would
+        # freeze the shrunk list into settings.local.json, which is precisely
+        # what settings.critical.json's hookMarkers exist to prevent.
+        base = {**BASE, "hooks": {"PreToolUse": [{"matcher": "A"}]}}
+        existing = {**BASE, "hooks": {}}
+        rendered, new_local = rs.plan(base, {}, existing=existing)
+        assert rendered["hooks"] == base["hooks"]
+        assert "hooks" not in new_local
+
 
 class TestMainRoundTrip:
     def test_replaces_symlink_with_rendered_file(self, tmp_path):

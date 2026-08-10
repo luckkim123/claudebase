@@ -57,6 +57,23 @@ from typing import Any
 # templates (`_comment`, `_optional_plugins_note`, `_remove_this_example`).
 INSTALLER_ONLY_KEYS = frozenset({"personalRepos"})
 
+# Top-level keys the tracked baseline owns outright: never captured into the
+# per-machine layer, however much the previous render disagrees.
+#
+# `hooks` is here because capture is exactly wrong for it in both directions.
+# The CLI's re-serialization DROPS hook blocks it does not recognize (the whole
+# reason config/settings.critical.json asserts hookMarkers), so capturing that
+# difference would freeze a *shrunk* hooks list into settings.local.json, where
+# it wins the merge and permanently suppresses the baseline hook the guard is
+# supposed to protect. And because `hooks` values are lists, deep_merge replaces
+# rather than merges them, so one captured entry silences every later addition.
+#
+# Observed 2026-08-10 while adding the two graphify guards: the machine's
+# previous render predated them, the old two-block PreToolUse list was captured
+# as a "per-machine override", and the new hooks never reached the rendered
+# file — silently, since capture is a normal, non-error path.
+BASELINE_OWNED_KEYS = frozenset({"hooks"})
+
 
 def _is_installer_only(key: str) -> bool:
     return key.startswith("_") or key in INSTALLER_ONLY_KEYS
@@ -151,6 +168,8 @@ def plan(
     """
     expected = deep_merge(base, strip_installer_keys(local))
     captured = diff_overrides(existing, expected) if existing else {}
+    for key in BASELINE_OWNED_KEYS:
+        captured.pop(key, None)
     new_local = deep_merge(local, captured) if captured else local
     rendered = deep_merge(base, strip_installer_keys(new_local))
     return rendered, new_local

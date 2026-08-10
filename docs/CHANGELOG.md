@@ -2,6 +2,51 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the graph routing becomes binding: user-scope `PreToolUse` guards
+
+Installing two graph CLIs and writing a routing card left the actual behaviour unchanged, because
+neither layer is binding. An MCP server only adds tools to the list; a `CLAUDE.md` rule only asks.
+Both are skipped under momentum — demonstrated in the session that produced this entry, where the
+vault's own `ALWAYS use the code-review-graph MCP tools BEFORE Grep/Glob/Read` was read and then
+ignored for an entire investigation. A `PreToolUse` hook is the only layer that intercepts the tool
+call itself, and the only one that reaches **subagents**, which inherit the interception but not the
+instruction.
+
+### Added
+- **`runtime/hooks/graphify-guard.sh`** + two `PreToolUse` blocks in `config/settings.json`
+  (`Bash|Grep` → `hook-guard search`, `Read|Glob` → `hook-guard read`). Wired at **user scope**, so
+  the routing holds on every machine and in every project rather than per-repo — the thing a
+  per-project install cannot give you. Safe there because `graphify hook-guard` is a no-op wherever
+  no graph exists: measured in a graph-free directory it prints nothing and exits 0, at ~51 ms per
+  call. Where a graph does exist it returns `hookSpecificOutput.additionalContext` telling the agent
+  to run `graphify query` before grepping. The wrapper exists so the hook degrades safely: it
+  resolves `graphify` via PATH then `~/.local/bin` (uv's shim dir, which this user's shells do not
+  export), exits 0 when the binary is absent — a machine that has not run `install.sh` yet must not
+  have its tool calls blocked — and `exec`s otherwise, preserving both stdin and the exit code so a
+  future `--strict` install can still block.
+- **`GRAPHIFY_SEARCH_GUARD` / `GRAPHIFY_READ_GUARD`** added to `settings.critical.json`'s
+  `hookMarkers.PreToolUse`, per the "update the manifest deliberately in the same commit" rule.
+
+### Fixed
+- **`installer/scripts/render_settings.py` silently discarded new baseline hooks.** Adding the two
+  guards to `config/settings.json` did not change `~/.claude/settings.json` at all. `diff_overrides`
+  compares the previous render against the expected one and captures whatever the sources do not
+  explain into `settings.local.json`; the machine's previous render predated the guards, so the old
+  two-block `PreToolUse` list was captured as a "per-machine override". Since `hooks` values are
+  **lists**, `deep_merge` replaces rather than merges, and the captured old list then won — the new
+  hooks could never reach the rendered file. Worse, it is self-sustaining: re-rendering compares
+  against the freshly-broken render and re-captures, so editing `settings.local.json` alone does not
+  recover (the module's own docstring flags this as a known ceiling for *deleting* an override; this
+  is the same mechanism applied to an *addition*). Fix: `BASELINE_OWNED_KEYS = {"hooks"}`, excluded
+  from capture. Capture is wrong for `hooks` in both directions anyway — the CLI's re-serialization
+  drops hook blocks it does not recognise, and capturing *that* would freeze a shrunk list into the
+  per-machine layer, permanently suppressing the very hook `settings.critical.json` exists to
+  protect. Two regression tests pin both directions; suite is 165 passing.
+- Recovery on an already-broken machine takes both steps: remove `hooks` from `settings.local.json`
+  **and** delete `~/.claude/settings.json` before re-rendering, since capture is computed against
+  the existing render. Machines pulling this commit are unaffected — the fix lands before their next
+  render — but any machine that rendered between the two commits needs the manual clear.
+
 ## [Unreleased] — 2026-08-10 — second code graph: `graphify` alongside `code-review-graph`
 
 ### Added
