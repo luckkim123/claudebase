@@ -17,6 +17,16 @@ occurrences are path-initial (84 followed by `/`, the rest by a newline or space
 preceded only by space, backtick, quote, or `/`), and none sits inside a longer
 identifier. A word-boundary check found zero violations, so a plain string
 replace cannot corrupt prose or a different token.
+
+The skill is a directory, not one file. `skill.md` delegates its heavier flows to
+a sibling `references/` (extraction-spec.md is the subagent prompt itself; the
+`--update`, `query`, `add`/`--watch`, export, and merge runbooks live there too).
+Rendering only skill.md left that directory absent, which fails twice: the Step 3
+semantic pass cannot load the extraction prompt at all, and every reference that
+did arrive would still say `graphify-out` — 62 occurrences across 6 files against
+graphify 0.9.38, concentrated in update.md (20) and query.md (17). That is exactly
+the CLI-vs-skill split this script exists to close, so the references get the same
+rewrite and travel with skill.md.
 """
 from __future__ import annotations
 
@@ -66,6 +76,48 @@ def insert_after_frontmatter(text: str, banner: str) -> str:
     return text[: close + 1] + "\n" + banner + text[close + 1 :]
 
 
+def find_references(pkg_dir: Path, platform: str = "claude") -> Path | None:
+    """Locate the platform's `references/` inside the installed graphify package.
+
+    It does not sit beside skill.md. graphify 0.9.38 ships ONE top-level
+    `skill.md` at the package root and a PER-PLATFORM `skills/<platform>/
+    references/` (claude, windows, codex, opencode, …) — so the obvious
+    `skill.md.parent / "references"` resolves to a path that does not exist, and
+    the copy silently does nothing. Checked in that order, with the flat layout
+    kept as a fallback in case a later release moves it.
+    """
+    for candidate in (pkg_dir / "skills" / platform / "references", pkg_dir / "references"):
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def render_references(src_dir: Path, dst_dir: Path, out_dir: str, version: str, dry_run: bool) -> int:
+    """Mirror `src_dir` into `dst_dir` with the same GRAPHIFY_OUT rewrite.
+
+    Returns the number of files written. Missing source is not an error — an
+    older graphify shipped skill.md alone.
+    """
+    if not src_dir.is_dir():
+        return 0
+    written = 0
+    for src in sorted(src_dir.glob("*.md")):
+        rendered = rewrite(src.read_text(encoding="utf-8"), out_dir, version)
+        dst = dst_dir / src.name
+        if dst.is_file() and dst.read_text(encoding="utf-8") == rendered:
+            continue
+        if dry_run:
+            print(f"[dry-run] would write {dst} (GRAPHIFY_OUT={out_dir})")
+            written += 1
+            continue
+        if dst.is_symlink() or dst.exists():
+            dst.unlink()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(rendered, encoding="utf-8")
+        written += 1
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render graphify's SKILL.md for this machine.")
     parser.add_argument("--src", required=True, help="skill.md inside the installed graphify package")
@@ -81,9 +133,21 @@ def main(argv: list[str] | None = None) -> int:
 
     rendered = rewrite(src.read_text(encoding="utf-8"), args.out_dir, args.source_version)
 
+    # The references travel with skill.md, and are rendered even when skill.md
+    # itself is unchanged: they are separate files, so a run that skipped them
+    # before must still be able to fill them in.
+    refs_src = find_references(src.parent)
+    refs = (
+        render_references(refs_src, dst.parent / "references", args.out_dir, args.source_version, args.dry_run)
+        if refs_src
+        else 0
+    )
+
     # Idempotent: identical content means no write and no log line, so a re-run
     # of install.sh stays silent.
     if dst.is_file() and dst.read_text(encoding="utf-8") == rendered:
+        if refs:
+            print(f"[install]   graphify skill references rendered -> {dst.parent / 'references'} ({refs} file(s))")
         return 0
     if args.dry_run:
         print(f"[dry-run] would write {dst} (GRAPHIFY_OUT={args.out_dir})")

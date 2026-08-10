@@ -2,6 +2,40 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — the graphify skill is a directory, and half of it never shipped
+
+`render_graphify_skill.py` rendered `skill.md` and stopped there. But the skill delegates its heavy
+flows to a sibling `references/` — and `extraction-spec.md` in that directory *is* the Step 3 subagent
+prompt, not documentation. So the semantic pass could not load its own prompt: running `/graphify` on a
+real corpus warned `could not read extraction prompt ... falls back to the unversioned layout`, and the
+cache could no longer attribute entries to a prompt version (#1939, the thing that keeps an upgraded
+prompt from replaying stale extractions).
+
+The cause is a layout that reads backwards. graphify 0.9.38 ships **one** `skill.md` at the package
+root and **per-platform** `skills/<platform>/references/`. The obvious `skill.md.parent / "references"`
+therefore names a path that does not exist — and a copy of a missing directory fails silently, which is
+why nothing pointed at it.
+
+Fixing the copy alone would have shipped the second half of the same bug: the references carry 62
+`graphify-out` occurrences of their own against 0.9.38, 20 in `update.md` and 17 in `query.md`. That is
+exactly the CLI-writes-here / skill-looks-there split this script exists to close, so they get the same
+rewrite rather than a verbatim copy.
+
+### Fixed
+- **`installer/scripts/render_graphify_skill.py`** — `find_references()` resolves
+  `skills/<platform>/references` first and keeps the flat layout as a fallback;
+  `render_references()` applies the same GRAPHIFY_OUT rewrite, file by file, skipping any whose content
+  already matches. It runs even when `skill.md` itself is unchanged, since a run that skipped the
+  references before must still be able to fill them in.
+- **`installer/lib/deps.sh`** — the `GRAPHIFY_OUT=graphify-out` branch links `skill.md` and returned;
+  it now links the references beside it. That branch needs no rewrite, but it needed the files.
+
+### Notes
+- Suite: 203 passed (was 196; 7 new across `TestFindReferences` / `TestRenderReferences`).
+  `tests/smoke/test_install_idempotent.sh` PASS.
+- The regression test was mutation-checked, not just watched to go green: reverting `find_references`
+  to the beside-`skill.md` assumption fails 4 of the 14, and restoring it passes all 14.
+
 ## [Unreleased] — 2026-08-10 — the ignore file `code-review-graph` actually reads
 
 `templates/project-code-review-graph.md` already said the two ignore files are independent and that
