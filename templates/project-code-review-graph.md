@@ -315,7 +315,7 @@ empty answer:
 | Cause | Tell | Fix |
 |:---|:---|:---|
 | File is untracked | `git ls-files` does not list it | Use `grep -rn`; the graph cannot help |
-| Graph is stale | `_graph.head_matches_build` is `false` | Re-run `code-review-graph update` |
+| Graph is stale | `_graph.head_matches_build` is `false` | `code-review-graph update` — but `build` if files were renamed or deleted (see below) |
 | Query had several words | Search ran in keyword/FTS mode | Query one identifier at a time |
 | You queried an empty graph | `code-review-graph status` says `Nodes: 0` | Pass `repo_root` — the graph you want is elsewhere |
 
@@ -334,6 +334,24 @@ anything keying on existence. claudebase's own Stop hook did exactly that, and
 refreshed the empty one every turn while the real graphs went stale
 (`runtime/hooks/graph-refresh.sh`, fixed 2026-08-10 — it now gates on node
 count).
+
+### `update` adds and revises; it does not forget
+
+The opposite failure of an empty answer: nodes for code that no longer exists.
+`code-review-graph update` is incremental over changed and new files, and a file
+that was **deleted or renamed away** is simply never revisited — its nodes stay,
+and nothing in `status` marks them. Ask for the callers of a symbol in a
+directory that was renamed last week and the graph answers from the old tree,
+confidently.
+
+Measured on a repo mid-rename (2026-08-10): a graph built while
+`albc_bridge/ -> stonefish_albc_bridge/` was staged carried both paths at 70
+nodes each. `update --brief` left the duplicate untouched; only a full
+`code-review-graph build` cleared it (728 nodes, one path).
+
+So: after any rename, deletion, or branch switch that moves files, **rebuild
+rather than update**. `update` is for editing files in place, which is what a
+Stop hook does between rebuilds.
 
 ### The other edge of that premise: tracked vendored code
 
