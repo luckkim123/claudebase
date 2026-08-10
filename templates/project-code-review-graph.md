@@ -175,6 +175,54 @@ verification step with it — check `code-review-graph status` for node count an
 language list, confirm the nodes are not vendored, and delete the graph if they
 are.
 
+### Reading the graph in Obsidian, and the sidecar that silently ruins it
+
+`graphify export obsidian` turns the graph into a vault: one `.md` per node with
+`[[wikilinks]]`, a `_COMMUNITY_<name>.md` overview per community, a
+`graph.canvas`, and YAML frontmatter carrying `source_file` back to the note the
+node came from. That back-reference is the whole point — the export is a *map of*
+the corpus, not a copy of it.
+
+Export to `<GRAPHIFY_OUT>/obsidian/` (the default) and open **that directory** as
+its own vault. Do not aim `--dir` at a live vault's note tree: the output is
+roughly one file per node (10,800 files / 46 MB on the vault measured here), it
+lands in git, and graphify then re-indexes its own output on the next build.
+The default sits under the gitignored `.graphify/`, and Obsidian hides dot-dirs,
+so the live vault never sees it.
+
+**The trap.** Community names come from `.graphify_analysis.json`, a sidecar —
+not from the graph. `graph.json` does carry a `community` id on every node, and
+`cli.py` will reconstruct from it, but only under `if not communities:` — that is,
+when the sidecar is **missing**, never when it is merely **stale**. A semantic
+re-extraction rewrites `graph.json` and `.graphify_labels.json` and leaves the
+sidecar untouched, so an incomplete sidecar is treated as authoritative and every
+node it does not mention exports as `Community None`. Measured on the vault,
+2026-08-10: sidecar from 14:04 with 68 communities / 900 node ids, graph from
+15:41 with 9,874 nodes and all 926 communities labeled — the 8,974 nodes missing
+from the sidecar were exactly the 8,974 notes tagged `community/Community_None`.
+
+The tell is that count, so check it rather than trusting the export's cheerful
+node total:
+
+```bash
+grep -l 'community/Community_None' "${GRAPHIFY_OUT:-graphify-out}"/obsidian/*.md | wc -l
+ls -l "${GRAPHIFY_OUT:-graphify-out}"/.graphify_analysis.json \
+      "${GRAPHIFY_OUT:-graphify-out}"/graph.json          # sidecar older = suspect
+```
+
+The fix is to move the stale sidecar aside and re-export, which forces the
+reconstruction path onto the per-node ids — free, offline, and it keeps the
+existing labels aligned because those ids are what the label file is keyed to.
+Do **not** reach for `graphify cluster-only` to repair this: re-clustering mints
+fresh community ids while `.graphify_labels.json` stays keyed to the old ones,
+which trades `Community None` for confidently wrong names (reasoned from the id
+keying, not measured — the repair below was the one actually run).
+
+```bash
+mv "${GRAPHIFY_OUT:-graphify-out}"/.graphify_analysis.json /tmp/analysis.stale.json
+graphify export obsidian
+```
+
 ## tokensave: the only one that reads prose without a bill
 
 tokensave runs from `~/.claude.json` (user scope, absolute path — it is not on
