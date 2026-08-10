@@ -8,8 +8,7 @@
   },
   "requiredPlugins": [
     "clangd-lsp@claude-plugins-official",
-    "claude-code-setup@claude-plugins-official",
-    "claude-md-management@claude-plugins-official",
+    "claude-mem@thedotmack",
     "context7@claude-plugins-official",
     "oh-my-claudecode@omc",
     "oh-my-docs@heroacademia",
@@ -20,7 +19,7 @@
     "pyright-lsp@claude-plugins-official",
     "superpowers@claude-plugins-official"
   ],
-  "requiredMarketplaces": ["heroacademia", "omc"],
+  "requiredMarketplaces": ["heroacademia", "omc", "thedotmack"],
   "requiredHudLayout": ["line1", "main"],
   "requiredScalars": ["language", "outputStyle", "remoteControlAtStartup", "skipWorkflowUsageWarning"]
 }

@@ -93,8 +93,6 @@
     "command": "sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud-cache.sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
   },
   "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
@@ -105,9 +103,16 @@
     "oh-my-scholar@heroacademia": true,
     "oh-my-project@heroacademia": true,
     "oh-my-heroacademia@heroacademia": true,
-    "ponytail@ponytail": true
+    "ponytail@ponytail": true,
+    "claude-mem@thedotmack": true
   },
   "extraKnownMarketplaces": {
+    "thedotmack": {
+      "source": {
+        "repo": "thedotmack/claude-mem",
+        "source": "github"
+      }
+    },
     "ponytail": {
       "source": {
         "source": "git",
