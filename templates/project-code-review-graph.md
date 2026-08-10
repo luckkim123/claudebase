@@ -316,9 +316,22 @@ The blast radius is narrow but the fix is narrower — just don't call it:
 | Path | Re-installs? |
 |:---|:---|
 | `tokensave status` (and other plain CLI verbs) | **yes** |
+| `tokensave sync` | **yes** — confirmed separately, below |
 | `tokensave --help` | no |
 | `tokensave hook-pre-tool-use` / `hook-prompt-submit` / `hook-stop` (what the wrapper calls) | no — measured over 6 min and 3 prompts, mtime unchanged |
 | `code-review-graph status`, graphify read commands | no |
+
+`sync` earns its own row because it is the one verb the tool *asks you to run*:
+`tokensave_status` returns `stale_warning: "N commit(s) since last sync. Run
+\`tokensave sync\` to update the index."` — and there is no MCP equivalent, so
+following that instruction is the documented path into the side effect. Measured
+2026-08-10 with a sha256 taken either side: the sync itself succeeded (19 added,
+0 modified, 0 removed in 52 ms) and `~/.claude/settings.json` changed underneath
+it, gaining two hook entries whose command was the literal string `"#"`.
+
+If you must sync, wrap it — copy `~/.claude/settings.json` aside, run the verb,
+compare hashes, restore from the copy when they differ. That is three lines and
+it is the only reason this measurement cost nothing.
 
 So the per-prompt hook path is safe and the wrapper needs no guard; what is not
 safe is a human or an agent reaching for `tokensave <verb>` in a script, an audit
