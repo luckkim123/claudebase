@@ -40,17 +40,22 @@ Over many sessions of "ship and forget," the human hasn't grown. This hook enfor
 
 The hook is already here at `hooks/quality-gate.py`; nothing needs copying.
 
-**It is the one hook of the three still NOT registered in `config/settings.json`,
-and the reason is worth recording.** An attempt to add it on 2026-08-10 was refused
-by the harness's own permission classifier — twice, including after the two
-`PreToolUse` siblings had gone into the same file from the same session. The
-distinguishing property is that this hook can `exit 2` on the **Stop** event, i.e.
-it can prevent a session from ending, which is a self-modification that could trap
-the agent making it. That refusal is worth respecting rather than routing around,
-so the block below is left for a human to paste.
+**Registered in `config/settings.json` since 2026-08-10 — applied by a human, and
+that detail is the point.** Two agent attempts to add it were refused by the
+harness's own permission classifier, including after both `PreToolUse` siblings had
+gone into the same file from the same session. The distinguishing property is that
+this hook can `exit 2` on the **Stop** event: it can prevent a session from ending,
+which is a self-modification that could trap the agent making it. The refusal was
+respected rather than routed around; the user inserted the block by hand, and the
+agent then rendered and verified it.
 
-Append this to the existing `Stop` group in `config/settings.json` (seven entries
-are already there), then render:
+Verified on the rendered command line, exit codes read without a pipe: complex
+session (4 edits) with no auto-memory file today → **exit 2**; same session with
+today's memory present → **exit 0**; `OMC_SKIP_HOOKS=delivery_gate` → **exit 0**;
+`DISABLE_OMC=1` → **exit 0**.
+
+For reference, this is the block that lives in the `Stop` group (it is the eighth
+entry), and the render command that applies a change to it:
 
 ```jsonc
 {

@@ -147,6 +147,12 @@
             "command": "# USAGE_TRACKER\npython3 ~/claudebase/runtime/hooks/usage_tracker.py 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Recording session token usage"
+          },
+          {
+            "type": "command",
+            "command": "# DELIVERY_GATE\npython3 ~/claudebase/runtime/skills/delivery-gate/hooks/quality-gate.py",
+            "timeout": 10,
+            "statusMessage": "Checking that a complex session captured its learning"
           }
         ]
       }

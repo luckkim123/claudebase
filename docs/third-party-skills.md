@@ -86,7 +86,7 @@ Wired 2026-08-10, after measuring rather than before:
 |:---|:---|:---|:---|
 | `gateguard` | `PreToolUse` | `Edit\|Write\|MultiEdit\|Bash` | **live** |
 | `strategic-compact` | `PreToolUse` | `Edit\|Write` | **live** |
-| `delivery-gate` | `Stop` | — | **not wired** — see below |
+| `delivery-gate` | `Stop` | — | **live** — inserted by hand, see below |
 
 `config/settings.json` is the tracked base; `~/.claude/settings.json` is a build
 product of `installer/scripts/render_settings.py` merging it with this machine's
@@ -104,14 +104,22 @@ live: the first Edit of a source file denies and the retry passes, a destructive
 fourth denial of a session arrives condensed to one line exactly as the skill
 documents.
 
-**`delivery-gate` stays unwired because the harness refused it.** Its command was
-rejected by the permission classifier twice — after the two `PreToolUse` siblings
-had already landed in the same file from the same session. The distinguishing
-property is that it can `exit 2` on `Stop`, i.e. prevent a session from ending: a
-self-modification that could trap the agent making it. Respecting that refusal
-rather than routing around it is the point. `delivery-gate/SKILL.md` carries the
-exact block to paste, and the hook gained an `OMC_SKIP_HOOKS=delivery_gate` kill
-switch first, because a blocking hook without an escape is a trap.
+**`delivery-gate` was wired by the human, and that division of labour is the
+finding.** The permission classifier refused the agent's command twice — after both
+`PreToolUse` siblings had already landed in the same file from the same session. The
+distinguishing property is `exit 2` on `Stop`: it can prevent a session from ending,
+a self-modification that could trap the agent making it. Rather than route around
+the refusal, the agent verified an insertion script against a copy, handed over
+three commands, and the user ran the one that touched `Stop`; the agent then
+rendered and measured the result. The hook had gained an
+`OMC_SKIP_HOOKS=delivery_gate` / `DISABLE_OMC=1` kill switch *before* that, because
+a blocking hook whose only escape is editing settings.json is a trap — the moment
+you need it off is the moment you cannot finish the session that would turn it off.
+
+Exit codes on the rendered command line, read without a pipe (a pipe reports
+`tail`'s status, not the hook's — which is how a blocking gate gets mistaken for a
+passing one): complex session with no memory today **2**, with memory **0**, either
+kill switch **0**.
 
 An earlier draft of this section said "this machine already runs 18 hooks".
 Measured: **17** in `config/settings.json` (19 now), plus 33 from plugin
