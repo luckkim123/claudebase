@@ -2,6 +2,36 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — tokensave's hooks, the half the previous entry deferred
+
+The distribution commit installed tokensave and registered its MCP server but left its three hooks
+out, on the grounds that the `Stop` one deserved its own verification. This is that change.
+
+### Added
+- **`runtime/hooks/tokensave-guard.sh`** and three blocks in `config/settings.json`:
+  `PreToolUse` on `Agent|Grep|Bash` → `hook-pre-tool-use`, `UserPromptSubmit` → `hook-prompt-submit`,
+  `Stop` → `hook-stop`. Declared here rather than installed by `tokensave install --agent claude`,
+  which writes them into `~/.claude/settings.json` — a **rendered** file, so they would disappear on
+  the next `install.sh` with no error. Same wrapper shape as `graphify-guard.sh`, for the same
+  reason: resolve via PATH then `~/.local/bin`, exit 0 when the binary is absent so a machine that
+  has not run `install.sh` is never blocked, `exec` otherwise to preserve stdin and the exit code.
+  Verified safe outside an indexed repo — in a directory with no `.tokensave/`, `pre-tool-use`
+  returns `{"permission":"allow"}` and the other two print nothing, all exit 0; an unknown mode
+  argument also exits 0 rather than blocking a tool call or a turn.
+- **Markers registered in `settings.critical.json`** in the same commit, including a new
+  `UserPromptSubmit` entry — that event had no protected marker before, so a CLI shrink there was
+  previously invisible to the guard.
+- **`permissions.allow: ["mcp__tokensave__*"]` promoted to the baseline.** It had been captured into
+  `settings.local.json` as a per-machine override, which means every *other* machine would prompt on
+  each tokensave tool call — the opposite of the "same everywhere" the distribution work was for.
+  Promoting it and clearing the local copy keeps `allow` (a list, therefore replaced rather than
+  merged) owned in one place.
+
+### Notes
+- The `Stop` hook now joins four existing ones. It records the turn's token accounting and produced
+  no output and exit 0 when run outside an indexed repo, which is the failure mode that would matter
+  — a `Stop` hook that errors or hangs is felt on every single turn.
+
 ## [Unreleased] — 2026-08-10 — third graph (`tokensave`), and MCP registration that reaches the CLI
 
 The routing card already claimed "all three are installed by claudebase". Two were. tokensave lived
