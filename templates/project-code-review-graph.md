@@ -149,6 +149,29 @@ repositories, not the vault.
 not anything queries it. Measured on one vault: the DB was rewritten mid-session
 while the query count for that session was zero.
 
+**Its CLI writes to your settings — do not call it from anything automated.** The
+side effect is not confined to `install`: a plain `tokensave status`, which reads
+as a pure query, printed `Wrote ~/.claude/settings.json` and re-injected its own
+UserPromptSubmit and Stop hooks into the rendered file. Where claudebase already
+wires those hooks through `runtime/hooks/tokensave-guard.sh`, the result is a
+duplicate pair that runs **twice per prompt**, and it survives until the next
+render. Measured 2026-08-10: execution time and file mtime matched to the second.
+
+The blast radius is narrow but the fix is narrower — just don't call it:
+
+| Path | Re-installs? |
+|:---|:---|
+| `tokensave status` (and other plain CLI verbs) | **yes** |
+| `tokensave --help` | no |
+| `tokensave hook-pre-tool-use` / `hook-prompt-submit` / `hook-stop` (what the wrapper calls) | no — measured over 6 min and 3 prompts, mtime unchanged |
+| `code-review-graph status`, graphify read commands | no |
+
+So the per-prompt hook path is safe and the wrapper needs no guard; what is not
+safe is a human or an agent reaching for `tokensave <verb>` in a script, an audit
+step, or a diagnostic. Query the MCP tools instead — they do not touch settings.
+`oh-my-project` encodes this as a hard rule with a test that fails if the binary
+is invoked at all (`omp_graph_audit`, v0.8.0).
+
 **The process count is not a leak — do not "clean it up".** A stdio MCP server is
 a child of the `claude` process that launched it, so `ps` shows one per live
 session *and* one per background worker (`claude bg-spare`), and a busy machine
