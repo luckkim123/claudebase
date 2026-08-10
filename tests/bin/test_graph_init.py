@@ -6,11 +6,13 @@ part worth pinning down — a graph made of somebody else's vendored tree is
 worse than no graph, because the PreToolUse guards then force every session to
 consult it, and the original failure mode was that nothing said so.
 
-These build real graphs, so they skip where neither CLI is installed.
+The classes that shell out build real graphs, so they skip where neither CLI is
+installed; the skill-sync checks read files and always run.
 """
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,6 +21,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "runtime" / "bin" / "graph-init.sh"
+SKILL = REPO_ROOT / "runtime" / "skills" / "graph-init" / "SKILL.md"
 
 
 def which(name: str) -> str | None:
@@ -29,7 +32,7 @@ def which(name: str) -> str | None:
     return str(local) if os.access(local, os.X_OK) else None
 
 
-pytestmark = pytest.mark.skipif(
+needs_cli = pytest.mark.skipif(
     not which("code-review-graph") and not which("graphify"),
     reason="neither code-review-graph nor graphify is installed",
 )
@@ -57,6 +60,7 @@ def project(tmp_path):
     return tmp_path / "proj"
 
 
+@needs_cli
 class TestBuild:
     def test_a_plain_directory_gets_graphs_and_exclusions(self, project):
         # No git anywhere here: CRG falls back to an rglob walk and graphify
@@ -83,6 +87,7 @@ class TestBuild:
         assert (project / ".graphifyignore").read_text() == "# mine\nsrc/\n"
 
 
+@needs_cli
 class TestVerdict:
     def test_a_graph_made_of_vendored_code_fails(self, tmp_path):
         # The measured failure: one vault's graph was 21,865 nodes of bundled
@@ -99,6 +104,7 @@ class TestVerdict:
         assert "--purge" in result.stdout
 
 
+@needs_cli
 class TestPurge:
     def test_purge_removes_graphs_and_keeps_exclusions(self, project):
         run(project)
@@ -114,6 +120,31 @@ class TestPurge:
         assert run(project, "--purge").returncode == 0
 
 
+class TestSkillStaysInSync:
+    """The skill is where the exit codes get *interpreted*, so it goes stale
+    silently if the script's contract moves. Bind the two."""
+
+    def test_the_skill_delegates_rather_than_re_implementing(self):
+        body = SKILL.read_text(encoding="utf-8")
+        assert "graph-init" in body
+        # The failure being guarded: a skill that spells the procedure out again
+        # is the 1,152-character hook message reborn.
+        assert "code-review-graph build" not in body.split("## Boundaries")[0]
+
+    def test_documented_exit_codes_are_the_ones_the_script_returns(self):
+        body = SKILL.read_text(encoding="utf-8")
+        script = SCRIPT.read_text(encoding="utf-8")
+
+        documented = {int(m) for m in re.findall(r"^\| (\d) \|", body, re.MULTILINE)}
+        assert documented == {0, 1, 2}, documented
+        # 0 and 2 are the two the verify block distinguishes by name; 1 is the
+        # python fallthrough when no graph was built at all.
+        assert 'exit "$verdict"' in script
+        assert "sys.exit(1)" in script
+        assert "sys.exit(0 if ok else 2)" in script
+
+
+@needs_cli
 class TestRefusal:
     def test_it_refuses_home(self, tmp_path):
         home = tmp_path / "home"

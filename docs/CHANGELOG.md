@@ -2,6 +2,37 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-10 — a verb nobody can find is still no verb
+
+`graph-init` shipped with exactly one surface that named it: the SessionStart offer, which fires once
+per project and only past three gates. Every way that gate closes is a user who never learns the
+command exists — a project under 20 code files, a marker already spent, a message skimmed past in a
+busy session. The sharpest case is the one the script itself creates: it tells you `--purge` undoes a
+bad graph, and after you purge, the marker means nothing ever tells you how to build a good one.
+
+So the command gets a skill above it, and the division is the point. The mechanism stays a shell
+script because it is entirely mechanical — copy two files, run two builds, count nodes by directory,
+compare a ratio — and prose that a model re-enacts is what this whole line of work has been deleting.
+The skill takes the two things a script cannot: being findable in the `/` list without a hook, and the
+judgement of *which* directory to exclude when the vendored check fires.
+
+### Added
+- **`runtime/skills/graph-init/SKILL.md`** — invoke the command, do not re-implement it; a table
+  mapping exit 0/1/2 to what to do; confirm before building, since a graph is per-project state the
+  guards then force every later session to consult. Korean and English triggers.
+- **`tests/bin/test_graph_init.py::TestSkillStaysInSync`** — binds the skill to the script. The skill
+  is where exit codes get interpreted, so it rots silently when the contract moves. One check asserts
+  the documented codes are the ones the script returns; the other asserts the skill does not spell out
+  the procedure again, which caught a first draft that listed the build commands verbatim.
+
+### Changed
+- The CLI skip in `tests/bin/test_graph_init.py` moved from module scope to the four classes that
+  shell out, so the two file-reading checks run everywhere.
+
+### Notes
+- Suite: 243 passed (was 241).
+- New skill directories need no installer change — `link_skills_and_agents` globs `runtime/skills/*/`.
+
 ## [Unreleased] — 2026-08-10 — the offer that named no verb
 
 `graph-offer.sh` told a session its project had no code graph and then had to explain, in 1,152
