@@ -10,6 +10,7 @@ code-review-graph so the assertions are about the hook's logic, not theirs.
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -52,6 +53,23 @@ def run_hook(repo: Path, bin_dir: Path, out_dir: str = ".graphify"):
     )
 
 
+def make_crg_graph(repo: Path, nodes: int = 1) -> Path:
+    """Create a `.code-review-graph/` the hook will accept as a real graph.
+
+    A bare directory is not enough: any MCP query that omits `repo_root` leaves
+    an empty `graph.db` behind, so the hook gates on the node count rather than
+    on existence. Pass `nodes=0` to build one of those empty artifacts.
+    """
+    gdir = repo / ".code-review-graph"
+    gdir.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(gdir / "graph.db")
+    db.execute("CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY)")
+    db.executemany("INSERT INTO nodes (id) VALUES (?)", [(i,) for i in range(nodes)])
+    db.commit()
+    db.close()
+    return gdir
+
+
 def calls(log: Path, expected: int) -> list[str]:
     """Read the detached stubs' log once it has `expected` lines, or give up."""
     deadline = time.monotonic() + SETTLE_TIMEOUT
@@ -87,7 +105,7 @@ class TestRefresh:
         repo, bin_dir, log = sandbox
         (repo / ".graphify").mkdir()
         (repo / ".graphify" / "graph.json").write_text("{}")
-        (repo / ".code-review-graph").mkdir()
+        make_crg_graph(repo)
 
         run_hook(repo, bin_dir)
 
@@ -97,7 +115,7 @@ class TestRefresh:
         # A chatty session fires Stop after every turn; re-parsing each time buys
         # nothing and would eventually overlap with itself.
         repo, bin_dir, log = sandbox
-        (repo / ".code-review-graph").mkdir()
+        make_crg_graph(repo)
 
         run_hook(repo, bin_dir)
         assert calls(log, 1) == ["code-review-graph update --brief"]
@@ -119,7 +137,7 @@ class TestRefresh:
         chunk_dir.mkdir(parents=True)
         (chunk_dir / "abc123.json").write_text("{}")
         (repo / ".graphify" / "graph.json").write_text("{}")
-        (repo / ".code-review-graph").mkdir()
+        make_crg_graph(repo)
 
         run_hook(repo, bin_dir)
 
@@ -140,6 +158,46 @@ class TestRefresh:
         run_hook(repo, bin_dir)
 
         assert calls(log, 1) == ["graphify update ."]
+
+    def test_a_graph_below_the_git_root_is_refreshed(self, sandbox):
+        # A meta-repo that gitignores its source tree holds the real graphs in
+        # nested independent repos (stonefish_ws: src/stonefish_sim,
+        # src/stonefish_slam). Keying only on `$repo/.code-review-graph` left
+        # both of them stale forever, which is worse than having no graph — the
+        # PreToolUse guards still route every query through them.
+        repo, bin_dir, log = sandbox
+        make_crg_graph(repo / "src" / "pkg_a")
+        make_crg_graph(repo / "src" / "pkg_b")
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 2) == ["code-review-graph update --brief"] * 2
+
+    def test_the_update_runs_in_the_graphs_own_directory(self, sandbox):
+        # `code-review-graph update` resolves the repo from its cwd, so a nested
+        # graph refreshed from the meta-repo root would re-parse the wrong tree.
+        repo, bin_dir, log = sandbox
+        nested = repo / "src" / "pkg_a"
+        make_crg_graph(nested)
+        # Re-stub so the log records where the process actually ran.
+        stub = bin_dir / "code-review-graph"
+        stub.write_text(f'#!/bin/sh\necho "cwd=$(pwd)" >> "{log}"\n')
+        stub.chmod(0o755)
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 1) == [f"cwd={nested}"]
+
+    def test_an_empty_graph_is_not_refreshed(self, sandbox):
+        # Any MCP query that omits `repo_root` creates a 0-node graph.db at the
+        # server's cwd. Treating that as opt-in made the hook refresh an empty
+        # database every turn while the real graphs went stale.
+        repo, bin_dir, log = sandbox
+        make_crg_graph(repo, nodes=0)
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 1) == []
 
     def test_graphify_out_relocation_is_honoured(self, sandbox):
         # GRAPHIFY_OUT moves the whole output tree; the hook reads it so the
