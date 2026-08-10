@@ -13,6 +13,7 @@
 #   link_settings_and_md               — stage 1+2+2b: ~/.claude/{,settings.json,CLAUDE.md}
 #   link_tmux_conf                     — stage 4: ~/.tmux.conf
 #   link_skills_and_agents             — stages 4b+4c: per-skill and per-agent links
+#   prune_stale_links                  — stage 4e: drop links whose source left the repo
 #
 # Stage 3 (mcp.json render) is NOT here — it's in lib/secrets.sh because the
 # template substitution is the real concern, not the linking.
@@ -130,6 +131,34 @@ link_skills_and_agents() {
       link_or_copy "$agent_file" "$CLAUDE_HOME/agents/$agent_name"
     done
   fi
+}
+
+# Stage 4e — drop links this installer made whose source has since left the repo.
+#
+# link_or_copy only ever adds. Deleting a skill from runtime/skills/ therefore
+# left its ~/.claude/skills/<name> symlink behind forever, pointing at nothing.
+# Measured 2026-08-10: 5 stale links (omc-teams-ops, docker-env, and the three
+# simplicity-* skills that moved to the ponytail plugin). They are not inert —
+# ecc-agentshield crashed on `statSync` of one, and any tool that walks the
+# skills directory hits the same ENOENT.
+#
+# Only symlinks resolving INTO $REPO_DIR are candidates, so a user-managed skill
+# — a real directory, or a link to somewhere else — is never a candidate. Under
+# --copy there are no symlinks to judge, and a stale copy is indistinguishable
+# from a user's own file, so that mode prunes nothing by construction.
+prune_stale_links() {
+  local dir entry dest
+  for dir in skills agents output-styles; do
+    [[ -d "$CLAUDE_HOME/$dir" ]] || continue
+    for entry in "$CLAUDE_HOME/$dir"/*; do
+      [[ -L "$entry" ]] || continue
+      dest="$(readlink "$entry")"
+      [[ "$dest" == "$REPO_DIR"/* ]] || continue
+      [[ -e "$dest" ]] && continue
+      run rm -f "$entry"
+      log "pruned:  $entry (source gone: $dest)"
+    done
+  done
 }
 
 # Stage 4d — symlink each user-scope output style .md. Same per-file linking as

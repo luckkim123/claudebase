@@ -42,10 +42,13 @@ link_settings_and_md
 source "$REPO_DIR/installer/lib/secrets.sh"
 render_mcp_json
 
-# Stages 4 + 4b + 4c + 4d handled by lib/link.sh helpers.
+# Stages 4 + 4b + 4c + 4d + 4e handled by lib/link.sh helpers.
 link_tmux_conf
 link_skills_and_agents
 link_output_styles
+# 4e runs last so it judges what the link stages just refreshed: a renamed skill
+# (old link now dangling, new link freshly made) settles in a single run.
+prune_stale_links
 
 # Stages 5 / 5b / 6 → lib/platform.sh, lib/project_hooks.sh, lib/plugins.sh (P3-T6/T7/T8).
 # shellcheck source=lib/platform.sh
