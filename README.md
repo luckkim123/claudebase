@@ -78,6 +78,39 @@ installer/install.sh                  # macOS / Linux
 
 That symlinks `~/.claude/CLAUDE.md`, your skills and hooks into the repo, and **renders** `~/.claude/settings.json` from `config/settings.json` plus this machine's `settings.local.json`. To update: `git pull` — enough for everything symlinked; a change to `config/settings.json` needs one `installer/install.sh` run to re-render.
 
+### Code graphs (installed by the same run)
+
+Three of them, because they answer different questions. `code-review-graph`
+serves callers/importers/blast-radius from an incremental SQLite index;
+`graphify` builds a whole-corpus knowledge graph and exports artifacts a human
+opens; `tokensave` indexes symbols **and markdown headings** — the only one of
+the three that reads prose without an LLM pass, which is what makes it the one
+worth having in a notes repo. Full routing rules, and the failure modes that
+make an empty graph look like a healthy one, are in
+[`templates/project-code-review-graph.md`](templates/project-code-review-graph.md).
+
+`installer/install.sh` installs the CLIs, renders graphify's `/graphify` skill
+for this machine's `GRAPHIFY_OUT`, and registers the MCP servers. Prerequisites
+are warned about rather than enforced: **`uv`** for the first two, and **`brew`**
+(macOS) or **`cargo`** (Linux) for tokensave — the cargo path compiles 34
+tree-sitter grammars, so give it several minutes.
+
+It does **not** build a graph anywhere. That stays per-repo, and two hooks make
+it self-managing:
+
+- `GRAPH_REFRESH` (Stop) updates the graphs a repo *already has* — detached, so
+  a turn never waits, and debounced to once a minute. No graph, no work.
+- `GRAPH_OFFER` (SessionStart) tells the session, **once per repo ever**, that
+  this repo has ≥20 tracked code files and no graph, and lets you decide. The
+  marker lives in `.git/`, so the answer travels with the clone and is never
+  committed.
+
+Creation is a decision rather than a default because a blindly built graph is
+worse than none: the `PreToolUse` guards then *require* consulting it. One
+Obsidian vault produced 0 nodes from 746 tracked `.md` while 101 files of
+vendored plugin JS produced 21,425 "functions" and a 212 MB index — with no
+error anywhere. The offer therefore carries its own verification step.
+
 ### Installing tmux + clipboard tool
 
 `tmux.conf`'s mouse-copy bindings need `tmux` and a clipboard helper. By
