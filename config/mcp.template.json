@@ -1,4 +1,11 @@
 {
   "$comment": "MCP servers — rendered to ~/.claude/mcp.json by install.sh. Add VAR_NAME-style placeholders (with the dollar-brace syntax) here and define them in secrets/secrets.env when a server needs an API key.",
-  "globalServers": {}
+  "$caveat": "2026-08-10 measured: Claude Code does NOT read ~/.claude/mcp.json — it loads user-scope servers from ~/.claude.json (mcpServers). Tested with both the globalServers and the mcpServers key; neither appeared in `claude mcp list`. So entries below are a record of intent, not an active config. Until the renderer is wired to feed `claude mcp add -s user`, each machine must register them by hand (see the per-entry note).",
+  "globalServers": {
+    "arxiv": {
+      "$note": "register manually: claude mcp add --transport stdio --scope user arxiv -- uvx arxiv-mcp-server",
+      "command": "uvx",
+      "args": ["arxiv-mcp-server"]
+    }
+  }
 }
