@@ -2,6 +2,48 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-11 — a version string is not an extraction prompt
+
+graphify buckets its semantic-extraction cache by `prompt_fingerprint()`, a sha256 over the **whole
+text** of `references/extraction-spec.md`. That file is the subagent prompt, and hashing it is how
+graphify notices the prompt changed and re-extracts instead of replaying stale results. Our renderer
+prepended a banner to it carrying `{version}` — provenance, not instruction — so the hash moved on
+every graphify upgrade whether or not the prompt had changed.
+
+Measured on the obsidian vault, 2026-08-11. Upgrading 0.9.38 → 0.9.39 left the 252 committed cache
+entries orphaned in bucket `pf33081f95084` while the run started from zero, and the corpus was
+re-extracted at full LLM cost: 898 files, ~9M tokens, 37 subagent chunks. Changing only `graphify
+0.9.39` to `0.9.38` in the banner and re-hashing moved the bucket from `p7814ca696b13` to
+`p868ee8799dae` — one string, a whole cache.
+
+The banner also made the file **machine**-specific, which breaks the other half of the design. The
+cache is committed to git (`71b6c786`) precisely so a second machine restores it without re-paying;
+but a machine on the default `GRAPHIFY_OUT=graphify-out` takes the early return in `rewrite()` and
+gets the pristine file, while `.graphify` machines got a banner. Two buckets for one prompt, so the
+shared cache never hit across them.
+
+### Fixed
+- **`installer/scripts/render_graphify_skill.py`** — `rewrite()` returns the text unchanged when the
+  `graphify-out` replace was a no-op, so a file with nothing machine-specific in it gets no banner.
+  General rule, no filename special-casing: `extraction-spec.md` carries zero `graphify-out`
+  occurrences against 0.9.39 (the paths it names are substituted by the caller), so it now renders
+  byte-identical to the packaged prompt and its fingerprint moves only when graphify actually changes
+  the prompt. `hooks.md` is the other zero-occurrence file and loses a banner it never needed; the
+  six that really are rewritten keep theirs.
+
+### Notes
+- Suite: 283 passed (was 279). The four new tests state the regression the way the cache sees it —
+  two renders differing only in graphify version, or only in `GRAPHIFY_OUT`, must be byte-identical.
+- Mutation-checked rather than watched to go red: reverting the guard in-process makes both equality
+  assertions `False`, restoring it makes them `True`.
+- Not the whole story of that vault's 9M tokens. `pf33081f95084` is **not** reproducible from the
+  current body under any banner version (0.9.37/38/39/unknown tested; `BANNER` itself has never been
+  edited since `87cba53`), so 0.9.39 genuinely revised the prompt body and that re-extraction was
+  owed. This fix is about the upgrades where it is not.
+- Re-keying an existing cache after this change is sound and cheap: `banner(0.9.39) + current body`
+  reproduces `p7814ca696b13` exactly, which proves those entries were produced by the current prompt
+  body, so they can be copied into the banner-free bucket rather than re-extracted.
+
 ## [Unreleased] — 2026-08-10 — a purge that leaves a graph is not a purge
 
 `GRAPHIFY_OUT=.graphify` lives in the rendered `settings.json`, so a Claude Code session — and every

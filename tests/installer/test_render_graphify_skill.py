@@ -66,6 +66,56 @@ class TestRewrite:
         assert 'description: "Use when .graphify/ exists."' in out
 
 
+# `references/extraction-spec.md` — zero `graphify-out` occurrences against
+# graphify 0.9.39, because the paths it names are substituted by the caller.
+NO_OUT_DIR_REFERENCE = """# graphify reference: extraction subagent prompt
+
+Each semantic subagent receives the prompt below verbatim.
+
+```
+Files (chunk CHUNK_NUM of TOTAL_CHUNKS):
+FILE_LIST
+Then write the JSON to CHUNK_PATH.
+```
+"""
+
+
+class TestNoOpRewriteGetsNoBanner:
+    """The banner must never reach a file graphify hashes as a cache key.
+
+    graphify buckets its semantic cache by `prompt_fingerprint()`, a sha256
+    over the whole text of `references/extraction-spec.md`. A banner carrying
+    `{version}` therefore made every graphify upgrade look like a prompt
+    change and orphaned the entire cache — ~10M tokens of re-extraction on the
+    obsidian vault, 2026-08-11, for a version string.
+    """
+
+    def test_file_without_the_default_dir_comes_back_identical(self):
+        assert rgs.rewrite(NO_OUT_DIR_REFERENCE, ".graphify", "1.2.3") == NO_OUT_DIR_REFERENCE
+
+    def test_fingerprint_survives_a_version_bump(self):
+        # THE regression, stated the way the cache sees it: two renders that
+        # differ only in graphify version must be byte-identical, or the
+        # bucket moves and the corpus is re-extracted at full LLM cost.
+        assert rgs.rewrite(NO_OUT_DIR_REFERENCE, ".graphify", "0.9.38") == rgs.rewrite(
+            NO_OUT_DIR_REFERENCE, ".graphify", "0.9.39"
+        )
+
+    def test_fingerprint_survives_a_different_graphify_out(self):
+        # The cache is committed to git so a second machine restores it without
+        # re-paying. A machine on the default GRAPHIFY_OUT took the early
+        # return and got the pristine file; a `.graphify` machine got a banner.
+        # Two buckets for one prompt means the shared cache never hits.
+        assert rgs.rewrite(NO_OUT_DIR_REFERENCE, ".graphify", "1.2.3") == rgs.rewrite(
+            NO_OUT_DIR_REFERENCE, "graphify-out", "1.2.3"
+        )
+
+    def test_a_file_that_does_mention_it_still_gets_the_banner(self):
+        # The guard is "no rewrite happened", not "skip references" — a file
+        # that really was rewritten still needs its do-not-edit warning.
+        assert "<!-- Generated" in rgs.rewrite(REFERENCE, ".graphify", "1.2.3")
+
+
 REFERENCE = """# graphify reference: incremental update
 
 ```bash
