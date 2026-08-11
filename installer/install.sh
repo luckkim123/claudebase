@@ -128,6 +128,13 @@ ensure_graphify_skill
 # the CLI installs above, since it is what those CLIs get driven by.
 ensure_graph_init
 
+# Say the three CLIs exist, once per machine → deps.sh. graph-offer.sh is the
+# only other automatic mention and it short-circuits in any project that already
+# has one graph, so without this a user can carry all three for months and never
+# learn `/graphify` is there. Printed, not prompted; after ensure_graph_init so
+# the verb it names already resolves.
+graph_cli_intro_note
+
 # Register user-scope MCP servers with the CLI. This is separate from
 # render_mcp_json above because Claude Code does NOT read ~/.claude/mcp.json —
 # user-scope servers live in ~/.claude.json, reachable only via `claude mcp add`

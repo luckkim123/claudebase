@@ -290,6 +290,43 @@ ensure_graph_init() {
   link_or_copy "$src" "$HOME/.local/bin/graph-init"
 }
 
+# graph_cli_intro_note — name the three graph CLIs once per machine.
+#
+# The gap this fills: the installs above are unconditional and silent on repeat,
+# so a first-time user ends up carrying three tools nobody ever mentioned. The
+# only automatic mention anywhere is runtime/hooks/graph-offer.sh, and it fires
+# ONLY in a project that has no graph at all — `[ -d "$repo/.code-review-graph" ]
+# && exit 0`. A project where CRG got built first is therefore silent forever,
+# and graphify's prose pass — the one a notes or docs repo actually wants — is
+# never named. Measured on the obsidian vault 2026-08-11: CRG index present
+# since 08-03, no graphify graph.json, hook permanently short-circuited.
+#
+# Printed, never prompted. install.sh must stay non-interactive-safe, and
+# nothing here needs installing: the decision this informs (which repo gets a
+# graph) is per-project and belongs to graph-offer.sh or the sync-claudebase
+# skill, not to a machine-scope installer.
+#
+# Marker-guarded at machine scope so it also reaches machines that installed the
+# CLIs before this note existed — keying off "did anything install on this run"
+# would skip exactly those. Same contract as graph-offer.sh: shown once, and
+# ignoring it is itself a durable answer.
+graph_cli_intro_note() {
+  local marker="$CLAUDE_HOME/.claudebase-graph-intro"
+  [[ -e "$marker" ]] && return 0
+  [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
+  # Nothing to introduce where every install above warned-and-skipped.
+  _bin_present code-review-graph || _bin_present graphify || _bin_present tokensave || return 0
+
+  log "hint: this machine carries three code-graph CLIs (shown once)"
+  log "  code-review-graph  callers, importers, blast radius — per-project SQLite index"
+  log "  tokensave          symbol + markdown-heading index — the only one that reads prose free"
+  log "  graphify           whole-corpus graph; its prose pass is LLM-priced (hours, not seconds)"
+  log "  per project: 'graph-init' builds the two free ones; '/graphify' runs the paid prose pass"
+  log "  which to reach for, and how each fails silently: templates/project-code-review-graph.md"
+
+  : >"$marker" 2>/dev/null || true
+}
+
 ensure_graphify() {
   ensure_uv_tool graphify "graphifyy[mcp]" graphify
   # Self-heal machines that installed graphifyy before the extra was pinned here:

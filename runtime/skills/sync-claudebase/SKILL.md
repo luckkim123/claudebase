@@ -798,6 +798,97 @@ zsh -lc 'command -v bun && bun --version'   # must print a path + version
 Tell the user hooks take effect from the **next** session (`SessionStart` fires
 once per session start) — this sync cannot backfill data for the current one.
 
+**4l. Code graphs for THIS project? (detect-then-ask, once per project)**
+
+`install.sh` puts three graph CLIs on the machine but decides nothing about
+which *repo* gets a graph, and `runtime/hooks/graph-offer.sh` — the only
+automatic prompt — returns early on `[ -d "$repo/.code-review-graph" ]`. So the
+moment a project has any one graph the hook goes silent forever, including about
+the two it never built. Measured on the obsidian vault 2026-08-11:
+`.code-review-graph/graph.db` present since 08-03, no `graph.json` anywhere, the
+hook's own marker never written (it exits before that line), and `/graphify`
+never once surfaced. A sync is a deliberate invocation, so it is the right place
+to close that hole from the other side.
+
+**The project here is the session's working directory, not `~/claudebase`.**
+Every other step `cd`s into the repo being synced; this one must not.
+
+```bash
+PROJ="${CLAUDE_PROJECT_DIR:-$PWD}"          # where the user invoked the sync
+gout="${GRAPHIFY_OUT:-graphify-out}"
+crg=no; gfy=no; tks=no; gjson=""
+[ -f "$PROJ/.code-review-graph/graph.db" ] && crg=yes
+for d in "$gout" .graphify graphify-out; do
+  [ -f "$PROJ/$d/graph.json" ] && { gjson="$PROJ/$d/graph.json"; gfy=yes; break; }
+done
+[ -d "$PROJ/.tokensave" ] && tks=yes
+md=$(git -C "$PROJ" ls-files 2>/dev/null | grep -ci '\.md$')
+code=$(git -C "$PROJ" ls-files 2>/dev/null \
+  | grep -icE '\.(py|js|jsx|ts|tsx|go|rs|java|kt|c|h|cc|cpp|hpp|rb|php|swift|sh|bash|cs|scala|lua)$')
+
+# A graph.json is NOT evidence the prose is in it. The free AST pass emits zero
+# nodes for markdown, and graph-refresh.sh builds exactly that pass — so a
+# code-only graph is indistinguishable from a full one by file existence alone.
+# Count the markdown nodes instead; that is the number the prose question turns
+# on. Measured on the obsidian vault 2026-08-11: graph.json present, 1,017
+# nodes, 728 .py + 140 .json + 85 .cpp + 36 .sh, and **0** from .md — while 822
+# markdown files sat tracked and unindexed.
+gfy_md=0
+[ -n "$gjson" ] && gfy_md=$(python3 -c "
+import json, sys
+g = json.load(open(sys.argv[1]))
+print(sum(1 for x in g.get('nodes', []) if (x.get('source_file') or '').endswith('.md')))
+" "$gjson" 2>/dev/null || echo 0)
+
+echo "(4l) $PROJ — CRG=$crg graphify=$gfy (md nodes: $gfy_md) tokensave=$tks | tracked: ${code} code, ${md} md"
+```
+
+Report that line in the Outputs table **every** run — state costs nothing, and a
+user who merely sees `graphify=no` has already learned the thing this step
+exists for. Whether to *ask* is gated once per project, mirroring the hook's
+contract (marker written when the question is emitted, so ignoring it answers):
+
+```bash
+git_dir="$(git -C "$PROJ" rev-parse --git-dir 2>/dev/null)"
+case "$git_dir" in
+  "")  marker="$HOME/.claude/graph-offered/$(basename "$PROJ")-$(printf '%s' "$PROJ" | cksum | cut -d' ' -f1).sync" ;;
+  /*)  marker="$git_dir/claudebase-graph-sync-asked" ;;
+  *)   marker="$PROJ/$git_dir/claudebase-graph-sync-asked" ;;
+esac
+[ -e "$marker" ] && echo "(4l) already asked for this project — report state, do not ask again"
+```
+
+Marker absent → ask with `AskUserQuestion`, as **two separate decisions**. They
+differ by three orders of magnitude in cost, and bundling them makes a user
+decline a five-second build to avoid a five-hour one:
+
+- **`crg=no` (or `tks=no`) with `code` ≥ 20** → the free tree-sitter builds.
+  Offline, seconds, one command: `graph-init`. Nothing to weigh; just offer it.
+- **`gfy_md` = 0 with a substantial `md` count (≥50)** → graphify's prose
+  semantic pass, the one nothing else ever names. Note the trigger is the
+  markdown-node count, **not** `gfy`: a code-only graph built by
+  `graph-refresh.sh` sets `gfy=yes` while leaving every note invisible, so
+  gating on file existence would skip exactly the repos that need this most.
+  Put the price *in the question* so a yes is informed: it runs an LLM per
+  chunk, `--max-concurrency` is forced to 1 on the `claude-cli` backend, and one
+  774-note vault measured 5.3 min/chunk across 58 chunks — about five hours.
+  `graph-init` does **not** cover this; markdown yields zero tree-sitter nodes
+  no matter how healthy the resulting node count looks.
+
+**Never run the semantic pass from inside the sync.** Hand the user `/graphify`
+and let them start it deliberately — a sync that blocks for hours is a sync
+nobody finishes, and step 9.5 cannot audit a run that never returns. Running
+`graph-init` on a yes is fine, but read its exit code: **2** means a vendored
+tree filled the graph, and that result must be purged (`graph-init --purge`),
+never kept — an empty-shell graph is worse than none, because the PreToolUse
+guards then force every session to consult it.
+
+Write the marker once the question has been put to the user:
+
+```bash
+mkdir -p "$(dirname "$marker")" && date -u +%Y-%m-%dT%H:%M:%SZ >"$marker"
+```
+
 ### 5. Run installer
 
 ```bash
@@ -946,6 +1037,13 @@ third option, and "I mentioned it in the summary" is not (b).
       documented warn-only informational case named elsewhere in this skill
       (e.g. the marketplace cold-start race in 4b). Asked, or N/A (no such
       WARNING appeared).
+- [ ] 4l (code graphs for this project) — the state line reported in the
+      Outputs table **always**, plus an actual question for each missing
+      graph, or N/A (nothing missing, or the once-per-project marker was
+      already set). "This project already has a graph" is not N/A: the hook
+      that would otherwise ask stops dead at the first graph it finds, which
+      is precisely why a repo can carry CRG for months while its owner has
+      never heard of `/graphify`.
 - [ ] Step 9 template adoption — asked if `templates/` changed, or N/A
 
 If any box can't be checked yet, **ask now** — do not write the Outputs
@@ -998,6 +1096,7 @@ already done.
 | "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
 | "They said yes to `uv`/`cargo`, it installed cleanly, that item is done" | Installing the prerequisite is not installing the thing that needed it. install.sh skipped `graphify`/`tokensave`/the MCP registrations in the pass that found the prerequisite missing, so they are still absent — run install.sh once more and confirm the WARNING is gone. Reporting "installed" off the prerequisite alone leaves the tool on disk with nothing wired to it (measured 2026-08-10). |
 | "I'll note this optional plugin / install.sh WARNING in the Outputs summary instead of asking" | That's disclosure, not consent — the user can't redirect a decision they were never actually asked about, and a row in a nine-row table is easy to skim past. This exact shortcut (4k's optional plugins + a `code-review-graph`/`uv` WARNING both downgraded to summary notes) shipped a run reported "complete" with two live decisions silently defaulted to "skip" (2026-08-03). Run the Step 9.5 pre-completion ask audit before writing the Outputs table — every detect-then-ask item needs an actual question, not a mention. |
+| "This project already has a code graph, so 4l has nothing to report" | Having *a* graph says nothing about having the *right* one. The three tools answer different questions and CRG contributes **zero nodes** for markdown, so a prose repo with a healthy-looking CRG index has no index of its notes at all. `graph-offer.sh` makes exactly this mistake by design — it exits on the first graph it finds — which is why a vault carried CRG from 08-03 to 08-11 while `/graphify` was never once named to its owner. Report all three states every run; ask about the missing ones. |
 
 ## Outputs the user expects after a run
 
@@ -1014,6 +1113,7 @@ A short summary table:
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
 | MCP servers (4j) | per server: `<name>: up to date / X → Y (upgraded) / X → Y (deferred) / always-latest (npx) / remote` — plus `reconfigure run: <tool>` if a version bump needed one |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
+| Code graphs, this project (4l) | `CRG=<yes/no> graphify=<yes/no> tokensave=<yes/no>` + `<"built" / "offered, declined" / "already asked (marker set)" / "nothing missing">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |
