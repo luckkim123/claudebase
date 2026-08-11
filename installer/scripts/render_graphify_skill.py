@@ -51,10 +51,43 @@ BANNER = (
 
 
 def rewrite(text: str, out_dir: str, version: str = "unknown") -> str:
-    """Return `text` with the hardcoded output dir replaced by `out_dir`."""
+    """Return `text` with the hardcoded output dir replaced by `out_dir`.
+
+    A file that never mentions `graphify-out` comes back byte-identical — no
+    rewrite, and therefore no banner. That is not a cosmetic nicety: one of
+    these files is a CACHE KEY. graphify buckets its semantic-extraction cache
+    by `prompt_fingerprint()`, a sha256 over the WHOLE TEXT of
+    `references/extraction-spec.md` (graphify/cache.py), so anything this
+    script prepends becomes part of the extraction prompt as far as the cache
+    is concerned — including the `{version}` in BANNER, which is provenance,
+    not instruction.
+
+    Measured on the obsidian vault 2026-08-11: with the banner present,
+    changing only `graphify 0.9.39` to `0.9.38` moved the bucket from
+    `p7814ca696b13` to `p868ee8799dae`. Every graphify upgrade therefore
+    orphaned the whole semantic cache even when the prompt body was
+    byte-identical, and the corpus was re-extracted at full LLM cost — ~10M
+    tokens for 898 files on that vault, for a version string.
+
+    The banner also made the file MACHINE-specific, which breaks the other
+    half of the design: the cache is committed to git precisely so a second
+    machine restores it without re-paying. A machine on the default
+    `GRAPHIFY_OUT=graphify-out` takes the early return below and gets the
+    pristine file, while `.graphify` machines got a banner — two buckets for
+    one prompt, so the shared cache never hit across them.
+
+    `extraction-spec.md` carries zero `graphify-out` occurrences against
+    graphify 0.9.39 (the paths it names are substituted by the caller), so
+    skipping the no-op rewrite leaves it identical to the packaged prompt.
+    Its fingerprint then moves when graphify actually changes the prompt,
+    which is the behaviour the cache was designed around. `hooks.md` is the
+    other zero-occurrence file and simply loses a banner it never needed.
+    """
     if out_dir == DEFAULT_OUT:
         return text
     body = text.replace(DEFAULT_OUT, out_dir)
+    if body == text:
+        return text
     banner = BANNER.format(old=DEFAULT_OUT, new=out_dir, version=version)
     return insert_after_frontmatter(body, banner)
 
