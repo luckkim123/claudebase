@@ -4,7 +4,8 @@
     "GATEGUARD_EXEMPT_GLOBS": ".omp/**,.omx/**,.oms/**,.omd/**,.omha/**,.sp/**,.graphify/**,.tokensave/**,.code-review-graph/**,node_modules/**,.git/**",
     "GRAPHIFY_OUT": ".graphify",
     "OMD_ROUTE_GATE": "on",
-    "OMX_ROUTE_GATE": "observe"
+    "OMP_ROUTE_GATE": "on",
+    "OMX_ROUTE_GATE": "on"
   },
   "permissions": {
     "defaultMode": "auto",
