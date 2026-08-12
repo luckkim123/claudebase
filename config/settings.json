@@ -38,7 +38,7 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Read|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
