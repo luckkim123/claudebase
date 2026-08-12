@@ -38,6 +38,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# SESSION_GATE\npython3 ~/claudebase/runtime/hooks/session-gate.py",
+            "timeout": 5,
+            "statusMessage": "Checking the project's plan-of-record gate"
+          }
+        ]
+      },
+      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {
