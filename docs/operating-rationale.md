@@ -121,3 +121,17 @@ Three failures compounded, and only the first two are avoidable by discipline al
 Then the handoff compressed six reasoned dispositions into six prohibitions ("`step_interval` stays 250"), which removed the receiving session's ability to see that any of them had ever been a choice. Carry a held decision as **decision / alternative considered / why held / what it costs**, never as a bare "stays".
 
 **Mechanized where possible.** `omx program-lint` (oh-my-experiments v0.11.0) gates exactly this for experiment plans: objective present as a blockquote, a canonical decision section, every `[DECISION-REQUIRED: <slug>]` escalated into it, and a stated predicted outcome. It reports four findings on the plan above. But a lint cannot catch *"the user said it and nobody wrote it down"* — an objective section filled with the wrong goal passes. That part is discipline, which is why the rule lives here too.
+
+---
+
+## summary-layer-follows-body
+
+**Rule (see `config/CLAUDE.md`):** Fix the body, fix its summary in the same edit. Every pointer layer that summarizes content — a memory's frontmatter `description` and its `MEMORY.md` index line, a README's table of contents, a doc's staleness banner — is what recall and routing actually read, so a stale summary outranks a correct body.
+
+**Why the summary is the more dangerous half.** Retrieval does not read the body to decide relevance; it reads the summary. An auto-memory file is selected for injection by its `description`, and `MEMORY.md` is the index loaded into every session — the body is consulted only *after* the summary has already won or lost the ranking. So a body that says "this was retracted" and a description that still asserts the retracted conclusion do not average out. The description wins, and it wins silently: the retraction is invisible precisely in the moment the wrong conclusion is handed to a new session.
+
+**The incident (2026-08, obsidian vault).** A memory's body carried a struck-through retraction of its own headline finding, dated the day the retraction was measured. Its frontmatter `description` and its `MEMORY.md` index line kept the pre-retraction conclusion for about ten days, until a later session noticed and corrected both (recorded in that vault's `1_Area/2026-08-14-harness-ownership-gap-prompt.md` §3 P4). Nothing errored. The body was, the whole time, correct.
+
+**It is one instance of a general shape.** The same day surfaced three siblings: a project rules file still naming a directory that had been renamed away; a handoff quoting a canonical plan's line count from a revision that had since grown by ~120 lines; a routing pointer describing a layout that no longer existed. In each case the *source* was right and the *pointer to it* was wrong, and in each case the pointer is what the next reader consumed. **Summaries and pointers outlive the thing they summarize** — that is the failure family, and it is why the rule says "in the same edit" rather than "eventually".
+
+**What this does not license.** It is not an instruction to write summaries defensively, to hedge them, or to duplicate the body into them — that produces a second document rotting on its own schedule. The lazy form is the correct one: if a summary cannot be kept current, delete it rather than leave it. A missing pointer sends the reader to the source; a wrong one does not.

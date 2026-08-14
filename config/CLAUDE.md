@@ -182,6 +182,7 @@ Test before commit: "Does every non-obvious statement have something I could poi
 - **A self-scheduled wakeup is a note to yourself, NOT a user instruction.** `ScheduleWakeup`/`CronCreate`/`/loop` re-inject their `prompt` as a `user`-role message — indistinguishable from a real user turn, but with a `scheduled_task_fire` system line right before it. When a turn repeats an earlier prompt, check for that line: if present, the text is your own wakeup, so it only resumes the *already-agreed* task, never authorizes new scope. If the last genuine user message was an unanswered decision, wait for the human. Put a *resume marker* in the wakeup `prompt`, never a full re-issued brief. ↪ rationale: docs/operating-rationale.md#self-scheduled-wakeup-not-instruction
 - **A recommendation is not approval; confirming a fact is not a "yes, do it".** When a decision is genuinely the user's (you'd have asked via `AskUserQuestion`), the answer comes *from the user*. Abandoning the `AskUserQuestion` tool means keep talking, NOT start editing on the branch you recommended. And if the user replies "that's correct, but…" to a fact you proposed, they *verified the fact*, not *authorized the action* — re-confirm what to *do* before doing it. The tell: you're about to write "proceeding" right after a fact-only acknowledgement. ↪ rationale: docs/operating-rationale.md#recommendation-not-approval
 - **Write the requester's objective into the plan verbatim, before designing.** Every decision to hold or change something argues against *that* line. Redefining it mid-document is a re-ask, not an edit — a substituted objective makes every downstream trade look correct. Whatever your analysis marks as needing a decision is the user's, not yours. ↪ rationale: docs/operating-rationale.md#objective-verbatim
+- **Fix the body, fix its summary in the same edit.** Pointer layers — a memory's frontmatter `description` and its index line, a README ToC, a doc banner — are what recall and routing read, so a stale summary outranks a correct body. Update every layer that summarizes content in the same commit; never leave a retraction visible only in the body. ↪ rationale: docs/operating-rationale.md#summary-layer-follows-body
 
 ### Adding an Operational Limit (keep this file lean)
 
@@ -263,5 +264,5 @@ The goal is reducing costly mistakes on non-trivial work, not slowing down simpl
 
 ---
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-08-14
 **Managed by**: [`claudebase`](https://github.com/luckkim123/claudebase) — edit at `~/claudebase/config/CLAUDE.md`, the installer symlinks `~/.claude/CLAUDE.md` to it.
