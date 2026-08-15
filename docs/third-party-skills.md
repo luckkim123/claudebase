@@ -161,3 +161,43 @@ The four other names that read like dangling references in `mle-reviewer.md`
 (`database-reviewer`, `performance-optimizer`, `silent-failure-hunter`,
 `a11y-architect`) are **not** references — they are that file's own record of which
 upstream agents were deliberately dropped. Do not "fix" them.
+
+## Scanning a skill before installing it
+
+A skill installs as executable instructions with no vetting step, and this machine
+carries eight marketplaces. [`NVIDIA/SkillSpector`](https://github.com/NVIDIA/SkillSpector)
+(Apache-2.0, Python 3.12+) is the supply-chain filter that layer was missing:
+
+```bash
+uv tool install "git+https://github.com/NVIDIA/skillspector.git"
+skillspector scan <dir> --recursive --no-llm --format json --output r.json
+```
+
+`--no-llm` is static-only — free, no key, ~1.4 s for a six-skill plugin. The LLM
+stage needs a provider key and is what would raise precision; it has not been run
+here.
+
+**Use it as triage, never as a gate.** Measured 2026-08-15 across every installed
+plugin's `skills/` tree plus this repo's own 17 (204 skills): 7 CRITICAL, 48 HIGH,
+165 MEDIUM in the plugins, and 70 HIGH in ours. **All 7 CRITICAL were false**, and
+reading the `finding` field is what shows it in seconds:
+
+| Finding | Evidence field held | Reality |
+|:---|:---|:---|
+| 6× CRITICAL "Prompt Injection — may cause physical harm", `marketing-skills/ad-creative` | `"arsenic"` | An example ad campaign for a protein powder's heavy-metal lab test: *"Results table: Arsenic / Cadmium / Lead, all within limits"* |
+| 1× CRITICAL "YARA — known malware signature (reverse shell, backdoor, C2)", `claude-mem/mode-creator` | `"process.env.; process.env.; …; fetch"` | A Telegram bot setup wizard that reads env vars and calls `api.telegram.org`. No `exec`, `spawn`, `eval`, or `base64` anywhere in the file |
+| 6× HIGH "Tool Misuse", our own `gateguard` | `"rm -rf /"`, `"git reset --hard"` | The test fixtures of the guard that exists to block those strings |
+
+Two calibration facts fall out of the same run: Anthropic's first-party
+`superpowers` scores 95/100 and this repo's own skills score 100. The number is a
+count of pattern hits, not a trust ranking, and treating it as one would retire
+the safest things installed.
+
+**The trap: `--recursive` does not follow symlinks, and says nothing when it
+skips.** Pointed at `~/.claude/skills` — 19 entries, 17 of them symlinks into
+`runtime/skills/` — it reported a clean scan of **2 skills** with no warning.
+Scan `~/claudebase/runtime/skills` directly; the symlink farm is not a target.
+
+So the standing practice is the same shape as `.claude/scripts/citation-check.py`
+in the vault: a detector that narrows what a human reads, run deliberately before
+adopting something new, and never wired to a hook or a blocking gate.
