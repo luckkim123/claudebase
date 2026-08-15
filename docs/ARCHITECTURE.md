@@ -36,7 +36,7 @@ claudebase/
 │   └── secrets.env           # **gitignored** — real API keys
 ├── templates/                # boilerplate for new project .claude/
 ├── eval/                     # coder_eval tasks/experiments — does the harness change outcomes?
-├── docs/                     # ARCHITECTURE, CHANGELOG, CONTRIBUTING, specs/<topic>/{design,plan}.md
+├── docs/                     # ARCHITECTURE, CHANGELOG, CONTRIBUTING, loop-contract, specs/<topic>/{design,plan}.md
 ├── CLAUDE.md                 # repo-internal rules (not symlinked)
 ├── README.md
 └── LICENSE
