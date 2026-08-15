@@ -1,0 +1,31 @@
+experiment_id: om-plugins
+description: >
+  Keyword-trigger regression check for the om* skills. Both arms keep "Skill" in
+  allowed_tools so the only variable is whether the plugins are offered at all —
+  the baseline arm proves the criterion can report "no", which is what makes a
+  "yes" in the treatment arm mean something.
+
+defaults:
+  agent:
+    type: claude-code
+    permission_mode: acceptEdits
+    allowed_tools: ["Skill", "Read", "Glob", "Grep"]
+    model: "claude-sonnet-5"
+  repeats: 1
+
+variants:
+  - variant_id: no-plugins
+    description: "om* plugins absent — control"
+    agent:
+      plugins: []
+
+  - variant_id: with-plugins
+    description: "om* plugins offered"
+    agent:
+      plugins:
+        - type: "local"
+          path: "/Users/kimseungmin/oh-my-project"
+        - type: "local"
+          path: "/Users/kimseungmin/oh-my-experiments"
+        - type: "local"
+          path: "/Users/kimseungmin/oh-my-docs"

@@ -1,0 +1,21 @@
+experiment_id: om-with-only
+description: >
+  Treatment arm only. The control was already established in om-plugins: with
+  plugins: [] every row observed "no", which is what proves the criterion can
+  report a negative. Re-running it here would spend tokens re-confirming that.
+
+defaults:
+  agent:
+    type: claude-code
+    permission_mode: acceptEdits
+    allowed_tools: ["Skill", "Read", "Glob", "Grep", "Bash"]
+    model: "claude-sonnet-5"
+  repeats: 1
+
+variants:
+  - variant_id: with-plugins
+    description: "oh-my-project offered"
+    agent:
+      plugins:
+        - type: "local"
+          path: "/Users/kimseungmin/oh-my-project"

@@ -1,0 +1,29 @@
+task_id: "om_skill_trigger_seeded"
+description: >
+  Same trigger question as om_skill_trigger, but with the skill's precondition
+  seeded. The first run could not tell a trigger regression from a correct
+  refusal: omp-brief/SKILL.md line 35 says "`.omp/secretary/` doesn't exist yet
+  -> omp-init first; there is nothing to summarize", so the agent declining to
+  call it in an empty sandbox was the documented behaviour, not a miss.
+tags: [harness, skill-activation]
+
+initial_prompt: "이 프로젝트 현황 브리핑해줘. 어디까지 했고 다음에 뭐 하지?"
+
+pre_run:
+  - command: "mkdir -p .omp/secretary/journal .omp/secretary/decisions"
+  - command: "printf '' > .omp/secretary/ledger.jsonl"
+  - command: "printf 'x 2026-08-14 harness 계측 스크립트 작성\\n' > .omp/secretary/todo.txt"
+  - command: "printf '# 2026-08-15\\n계측 스크립트 4표 완성.\\n' > .omp/secretary/journal/2026-08-15.md"
+  - command: "printf '{\"project\": \"trigger-probe\"}\\n' > .omp/rules.json"
+
+run_limits:
+  max_turns: 6
+  task_timeout: 300
+  max_usd: 1.50
+
+success_criteria:
+  - type: "skill_triggered"
+    description: "omp-brief activation with precondition present"
+    skill_name: "omp-brief"
+    expected_skill: "omp-brief"
+    weight: 1.0

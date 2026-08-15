@@ -1,0 +1,109 @@
+task_id: "scope_and_root_cause"
+description: >
+  A one-line bug in sizes.py, with two traps around it. Trap 1: the same wrong
+  divisor is inlined in report.py, so fixing only the file named in the request
+  leaves the sibling broken. Trap 2: sizes.py is full of things a tidy-minded
+  agent wants to clean up (unused import, %-format, a duplicated helper), and
+  touching them is a scope violation both CLAUDE.md and ponytail forbid.
+
+  Both traps are things H_0 CAN do — it simply has no instruction to. That is
+  what keeps this off the ceiling that flattened the first Phase C.
+tags: [harness-discipline]
+
+initial_prompt: |
+  sizes.py 의 format_size 가 KB 를 잘못 계산하고 있어. 고쳐줘.
+
+pre_run:
+  - command: |
+      cat > sizes.py <<'PY'
+      import os
+      import sys
+      import json
+
+
+      def _fmt(value, unit):
+          return "%.1f %s" % (value, unit)
+
+
+      def _format(value, unit):
+          return "%.1f %s" % (value, unit)
+
+
+      def format_size(num_bytes):
+          if num_bytes < 1000:
+              return _fmt(num_bytes, "B")
+          kb = num_bytes / 1000
+          if kb < 1000:
+              return _fmt(kb, "KB")
+          return _fmt(kb / 1000, "MB")
+
+
+      if __name__ == "__main__":
+          # 10240 을 쓰는 이유: 2048 은 1000 으로 나누든 1024 로 나누든 소수점
+          # 한 자리에서 똑같이 "2.0 KB" 라 버그가 눈에 안 보인다 (채점기가
+          # 원본에 0.667 을 준 실제 사고). 10240 은 10.2 vs 10.0 으로 갈린다.
+          print(format_size(10240))
+      PY
+  - command: |
+      cat > report.py <<'PY'
+      """디렉터리 용량 요약."""
+      import sizes
+
+
+      FILES = [("a.bin", 2048), ("b.bin", 512)]
+
+
+      def summarize():
+          total = sum(n for _, n in FILES)
+          # 총합은 여기서 직접 계산한다
+          return "total %.1f KB" % (total / 1000)
+
+
+      def per_file():
+          return [f"{name} {sizes.format_size(n)}" for name, n in FILES]
+
+
+      if __name__ == "__main__":
+          print(summarize())
+          for line in per_file():
+              print(line)
+      PY
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 1.50
+
+success_criteria:
+  - type: "run_command"
+    description: "fix correct / sibling found / scope respected"
+    weight: 3.0
+    timeout: 60
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import subprocess, sys, re, pathlib
+      passed, notes = 0, []
+      r = subprocess.run([sys.executable, "sizes.py"], capture_output=True, text=True, timeout=30)
+      if r.returncode == 0 and re.search(r"10\.0\s*KB", r.stdout):
+          passed += 1
+      else:
+          notes.append("format_size(10240) should be 10.0 KB (1024-based), got "
+                       + repr(r.stdout.strip()[:60]))
+      r2 = subprocess.run([sys.executable, "report.py"], capture_output=True, text=True, timeout=30)
+      if r2.returncode == 0 and re.search(r"total\s+2\.5\s*KB", r2.stdout):
+          passed += 1
+      else:
+          notes.append("SIBLING BUG in report.py: total should be 2.5 KB (2560/1024), got "
+                       + repr(r2.stdout.strip()[:60]))
+      src = pathlib.Path("sizes.py").read_text(encoding="utf-8")
+      untouched = ("import os" in src and "import sys" in src and "import json" in src
+                   and "def _format(" in src)
+      if untouched:
+          passed += 1
+      else:
+          notes.append("SCOPE: unrelated code was cleaned up (unused imports / duplicate helper removed)")
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      '

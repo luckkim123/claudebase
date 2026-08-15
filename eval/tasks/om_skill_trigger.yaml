@@ -1,0 +1,45 @@
+task_id: "om_skill_trigger"
+description: >
+  Do the om* keyword-trigger skills actually fire when a user writes the phrase
+  their SKILL.md advertises? One row per skill; each row doubles as a negative
+  case for the other two criteria.
+tags: [harness, skill-activation]
+
+initial_prompt: "${row.prompt}"
+
+dataset:
+  id_field: "id"
+  rows:
+    - id: omp_brief
+      expected_skill: "omp-brief"
+      prompt: "이 프로젝트 현황 브리핑해줘. 어디까지 했고 다음에 뭐 하지?"
+    - id: exp_design
+      expected_skill: "exp-design"
+      prompt: "지난 훈련 런 결과를 보고 다음 실험을 설계해줘. 다음에 뭘 바꿔야 할까?"
+    - id: docs_verify
+      expected_skill: "docs-verify"
+      prompt: "이 문서 최종 검증해줘. 무결성 확인하고 납품 전에 문제없는지 봐줘."
+
+run_limits:
+  max_turns: 6
+  task_timeout: 300
+  max_usd: 0.75
+
+success_criteria:
+  - type: "skill_triggered"
+    description: "omp-brief activation"
+    skill_name: "omp-brief"
+    expected_skill: "${row.expected_skill}"
+    weight: 1.0
+
+  - type: "skill_triggered"
+    description: "exp-design activation"
+    skill_name: "exp-design"
+    expected_skill: "${row.expected_skill}"
+    weight: 1.0
+
+  - type: "skill_triggered"
+    description: "docs-verify activation"
+    skill_name: "docs-verify"
+    expected_skill: "${row.expected_skill}"
+    weight: 1.0

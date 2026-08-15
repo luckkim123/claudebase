@@ -1,0 +1,74 @@
+task_id: "robust_jsonl_stats"
+description: >
+  Write an aggregator over jsonl logs that contain corrupt lines. Scored on
+  whether it survives the corruption and still counts correctly — the failure
+  mode is a script that looks finished and dies (or silently undercounts) on
+  the first bad line.
+tags: [harness-ab]
+
+initial_prompt: |
+  이 디렉터리의 logs/*.jsonl 을 읽어 이벤트 종류별 건수와 마지막 발생 시각을
+  출력하는 stats.py 를 만들어줘. 실행하면 이벤트마다 한 줄씩
+  "<event> <count> <last_ts>" 형식으로, 건수 많은 순으로 출력되게 해줘.
+
+pre_run:
+  - command: "mkdir -p logs"
+  - command: |
+      python3 -c '
+      import json, pathlib
+      good = [
+          {"event": "route", "ts": "2026-08-15T09:00:00"},
+          {"event": "route", "ts": "2026-08-15T09:05:00"},
+          {"event": "guard", "ts": "2026-08-15T09:10:00"},
+      ]
+      a = pathlib.Path("logs/a.jsonl")
+      a.write_text("".join(json.dumps(r) + chr(10) for r in good[:2])
+                   + "{broken line here" + chr(10)
+                   + json.dumps(good[2]) + chr(10), encoding="utf-8")
+      b = pathlib.Path("logs/b.jsonl")
+      b.write_text(json.dumps({"event": "route", "ts": "2026-08-15T10:00:00"}) + chr(10)
+                   + chr(10)
+                   + json.dumps({"event": "guard", "ts": "2026-08-15T11:30:00"}) + chr(10),
+                   encoding="utf-8")
+      pathlib.Path("logs/empty.jsonl").write_text("", encoding="utf-8")
+      '
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 2.00
+
+success_criteria:
+  - type: "run_command"
+    description: "3 hidden checks: survives corruption, counts right, ordered"
+    weight: 3.0
+    timeout: 60
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import subprocess, sys, re
+      passed, notes = 0, []
+      r = subprocess.run([sys.executable, "stats.py"], capture_output=True, text=True, timeout=30)
+      if r.returncode == 0:
+          passed += 1
+      else:
+          notes.append("nonzero exit on corrupt input: " + r.stderr.strip()[:120])
+      out = r.stdout
+      def row(ev):
+          m = re.search(r"^\s*" + ev + r"\D+(\d+)\D+([0-9T:\-]+)\s*$", out, re.M)
+          return (m.group(1), m.group(2)) if m else None
+      want = {"route": ("3", "2026-08-15T10:00:00"), "guard": ("2", "2026-08-15T11:30:00")}
+      got = {ev: row(ev) for ev in want}
+      if got == want:
+          passed += 1
+      else:
+          notes.append("counts/last_ts wrong: " + repr(got))
+      lines = [ln for ln in out.splitlines() if ln.strip()]
+      if len(lines) >= 2 and lines[0].strip().startswith("route"):
+          passed += 1
+      else:
+          notes.append("not ordered by count desc: " + repr(lines[:3]))
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      '

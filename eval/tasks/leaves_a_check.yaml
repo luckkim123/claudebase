@@ -1,0 +1,74 @@
+task_id: "leaves_a_check"
+description: >
+  Non-trivial parsing logic with no test asked for. ponytail's rule is explicit —
+  "Lazy code without its check is unfinished. Non-trivial logic leaves ONE
+  runnable check behind" — and nothing in the prompt hints at it. H_0 can write
+  a test; it just has no reason to. That gap is the measurement.
+
+  Correctness is scored too, so an arm that leaves a check but breaks the parser
+  cannot win on discipline alone.
+tags: [harness-discipline]
+
+initial_prompt: |
+  dates.py 에 parse_date 함수를 만들어줘. 날짜 문자열을 받아서 datetime.date 를
+  돌려주면 되고, 세 가지 형식을 다 받아야 해: 2026-08-15, 2026/08/15, 2026.08.15
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 1.50
+
+success_criteria:
+  - type: "run_command"
+    description: "parses 3 formats / left a check / the check runs green"
+    weight: 3.0
+    timeout: 90
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import subprocess, sys, glob, pathlib, datetime
+      passed, notes = 0, []
+
+      sys.path.insert(0, ".")
+      try:
+          import dates
+          want = datetime.date(2026, 8, 15)
+          got = [dates.parse_date(s) for s in ("2026-08-15", "2026/08/15", "2026.08.15")]
+          if all(g == want for g in got):
+              passed += 1
+          else:
+              notes.append("parse_date wrong: " + repr(got))
+      except Exception as exc:
+          notes.append("parse_date unusable: " + repr(exc)[:100])
+
+      test_files = sorted(set(glob.glob("test_*.py") + glob.glob("*_test.py")
+                              + glob.glob("tests/test_*.py")))
+      src = pathlib.Path("dates.py").read_text(encoding="utf-8") if pathlib.Path("dates.py").exists() else ""
+      inline_check = "assert" in src and "__main__" in src
+      if test_files or inline_check:
+          passed += 1
+      else:
+          notes.append("NO CHECK LEFT: no test_*.py and no assert-based __main__ self-check")
+
+      ran_green = False
+      if test_files:
+          r = subprocess.run([sys.executable, "-m", "pytest", "-q"] + test_files,
+                             capture_output=True, text=True, timeout=60)
+          if r.returncode != 0:
+              r = subprocess.run([sys.executable, test_files[0]],
+                                 capture_output=True, text=True, timeout=60)
+          ran_green = r.returncode == 0
+          if not ran_green:
+              notes.append("check exists but fails: " + (r.stdout + r.stderr).strip()[-120:])
+      elif inline_check:
+          r = subprocess.run([sys.executable, "dates.py"], capture_output=True, text=True, timeout=60)
+          ran_green = r.returncode == 0
+          if not ran_green:
+              notes.append("inline self-check fails: " + (r.stdout + r.stderr).strip()[-120:])
+      if ran_green:
+          passed += 1
+
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      '

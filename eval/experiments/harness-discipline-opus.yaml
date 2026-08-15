@@ -1,0 +1,52 @@
+experiment_id: harness-discipline-opus
+description: >
+  Stage 2 of the discipline A/B. Stage 1 (sonnet) separated — h0 0.667 vs
+  ht 1.000 — so the Opus arms are now worth their tokens.
+
+  Kept as a SEPARATE experiment rather than two more variants in
+  harness-discipline.yaml on purpose: adding them there would re-run the six
+  sonnet tasks that already have results, at full price, for nothing.
+
+  What this tests is arXiv 2605.30621's non-monotonicity claim: harness-benefit
+  peaks at mid-tier and shrinks at strong-tier because the strong model already
+  does much of what the harness instructs. A SMALLER delta here than sonnet's
+  +0.333 is the predicted outcome, NOT evidence the harness failed.
+
+  Same boundary as stage 1: setting_sources=["project"] + fresh tempdir, so
+  neither arm loads ~/.claude/CLAUDE.md or the claudebase hooks. Plugin list is
+  the only variable.
+
+defaults:
+  agent:
+    type: claude-code
+    permission_mode: bypassPermissions
+    allowed_tools: ["Skill", "Bash", "Read", "Write", "Edit", "Glob", "Grep"]
+    model: "claude-opus-5"
+  repeats: 1
+
+variants:
+  - variant_id: h0-opus
+    description: "no plugins"
+    agent:
+      plugins: []
+
+  - variant_id: ht-opus
+    description: "full plugin layer"
+    agent:
+      plugins:
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/omc/oh-my-claudecode/4.15.7"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/ponytail/ponytail/4.8.4"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-heroacademia/db6099a0c006"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-project/0.11.1"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-experiments/0.11.1"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-docs/0.6.6"
+        - type: "local"
+          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-scholar/0.13.1"
