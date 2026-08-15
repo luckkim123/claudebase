@@ -124,6 +124,16 @@ def test_shim_plus_body_scores_all(tmp_path):
     assert all(_scores(text).values()), _scores(text)
 
 
+def test_discovery_covers_a_loop_whose_name_does_not_say_loop(tmp_path):
+    """omp-garden is a periodic sweep with state and an escalation cap. A
+    name-shaped rule that missed it would print a table that looks complete."""
+    root = tmp_path / "oh-my-project"
+    (root / "skills" / "omp-garden").mkdir(parents=True)
+    (root / "skills" / "omp-garden" / "SKILL.md").write_text(KNOWN_GOOD)
+    found = MOD.loop_skills({"oh-my-project": root})
+    assert [s for _, s, _, _ in found] == ["omp-garden"]
+
+
 def test_loop_skills_finds_only_loop_shaped_skills(tmp_path):
     root = _plugin(tmp_path, with_body=True)
     (root / "skills" / "sample-build").mkdir(parents=True)

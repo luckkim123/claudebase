@@ -75,21 +75,33 @@ while the repo showed working code.
 every one of those loops as failing all five checks, and reports no error while
 doing it.
 
+**Check 5 over-counts, and the evidence line is the correction.** The activity
+column globs every path literal the skill names — including the ones it names to
+send you elsewhere. `omp-garden` scores activity off `.omp/STRUCTURE.md` because
+its Do_Not_Use_When routes there. Read the example path under the row before
+reading the number as proof the loop ran.
+
 **Check 4 has a blind spot in `oh-my-claudecode`.** Ralph's real anti-self-
 approval enforcement is a Stop hook in compiled JS (`dist/`, referenced from
 `hooks/hooks.json`), not prose — a prose grep finds the reviewer delegation but
 cannot see the gate that makes it mandatory. Prose absence there is not
 enforcement absence.
 
-## Standing as of 2026-08-15
+## Standing as of 2026-08-16
 
 Run `python3 runtime/hooks/loop_lint.py --root <project>` for the live table.
 The gaps that motivated writing this down:
 
 | Loop | Gap |
 |:---|:---|
+| `ultragoal` | Weakest row — no deterministic stop, no numeric cap, no separate verifier |
+| `ultrawork` | No state file, no cap |
+| `ultraqa` | Cap without a named escalation path |
 | `docs-revise`, `scholar-revise` | Round history lives in the conversation; the `.omd`/`.oms` tree holds artifacts, not loop state |
 | all of them | No two share a state-file convention — `.omc/state/sessions/<id>/prd.json`, `pending-launch.json` + ledger, an artifact tree |
+
+`oh-my-project 0.12.0`'s `omp-garden` is the first loop written against this
+document rather than audited by it, and scores all five.
 
 Nothing here asks an existing loop to change. The point of writing it down is
 that the sixth loop should not invent a seventh convention.

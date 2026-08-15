@@ -30,6 +30,13 @@ Two tables, and the trap each carries:
       only the registered file scores every one of those loops as failing all
       five checks, and reports no error doing it.
 
+      The `activity` count is generous on purpose and must be read with its
+      evidence line. It globs every path literal the skill names, including the
+      ones named to say "that belongs to another stage" — omp-garden's row
+      counts `.omp/STRUCTURE.md` because its Do_Not_Use_When routes there. The
+      printed example path is what tells a reader whether the count is the
+      loop's own state or a neighbour's.
+
   [B] Enforcement surface — which hook can actually block, per plugin. This is
       the "which transitions live only in prose" question in its only
       answerable form: a transition can be enforced only where a hook event
@@ -55,8 +62,12 @@ _SOURCE_ROOTS = [Path.home() / "oh-my-heroacademia", Path.home()]
 
 # The signal used to enumerate the loops, narrowed to om* plugins so that
 # `marketing-skills/marketing-loops` stops showing up as one of ours.
+# `garden` is here because omp-garden (0.12.0) is a loop whose name says nothing
+# about looping — a periodic sweep with a state file and an escalation cap. A
+# name-shaped discovery rule silently omits exactly those, and the omission looks
+# like a clean table.
 _LOOP_NAME_RE = re.compile(
-    r"loop|revise|ralph|autopilot|ultraqa|ultrawork|ultragoal", re.I)
+    r"loop|revise|ralph|autopilot|ultraqa|ultrawork|ultragoal|garden", re.I)
 
 # ─── contract checks ────────────────────────────────────────────────────────
 # Each is a keyword probe, not a semantic judgement. See the module docstring.
@@ -78,6 +89,7 @@ _STOP_RE = re.compile(
     r"|\btests?\b[^.\n]{0,20}\bpass(?:es|ed)?\b"
     r"|\brc\s*[12]\b|exit\s*(?:code\s*)?[12]\b"
     r"|deadline_passed"
+    r"|no new (?:findings|items|results)"
     r"|\"decision\"|loop-health", re.I)
 
 # Not a failure — a note. Ralph carries this phrasing inside a <Bad> example,
@@ -87,7 +99,7 @@ _SOFT_RE = re.compile(
     r"|when you (?:think|feel)|if satisfied", re.I)
 
 _CAP_RE = re.compile(
-    r"\b\d+\s*\+?\s*(?:회|번|times|rounds?|iterations?|attempts?|blocked stops)"
+    r"\b\d+\s*\+?\s*(?:회|번|times|rounds?|sweeps?|iterations?|attempts?|blocked stops)"
     r"|\{\{MAX\}\}"
     r"|max[_-]?(?:runtime|iterations?|rounds?)"
     r"|hard\s*cap", re.I)
@@ -209,6 +221,12 @@ def state_paths(text: str) -> list:
         if "/" not in raw and raw != "progress.txt":
             continue
         if _NOT_STATE.search(raw):
+            continue
+        # A literal '*' in the prose is a glob the skill is documenting, not a
+        # path it writes. omp-garden names its own default sweep set (`docs/*.md`)
+        # and scored 26 "activity" hits off claudebase's docs directory — a live
+        # loop invented out of a sentence about globs.
+        if "*" in raw:
             continue
         pattern = re.sub(r"\{[^}]*\}|<[^>]*>", "*", raw).lstrip("/")
         if pattern and pattern not in out:
