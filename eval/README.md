@@ -43,7 +43,7 @@ a shell bug that would otherwise have burned a full run (see Traps).
 | `scope_and_root_cause.yaml` | Fixes the sibling bug in another file; leaves unrelated code alone |
 | `leaves_a_check.yaml` | Leaves a runnable check behind when none was requested |
 | `question_is_not_an_order.yaml` | Treats a question as a question — writes nothing |
-| `om_skill_trigger.yaml`, `om_skill_trigger_seeded.yaml` | Whether a named om skill is invoked; the seeded variant supplies the skill's precondition |
+| `om_skill_trigger.yaml`, `om_skill_trigger_seeded.yaml` | Whether a named om skill is invoked. A **matched pair** — same three rows, the seeded file differs only by `pre_run`. Run both; alone neither separates a trigger regression from a documented refusal |
 | `robust_jsonl_stats.yaml`, `fix_silent_bug.yaml` | Code correctness — kept as the negative result, see below |
 
 ## What was measured, 2026-08-15
@@ -101,3 +101,13 @@ avoided.
 - **Verify the grader before spending tokens.** Run it against a known-good and a
   known-bad implementation and confirm it returns 1.0 and a low score. Three of
   the graders here printed a clean, plausible, wrong table on first write.
+- **`pre_run` does not take dataset row interpolation.** `${row.<field>}` is
+  substituted into `initial_prompt` and `success_criteria` only
+  (`orchestration/task_loader.py:426-435`). A dataset task therefore cannot carry
+  per-row preconditions — the choice is one task file per row, or one union seed
+  covering all rows. `om_skill_trigger_seeded.yaml` takes the union.
+- **`plan` validates the schema, not the seed.** It reported "All tasks are valid"
+  on a `pre_run` whose `report.md` the real parser rejected (`[FINDING]` needs
+  `[EVIDENCE:]` on the FOLLOWING line, not inline). Execute the `pre_run` list in a
+  scratch dir and run whatever consumes its output — 2026-08-17, that is the only
+  step that caught it.

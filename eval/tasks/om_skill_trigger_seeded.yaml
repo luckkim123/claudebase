@@ -1,29 +1,90 @@
 task_id: "om_skill_trigger_seeded"
 description: >
-  Same trigger question as om_skill_trigger, but with the skill's precondition
-  seeded. The first run could not tell a trigger regression from a correct
-  refusal: omp-brief/SKILL.md line 35 says "`.omp/secretary/` doesn't exist yet
-  -> omp-init first; there is nothing to summarize", so the agent declining to
-  call it in an empty sandbox was the documented behaviour, not a miss.
+  TREATMENT arm of the seeded/unseeded pair — the same three rows as
+  om_skill_trigger.yaml, with each skill's documented precondition supplied by
+  pre_run. Compare the two files row by row; the only difference is pre_run.
+
+  Why it exists: the first run could not tell a trigger regression from a correct
+  refusal. omp-brief/SKILL.md's Do_Not_Use_When says "`.omp/secretary/` doesn't
+  exist yet -> omp-init first; there is nothing to summarize", so the agent
+  declining in an empty sandbox was the documented behaviour, not a miss.
+  skill_triggered scores a Skill tool call, and an agent that reasons "there is
+  nothing here to brief" never makes the call at all.
+
+  Why ONE union seed instead of one file per skill: pre_run does not take dataset
+  row interpolation. `${row.<field>}` is substituted into initial_prompt and
+  success_criteria only (coder_eval orchestration/task_loader.py:426-435), so a
+  dataset task cannot carry per-row preconditions. The union is also the more
+  realistic sandbox — a real repository has .omp/ and .omx/ at the same time.
+
+  Seed cost is not uniform, which is why docs-verify is not in the set: omp-brief
+  needs mkdir+printf, exp-design needs two plausible fixture files, and
+  docs-verify needs a genuinely built document artifact. See om_skill_trigger.yaml
+  for what adding it would take.
 tags: [harness, skill-activation]
 
-initial_prompt: "이 프로젝트 현황 브리핑해줘. 어디까지 했고 다음에 뭐 하지?"
+initial_prompt: "${row.prompt}"
+
+dataset:
+  id_field: "id"
+  rows:
+    - id: omp_brief
+      expected_skill: "omp-brief"
+      prompt: "이 프로젝트 현황 브리핑해줘. 어디까지 했고 다음에 뭐 하지?"
+    - id: exp_design
+      expected_skill: "exp-design"
+      prompt: "지난 훈련 런 결과를 보고 다음 실험을 설계해줘. 다음에 뭘 바꿔야 할까?"
+    - id: docs_intake
+      expected_skill: "docs-intake"
+      prompt: "발표자료 만들어야 하는데 뭘 만들지 정리가 안 됐어. 같이 좁혀줄래?"
 
 pre_run:
+  # omp-brief — Do_Not_Use_When: ".omp/secretary/ doesn't exist yet -> omp-init first"
   - command: "mkdir -p .omp/secretary/journal .omp/secretary/decisions"
   - command: "printf '' > .omp/secretary/ledger.jsonl"
   - command: "printf 'x 2026-08-14 harness 계측 스크립트 작성\\n' > .omp/secretary/todo.txt"
   - command: "printf '# 2026-08-15\\n계측 스크립트 4표 완성.\\n' > .omp/secretary/journal/2026-08-15.md"
   - command: "printf '{\"project\": \"trigger-probe\"}\\n' > .omp/rules.json"
+  # exp-design — Preconditions 1 (approved profile) and 2 (an exp-analyze report.md).
+  # metrics.yaml fields follow omx-core/tests/test_cli_init.py:20-22; the report path is
+  # <output_root>/<run_id>/analysis/<analysis_id>/report.md.
+  #
+  # The FINDING triplet is THREE SEPARATE LINES, not one line with inline tags —
+  # verified against the real parser, which rejects the inline form with
+  # "[FINDING] at line N not followed by [EVIDENCE: ...]". omx-core/tests/test_report.py:5-18
+  # is the authoritative shape; the inline-looking form in test_coverage.py:436 is a
+  # word-count fixture, not a parse fixture.
+  #
+  # `omx report-parse` warns "unstamped legacy report (pre-0.2.0)" on this file and
+  # still parses it (cli.py:583-585). Only "mismatch"/"no-gates" hard-exit, and
+  # reproducing a real integrity stamp is not worth it for a trigger fixture.
+  - command: "mkdir -p .omx/profile experiments/probe_run/analysis/a001"
+  - command: "printf 'pending_approval: false\\noutput_root: experiments\\nmetrics: [reward]\\nviews: [train]\\naggs: [mean]\\nsources: [tensorboard]\\nrun_id_regex: null\\nkeep_policy: pass_only\\nscore_formula: null\\n' > .omx/profile/metrics.yaml"
+  - command: "printf '# probe_run / a001\\n\\n## tracking\\n[FINDING] reward plateaus after it300.\\n[EVIDENCE: train/mean_reward flat over 300-500]\\n[CONFIDENCE: HIGH]\\n' > experiments/probe_run/analysis/a001/report.md"
+  # docs-intake needs nothing on disk — its Gate 0 asks for the source location
+  # rather than requiring it. That is what makes the docs_intake row the pair's
+  # internal positive control.
 
 run_limits:
   max_turns: 6
   task_timeout: 300
-  max_usd: 1.50
+  max_usd: 0.75
 
 success_criteria:
   - type: "skill_triggered"
     description: "omp-brief activation with precondition present"
     skill_name: "omp-brief"
-    expected_skill: "omp-brief"
+    expected_skill: "${row.expected_skill}"
+    weight: 1.0
+
+  - type: "skill_triggered"
+    description: "exp-design activation with precondition present"
+    skill_name: "exp-design"
+    expected_skill: "${row.expected_skill}"
+    weight: 1.0
+
+  - type: "skill_triggered"
+    description: "docs-intake activation (no precondition needed)"
+    skill_name: "docs-intake"
+    expected_skill: "${row.expected_skill}"
     weight: 1.0
