@@ -189,6 +189,12 @@
             "command": "# GRAPH_OFFER\nbash ~/claudebase/runtime/hooks/graph-offer.sh 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Checking whether this repo wants a code graph"
+          },
+          {
+            "type": "command",
+            "command": "# GRAPHIFY_DEBT\nbash ~/claudebase/runtime/hooks/graphify-debt.sh 2>/dev/null || true",
+            "timeout": 20,
+            "statusMessage": "Counting prose files awaiting semantic re-extraction"
           }
         ]
       }
