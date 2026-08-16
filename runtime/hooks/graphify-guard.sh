@@ -79,14 +79,41 @@ esac
 # such misfires in one session). The read guard already skips out-of-project
 # targets (#1840); this supplies the missing search-side equivalent. Filter absent
 # or python3 missing → behave exactly as before.
+ran=0
 if [ "$mode" = "search" ]; then
   filter="$(dirname "$0")/graphify_scope_filter.py"
   if [ -f "$filter" ] && command -v python3 >/dev/null 2>&1; then
     payload="$(cat)"
     printf '%s' "$payload" | python3 "$filter" || exit 0
-    printf '%s' "$payload" | "$graphify_bin" hook-guard "$mode"
-    exit $?
+    guard_out="$(printf '%s' "$payload" | "$graphify_bin" hook-guard "$mode")"
+    rc=$?
+    ran=1
   fi
 fi
 
-exec "$graphify_bin" hook-guard "$mode"
+if [ "$ran" -eq 0 ]; then
+  guard_out="$("$graphify_bin" hook-guard "$mode")"
+  rc=$?
+fi
+
+# Correct the one thing graphify gets wrong on a machine that relocates its
+# output tree. The nudge text hardcodes the literal `graphify-out/graph.json`
+# (cli.py:22,32,46) even though the same module resolves the real path through
+# GRAPHIFY_OUT two definitions later (`_default_graph_path`, cli.py:84). With
+# GRAPHIFY_OUT=.graphify — what config/settings.json sets on every claudebase
+# machine — the agent is handed a MANDATORY instruction naming a file that does
+# not exist, every turn, for as long as a graph is present. The premise is true
+# (a graph really is there); only the path is stale, so rewrite the path rather
+# than suppress the nudge. Measured on the obsidian vault 2026-08-17: the guard
+# fired correctly on ~10 tool calls in one session while pointing at an absent
+# `graphify-out/graph.json`.
+#
+# Fixed here rather than in site-packages because `uv tool upgrade` discards a
+# patched package, and this wrapper already computes the real directory name.
+if [ -n "${guard_out:-}" ] && [ "$out_name" != "graphify-out" ]; then
+  needle='graphify-out/graph.json'
+  guard_out="${guard_out//"$needle"/$out_name/graph.json}"
+fi
+
+[ -n "${guard_out:-}" ] && printf '%s\n' "$guard_out"
+exit "${rc:-0}"
