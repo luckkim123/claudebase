@@ -46,9 +46,12 @@ The split is by **purpose**, not by tool:
 - `config/` — what Claude reads (user-scope behavior).
 - `runtime/` — what Claude executes (skills, hooks).
 - `installer/` — what the user runs once per machine.
-- `eval/` — what measures whether any of it helps. Manual, like
-  `runtime/hooks/harness_stats.py`: that one counts whether guards fire, `eval/`
-  asks whether firing changes the outcome. Never wired to a hook or to CI.
+- `eval/` — what measures whether any of it helps. One of three manual
+  instruments, each asking a different question, none wired to a hook or to CI:
+  `runtime/hooks/harness_stats.py` counts whether the guards **fire**, `eval/`
+  asks whether firing **changes the outcome**, and `runtime/hooks/loop_lint.py`
+  asks whether the loops that fire are **built to one contract**
+  (`docs/loop-contract.md`).
 - `docs/`, `platform/`, `shell/`, `secrets/`, `templates/` — orthogonal.
 
 Specs follow a per-topic folder convention: each non-trivial change is paired as `docs/specs/<YYYY-MM-DD-topic>/design.md` + `plan.md`. The design captures decisions and trade-offs; the plan captures task breakdown and verification. Single-file specs (design only, no execution plan needed) keep the folder shape too — the absence of `plan.md` is meaningful.

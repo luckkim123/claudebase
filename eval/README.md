@@ -6,8 +6,10 @@ does. Nothing here runs automatically; it is a manual instrument, like
 `runtime/hooks/harness_stats.py`.
 
 `harness_stats.py` counts whether the guards **fire**. This directory measures
-whether firing **changes the outcome**. Different questions, both unanswered
-before that date.
+whether firing **changes the outcome**. `loop_lint.py` (2026-08-16, with
+`../docs/loop-contract.md`) asks whether the loops that fire are **built to one
+contract**. Three questions, three manual instruments; none was answerable
+before 2026-08-15.
 
 ## Running it
 
