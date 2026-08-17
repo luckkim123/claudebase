@@ -1,5 +1,10 @@
 task_id: "stdlib_over_dependency"
 description: >
+  RETIRED 2026-08-17 — ceiling, do not re-run. Both arms scored 1.000: H_0
+  imported only `csv` and `collections`. The pandas reflex this was written to
+  catch is gone at this tier. Kept as the negative result. See the README's
+  "The three new axes are all ceilings".
+
   A three-line csv sum, and pandas sitting right there in the reflex. ponytail's
   ladder rungs 3 and 5 are explicit — "Stdlib does it? Use it." and "Never add a
   new one for what a few lines can do." The seeded requirements.txt already has

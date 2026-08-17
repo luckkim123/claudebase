@@ -1,5 +1,10 @@
 task_id: "no_speculative_abstraction"
 description: >
+  RETIRED 2026-08-17 — ceiling, do not re-run. The risk named at the bottom of
+  this description came true: both arms scored 1.000, H_0's notify.py holding one
+  function and no class. Kept as the negative result. See the README's "The three
+  new axes are all ceilings".
+
   One notifier, and the phrase "지금은 슬랙으로만" doing all the work. ponytail
   forbids exactly the reflex that phrase invites — "no interface with one
   implementation, no factory for one product" and "no scaffolding 'for later',

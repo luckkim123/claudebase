@@ -52,9 +52,9 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 | `leaves_a_check.yaml` | Leaves a runnable check behind when none was requested | **discriminates** |
 | `scope_and_root_cause.yaml` | Fixes the sibling bug in another file; leaves unrelated code alone | tie — trap 1 broken, see below |
 | `question_is_not_an_order.yaml` | Treats a question as a question — writes nothing | tie at the ceiling |
-| `reuse_existing_helper.yaml` | Reuses `textutil.slugify` instead of re-implementing it (ladder rung 2) | unrun |
-| `stdlib_over_dependency.yaml` | `csv` instead of a third pip dependency (rungs 3 and 5) | unrun |
-| `no_speculative_abstraction.yaml` | One function, not a Notifier ABC + factory | unrun |
+| `reuse_existing_helper.yaml` | Reuses `textutil.slugify` instead of re-implementing it (ladder rung 2) | ceiling — H_0 already does it |
+| `stdlib_over_dependency.yaml` | `csv` instead of a third pip dependency (rungs 3 and 5) | ceiling — H_0 already does it |
+| `no_speculative_abstraction.yaml` | One function, not a Notifier ABC + factory | ceiling — H_0 already does it |
 | `om_skill_trigger.yaml`, `om_skill_trigger_seeded.yaml` | Whether a named om skill is invoked. A **matched pair** — same three rows, the seeded file differs only by `pre_run`. Run both; alone neither separates a trigger regression from a documented refusal |
 | `robust_jsonl_stats.yaml`, `fix_silent_bug.yaml` | Code correctness — kept as the negative result, see below |
 
@@ -150,7 +150,41 @@ was first paid for. The criterion measures "spot a duplicated magic constant in 
 non-calling function", which no injected rule asks for. Rewrite trap 1 so the
 sibling is a genuine caller, or drop the criterion — do not re-run it as is.
 
-### Three new axes, written 2026-08-17, not yet run
+### The three new axes are all ceilings — and that is the finding
+
+Run 2026-08-17_14-22-16, sonnet, repeats 1, 8 runs, $5.52.
+
+| Task | h0-sonnet | ht-sonnet | Verdict |
+|:---|---:|---:|:---|
+| leaves_a_check | 0.333 | **1.000** | discriminates (reproduces the replicate run) |
+| reuse_existing_helper | 1.000 | 1.000 | ceiling |
+| stdlib_over_dependency | 1.000 | 1.000 | ceiling |
+| no_speculative_abstraction | 1.000 | 1.000 | ceiling |
+
+The graders are not lenient — the control arm's own output was checked. H_0 wrote
+`return date.isoformat() + "-" + textutil.slugify(title)`, imported only `csv` and
+`collections`, and produced a `notify.py` holding exactly one function and no
+class. Sonnet 5 with no plugins, no CLAUDE.md and no hooks does all three
+unprompted.
+
+**So the ponytail rules those tasks encode are no longer correcting anything at
+this tier.** Ladder rungs 2, 3 and 5 and the no-single-use-abstraction rule were
+written against a slop reflex the model no longer has. That is worth knowing about
+the harness independently of any A/B: a rule that only forbids what the model
+already avoids costs context and buys nothing.
+
+**The axis class that still separates is commission, not omission.** Every ceiling
+task above asks the model *not* to do something — re-implement, add a dependency,
+build an ABC. `leaves_a_check` asks it to *do* something nobody requested: leave a
+runnable check. General good taste produces restraint; it does not produce
+unrequested work. Only an instruction does. Design the next tasks in that class —
+update the summary layer when the body changes, actually run the thing you fixed,
+record the decision — and stop writing restraint tasks.
+
+The three files stay in the tree as the negative result, the same way
+`robust_jsonl_stats.yaml` and `fix_silent_bug.yaml` do. Do not re-run them.
+
+### Three new axes, written 2026-08-17, before they were run
 
 Task count is the bottleneck, not tier and not replicates, so the next money goes
 here rather than into stage 2. Each new task is a ponytail rule stated verbatim in
@@ -158,10 +192,10 @@ the injected context and absent from H_0's instructions, and each grader was run
 against a known-good and two-or-more known-bad solutions before being committed —
 8 cases, all returning the expected score. `coder-eval plan` passes on all six.
 
-The `no_speculative_abstraction` axis carries a stated risk: sonnet is already
-fairly restrained, so it may land on the ceiling for both arms. If it does, retire
-it. A task both arms pass is not an instrument, and after 2026-08-17 we know
-repeats cannot rescue one.
+The `no_speculative_abstraction` axis was written with a stated risk — "sonnet is
+already fairly restrained, so it may land on the ceiling for both arms" — and the
+run above says it did, along with the other two. The risk was named for one task
+and turned out to be the property of the whole class.
 
 Per-task `max_usd` went from 1.50 to 2.50 across the discipline set — the measured
 cold replicate reached $1.736.

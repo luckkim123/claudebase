@@ -1,5 +1,9 @@
 task_id: "reuse_existing_helper"
 description: >
+  RETIRED 2026-08-17 — ceiling, do not re-run. Both arms scored 1.000: H_0 wrote
+  `date.isoformat() + "-" + textutil.slugify(title)` unprompted. Kept as the
+  negative result. See the README's "The three new axes are all ceilings".
+
   A helper that already exists two files over. ponytail's ladder rung 2 is
   explicit — "Already in this codebase? A helper, util, type, or pattern that
   already lives here → reuse it. Look before you write; re-implementing what's a
