@@ -104,6 +104,31 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 
 ---
 
+## worktree-index-boundary
+
+**Rule (see `config/CLAUDE.md`):** In a linked worktree a gitignored index is absent, not empty. Locate indexes and state from `dirname $(git rev-parse --git-common-dir)`, never `--show-toplevel`.
+
+**One boundary, two opposite failures.** `git worktree add` copies tracked files and nothing else, so `.gitignore` decides which half of the harness follows a session into a worktree — and each half fails in the opposite direction:
+
+| | Follows the worktree? | Failure |
+|:---|:---|:---|
+| `.omp/`, a tracked `.graphify/` | yes, as branch content | append-only state (e.g. `.omp/secretary/ledger.jsonl`) forks per branch and collides at merge |
+| `.code-review-graph/`, `.tokensave/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
+
+The second half is the dangerous one: an absent index is indistinguishable from a healthy one that found nothing — the same silent-success class `templates/project-code-review-graph.md` documents at length. Worse, an MCP query that omits `repo_root` *creates* an empty `graph.db` at its cwd and answers `status: "ok"`, so the worktree ends up holding a plausible-looking 0-node index.
+
+**Why `--git-common-dir`.** The common dir is shared by every worktree of a repo, so its parent is the main checkout — where the ignored indexes actually live. Outside a worktree the two forms name the same directory, which is what makes the correction safe to ship: a single-checkout user sees no behaviour change at all.
+
+**The trap inside the fix.** Comparing the two git dirs as raw strings reports a worktree where there is none. Measured on git 2.39.5: from a subdirectory of an ordinary main checkout, `--git-dir` prints an absolute path while `--git-common-dir` still prints `../.git`. Both must be absolutised before the compare. Doing so also keeps `--separate-git-dir` correct for free — there the two resolve to the same external directory, the branch is skipped, and `--show-toplevel` (which handles that layout) stands. `tests/hooks/test_worktree_root.py` pins all of it, including the empty guard: without it, `cd "/.."` outside a repo silently yields `/`.
+
+**What claudebase does about it.** `runtime/hooks/graph-refresh.sh` (canonical copy of the comment), `runtime/hooks/graph-offer.sh` and `runtime/bin/graph-init.sh` all start from `--show-toplevel` and correct only for a linked worktree; graph-offer additionally anchors its once-per-project marker in the common dir. `installer/scripts/render_settings.py` resolves `env.OMC_STATE_DIR` at render time so `.omc/` state outlives `git worktree remove` — it cannot be tracked, because `~`/`$HOME` do not expand in the `env` block and OMC joins the value verbatim, so a literal `~` would create a directory *named* `~`.
+
+**What it does not fix.** `graphify-guard.sh` needed nothing — it already walks ancestors for `graph.json`. tokensave resolves its own repo inside the binary and cannot be redirected from here, so a worktree gets no note index; do not paper over that by auto-indexing, which is slow and, on corpora with long non-ASCII paths, a known crash. `claude-mem` keys observations per path, so a worktree's history is separate. Claude Code's own auto-memory is the happy exception — it already resolves to the main repo.
+
+**Where this came from.** Measured 2026-08-17 on an Obsidian vault opened through an IDE that creates one worktree per workspace. Three checkouts of the same repo were live; both worktrees held a 0-node `graph.db` while the real 12.9 MB index sat in the main checkout, and that project's `CLAUDE.md` instructed every session to consult the graph before grepping. Nothing errored. The IDE is incidental — `claude --worktree <name>`, which `#multisession-git` recommends as the default, reproduces it exactly.
+
+---
+
 ## objective-verbatim
 
 **Rule (see `config/CLAUDE.md`):** Write the requester's objective into the plan verbatim before designing. Every decision to hold or change something argues against *that* line. Redefining the objective mid-document is a re-ask, not an edit — and anything your own analysis marks as needing a decision belongs to the user.
