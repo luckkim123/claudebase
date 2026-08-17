@@ -18,13 +18,20 @@ description: >
   fresh tempdir means NEITHER arm loads ~/.claude/CLAUDE.md or the claudebase
   hooks. The plugin list is the only variable.
 
+  Plugin paths come from `${CE_PLUGIN_*}`, resolved per machine by
+  `eval/scripts/plugin_env.py` — run `eval "$(python3 eval/scripts/plugin_env.py)"`
+  first. Literal paths were removed on 2026-08-17: they pinned one home directory
+  (unrunnable elsewhere, and claudebase ships everywhere) and one version each,
+  and superseded versions stay in the plugin cache, so 4 of these 8 pins still
+  resolved while naming a harness that no longer existed.
+
 defaults:
   agent:
     type: claude-code
     permission_mode: bypassPermissions
     allowed_tools: ["Skill", "Bash", "Read", "Write", "Edit", "Glob", "Grep"]
     model: "claude-sonnet-5"
-  repeats: 1
+  repeats: 3
 
 variants:
   - variant_id: h0-sonnet
@@ -37,18 +44,18 @@ variants:
     agent:
       plugins:
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/omc/oh-my-claudecode/4.15.7"
+          path: "${CE_PLUGIN_OMC}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/ponytail/ponytail/4.8.4"
+          path: "${CE_PLUGIN_PONYTAIL}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0"
+          path: "${CE_PLUGIN_SUPERPOWERS}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-heroacademia/db6099a0c006"
+          path: "${CE_PLUGIN_OMHA}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-project/0.11.1"
+          path: "${CE_PLUGIN_OMP}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-experiments/0.11.1"
+          path: "${CE_PLUGIN_OMX}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-docs/0.6.6"
+          path: "${CE_PLUGIN_OMD}"
         - type: "local"
-          path: "/Users/kimseungmin/.claude/plugins/cache/heroacademia/oh-my-scholar/0.13.1"
+          path: "${CE_PLUGIN_OMS}"

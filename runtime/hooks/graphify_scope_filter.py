@@ -88,11 +88,16 @@ def main() -> int:
 
 
 def _self_check() -> None:
-    root = Path("/Users/kimseungmin/ksm_Obsidian").resolve()
-    out = "/Users/kimseungmin/.claude/plugins/cache/oh-my-project/README.md"
+    # Derived from $HOME rather than written literally: claudebase ships to every
+    # machine, so a self-check pinned to one person's home directory is a check
+    # only that person can run.
+    home = Path.home()
+    root = (home / "proj").resolve()
+    plugins = home / ".claude" / "plugins"
+    out = plugins / "cache" / "oh-my-project" / "README.md"
     # The six real misfires from the session that motivated this filter.
     assert not in_scope(f"grep -n foo {out}", root)
-    assert not in_scope(f'P=/Users/kimseungmin/.claude/plugins; grep -n x "$P/skills/a.md"', root)
+    assert not in_scope(f'P={plugins}; grep -n x "$P/skills/a.md"', root)
     assert not in_scope('find "$HOME/.local/share/uv/tools" -name "*.py"', root)
     assert not in_scope("grep -rn graphify ~/claudebase/config/*.json", root)
     # Still nudges where the graph is authoritative.

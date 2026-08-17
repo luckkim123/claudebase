@@ -5,6 +5,12 @@ description: >
   the baseline arm proves the criterion can report "no", which is what makes a
   "yes" in the treatment arm mean something.
 
+  Plugin paths come from `${CE_PLUGIN_*}`, resolved per machine by
+  `eval/scripts/plugin_env.py` — run `eval "$(python3 eval/scripts/plugin_env.py)"`
+  first. These pointed at the source checkouts (`~/oh-my-project`) until
+  2026-08-17; they now name the *installed* plugins, which is both portable and
+  what actually loads at runtime.
+
 defaults:
   agent:
     type: claude-code
@@ -24,8 +30,8 @@ variants:
     agent:
       plugins:
         - type: "local"
-          path: "/Users/kimseungmin/oh-my-project"
+          path: "${CE_PLUGIN_OMP}"
         - type: "local"
-          path: "/Users/kimseungmin/oh-my-experiments"
+          path: "${CE_PLUGIN_OMX}"
         - type: "local"
-          path: "/Users/kimseungmin/oh-my-docs"
+          path: "${CE_PLUGIN_OMD}"

@@ -18,4 +18,4 @@ variants:
     agent:
       plugins:
         - type: "local"
-          path: "/Users/kimseungmin/oh-my-project"
+          path: "${CE_PLUGIN_OMP}"

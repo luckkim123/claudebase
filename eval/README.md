@@ -17,12 +17,21 @@ before 2026-08-15.
 uv tool install coder-eval            # once; ~/.local/bin is not on the Bash tool's PATH
 export PATH="$HOME/.local/bin:$PATH"
 cd eval
+eval "$(python3 scripts/plugin_env.py)"   # resolve THIS machine's plugin paths
 coder-eval plan -e experiments/harness-discipline.yaml tasks/leaves_a_check.yaml   # free
 coder-eval run  -e experiments/harness-discipline.yaml tasks/leaves_a_check.yaml   # spends tokens
 ```
 
+**The `plugin_env.py` line is required, not optional.** Every experiment's
+treatment arm names its plugins as `${CE_PLUGIN_*}`; `scripts/plugin_env.py`
+resolves those from this machine's `installed_plugins.json` and refuses to emit a
+partial environment. Skip it and coder-eval only *warns* about the unset vars —
+the run then succeeds with an empty treatment arm, which reads as "the harness
+does nothing". `python3 scripts/plugin_env.py --check` prints what it resolved.
+
 `plan` costs nothing and validates everything — always run it first. It caught
-a shell bug that would otherwise have burned a full run (see Traps).
+a shell bug that would otherwise have burned a full run (see Traps). Note that
+`plan` does **not** verify plugin paths — see the last trap.
 
 ## What is in here
 
@@ -106,6 +115,17 @@ avoided.
   (`orchestration/task_loader.py:426-435`). A dataset task therefore cannot carry
   per-row preconditions — the choice is one task file per row, or one union seed
   covering all rows. `om_skill_trigger_seeded.yaml` takes the union.
+- **A plugin path that names a home directory or a version is a trap twice over.**
+  Until 2026-08-17 every experiment spelled its plugins out literally, which made
+  them unrunnable on any other machine — claudebase ships everywhere — and pinned
+  a version each. The version half is the nastier one: superseded builds stay in
+  `~/.claude/plugins/cache/<name>/<version>/`, so a stale pin still resolves and
+  the run measures a harness that no longer exists. Measured that day: 4 of the 8
+  pins in `harness-discipline.yaml` were superseded (omd 0.6.6 vs 0.7.0, oms
+  0.13.1 vs 0.14.0, omp 0.11.1 vs 0.12.0, omha `db6099a0c006` vs `8a1aeb2e9c48`)
+  and all 8 directories still existed. `scripts/plugin_env.py` + `${CE_PLUGIN_*}`
+  replaced them. **`coder-eval plan` does not catch this** — it validates the task
+  schema and never checks that a plugin path exists, so both failures are silent.
 - **`plan` validates the schema, not the seed.** It reported "All tasks are valid"
   on a `pre_run` whose `report.md` the real parser rejected (`[FINDING]` needs
   `[EVIDENCE:]` on the FOLLOWING line, not inline). Execute the `pre_run` list in a

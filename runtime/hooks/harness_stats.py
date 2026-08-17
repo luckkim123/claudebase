@@ -215,9 +215,9 @@ def routing_summary(roots, route_log) -> dict:
 
 def _transcript_dir(root) -> Path:
     """Claude Code slugs a project path by replacing every non-alphanumeric
-    character with '-', not just the separators. Measured against the live
-    directory: `/Users/kimseungmin/ksm_Obsidian` is stored as
-    `-Users-kimseungmin-ksm-Obsidian` — the underscore is folded too, and
+    character with '-', not just the separators. Measured against a live
+    directory — e.g. `/Users/alice/ksm_Obsidian` is stored as
+    `-Users-alice-ksm-Obsidian` — the underscore is folded too, and
     `/.claude/` becomes `--claude-`. Folding only '/' finds nothing and every
     turn falls into the '(unmatched)' bucket."""
     slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(root).resolve()))
