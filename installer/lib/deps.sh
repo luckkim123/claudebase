@@ -290,6 +290,32 @@ ensure_graph_init() {
   link_or_copy "$src" "$HOME/.local/bin/graph-init"
 }
 
+# ensure_tmux_teams_shim — make Orca Agent Teams survive Claude Code's PATH.
+#
+# Orca launches its "Claude agent team" mode as `claude --teammate-mode auto`,
+# injecting a `tmux` shim at the front of that process's PATH. Claude Code's
+# settings `env.PATH` replaces PATH wholesale for every subprocess, so the shim
+# is gone by the time teammate spawning looks for `tmux`; the real tmux is found
+# instead, cannot reach Orca's synthetic socket, and the feature dies with
+# "Could not determine current tmux pane/window" — two layers from the cause.
+#
+# runtime/bin/tmux-orca-teams.sh forwards to Orca's shim only inside a team
+# session and falls through to the real tmux otherwise, so linking it as `tmux`
+# is safe. ~/.local/bin is the right home for exactly one reason: the rendered
+# PATH lists it ahead of Homebrew while a login shell lists it behind, so the
+# wrapper binds inside Claude Code and stays invisible to ordinary shells.
+#
+# Gated on the Orca CLI. A machine without Orca would only gain a shadowing
+# `tmux` that does nothing, and this repo ships to every machine.
+ensure_tmux_teams_shim() {
+  command -v orca >/dev/null 2>&1 || { debug "orca absent (skip tmux shim)"; return 0; }
+  local src="$REPO_DIR/runtime/bin/tmux-orca-teams.sh"
+  [[ -f "$src" ]] || { debug "tmux-orca-teams source missing (skip)"; return 0; }
+  run chmod +x "$src"
+  run mkdir -p "$HOME/.local/bin"
+  link_or_copy "$src" "$HOME/.local/bin/tmux"
+}
+
 # graph_cli_intro_note — name the three graph CLIs once per machine.
 #
 # The gap this fills: the installs above are unconditional and silent on repeat,

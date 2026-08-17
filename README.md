@@ -215,6 +215,19 @@ list every dir explicitly, venv first:
 The venv is machine-local (not git-synced) — re-running `installer/install.sh`
 recreates it.
 
+**Keep `~/.local/bin` in that list, ahead of Homebrew.** Replacing PATH also
+drops whatever the *launcher* injected, and the failure lands far from the
+cause. Orca's "Claude agent team" mode is the case that surfaced it: it starts
+`claude --teammate-mode auto` with a `tmux` shim first on PATH, the rendered
+PATH discards it, teammate spawning finds the real tmux, and the feature dies
+with `Could not determine current tmux pane/window` — no mention of PATH
+anywhere. `installer/lib/deps.sh` `ensure_tmux_teams_shim` links
+`runtime/bin/tmux-orca-teams.sh` into `~/.local/bin/tmux` to repair it; that
+wrapper forwards to Orca's shim only inside a team session and falls through to
+the real tmux otherwise. It is installed only where the `orca` CLI exists, and
+it binds only because `~/.local/bin` precedes Homebrew here while a login shell
+orders them the other way round.
+
 ## Per-machine overrides
 
 Put machine-specific plugins / permissions / model choice (e.g. `"model": "opus[1m]"`) in `~/.claude/settings.local.json` (gitignored). `installer/install.sh` merges it on top of `config/settings.json` and **renders** the result to `~/.claude/settings.json` — the only user-scope settings file Claude Code reads. Two consequences: edits to `settings.local.json` take effect on the next `install.sh` run rather than instantly, and anything the CLI writes into the rendered file (`/model`, `/config`, `claude plugin enable -s user`) is captured back into `settings.local.json` on that run, so personal preferences persist without ever touching the tracked baseline. See `templates/settings.local.example.json`.

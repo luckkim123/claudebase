@@ -2,6 +2,46 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-17 — a replaced PATH drops what the launcher put there
+
+`env.PATH` in the rendered settings replaces PATH for every Claude Code subprocess — that is the
+documented behaviour, and it is why the value must be spelled out absolutely. What the README did
+not say is that it also discards anything the *launcher* injected into the `claude` process, and
+that the resulting failure surfaces nowhere near PATH.
+
+Orca's "Claude agent team" launcher is the case that found it. `orca claude-teams` starts
+`claude --teammate-mode auto` with `~/.orca/claude-agent-teams-bin` first on PATH — a `tmux` shim
+forwarding to `orca agent-teams-tmux`, which opens teammates as native Orca panes — and sets
+`TMUX=/tmp/orca-claude-agent-teams/<team-id>`, a socket path only that shim understands. The
+rendered PATH then drops the shim, teammate spawning resolves `/opt/homebrew/bin/tmux`, and the real
+tmux answers `error connecting to /tmp/orca-claude-agent-teams/… (No such file or directory)`.
+Claude Code reports it as `Could not determine current tmux pane/window`; nothing names PATH, and
+`/tmp/orca-claude-agent-teams/` does not exist to be found. Measured 2026-08-17: every Agent
+dispatch in a team session failed, while calling the shim directly returned `%1`.
+
+Prepending Orca's shim dir to PATH is not the fix — it forwards unconditionally and answers
+`Missing agent team ID` outside a team session, so it would break tmux in every other session.
+
+### Fixed
+- **`runtime/bin/tmux-orca-teams.sh`** (new) — a `tmux` wrapper that execs Orca's shim when
+  `ORCA_AGENT_TEAMS_TEAM_ID` is set *and* the shim is executable, and otherwise strips its own
+  directory from PATH and hands over to the real tmux. Self-exclusion is what keeps a PATH that
+  leads with the wrapper from recursing into it.
+- **`installer/lib/deps.sh` `ensure_tmux_teams_shim`**, called from `install.sh` after
+  `ensure_graph_init` — links the wrapper to `~/.local/bin/tmux`. That directory, not a new one,
+  because the rendered PATH lists it **ahead** of Homebrew while a login shell lists it **behind**:
+  the wrapper binds inside Claude Code and stays invisible to ordinary shells. Gated on the `orca`
+  CLI, so a machine without Orca gains nothing to shadow `tmux` with.
+- **`README.md`** — the PATH section now says why `~/.local/bin` has to stay in the list and ahead
+  of Homebrew, with this failure as the worked example.
+
+### Verification
+Both wrapper branches exercised with the wrapper's directory first on PATH: team env present →
+Orca shim → `%1`; team env stripped → real tmux → `tmux 3.6b`, no recursion. The Agent dispatch
+that failed before the fix spawned successfully after it. `pytest tests/` 343 passed; the 3
+failures in `test_patch_omc_statedir.py` reproduce with the change stashed and are unrelated.
+`bash -n` clean on both shell files; shellcheck not installed on this machine, so it was not run.
+
 ## [Unreleased] — 2026-08-11 — a version string is not an extraction prompt
 
 graphify buckets its semantic-extraction cache by `prompt_fingerprint()`, a sha256 over the **whole

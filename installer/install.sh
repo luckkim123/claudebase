@@ -128,6 +128,9 @@ ensure_graphify_skill
 # the CLI installs above, since it is what those CLIs get driven by.
 ensure_graph_init
 
+# tmux wrapper for Orca Agent Teams → deps.sh. No-op on machines without Orca.
+ensure_tmux_teams_shim
+
 # Say the three CLIs exist, once per machine → deps.sh. graph-offer.sh is the
 # only other automatic mention and it short-circuits in any project that already
 # has one graph, so without this a user can carry all three for months and never
