@@ -18,6 +18,20 @@ sys.path.insert(0, str(REPO_ROOT / "installer" / "scripts"))
 
 import render_settings as rs
 
+def without_state_dir(settings: dict) -> dict:
+    """Drop the render-time `env.OMC_STATE_DIR` default.
+
+    `main()` injects it from `$HOME` (see `with_omc_state_dir`), which is a fact
+    about the machine rather than an outcome of the merge — so the tests that
+    assert the merge itself strip it instead of pinning one user's home path.
+    """
+    out = {k: v for k, v in settings.items() if k != "env"}
+    env = {k: v for k, v in (settings.get("env") or {}).items() if k != "OMC_STATE_DIR"}
+    if env:
+        out["env"] = env
+    return out
+
+
 # A realistic slice of the lab baseline: one common plugin plus a scalar block,
 # which is enough to exercise both merge modes.
 BASE = {
@@ -168,7 +182,7 @@ class TestMainRoundTrip:
 
         assert not out.is_symlink()
         merged = json.loads(out.read_text())
-        assert merged == {"enabledPlugins": {"a@m": True}, "model": "opus"}
+        assert without_state_dir(merged) == {"enabledPlugins": {"a@m": True}, "model": "opus"}
         # The baseline must come through untouched by the render.
         assert json.loads(base.read_text()) == {"enabledPlugins": {"a@m": True}}
 
@@ -198,7 +212,7 @@ class TestMainRoundTrip:
             "--out", str(out),
         ])
 
-        assert json.loads(out.read_text()) == {"model": "sonnet"}
+        assert without_state_dir(json.loads(out.read_text())) == {"model": "sonnet"}
 
     def test_second_run_is_silent_and_writes_nothing(self, tmp_path, capsys):
         # tests/smoke/test_install_idempotent.sh fails the build on a `rendered:`
@@ -232,3 +246,98 @@ class TestMainRoundTrip:
         ])
 
         assert not out.exists()
+
+
+class TestOmcStateDir:
+    """`env.OMC_STATE_DIR` is resolved at render time, never tracked.
+
+    Two things make the tracked forms wrong: `~`/`$HOME` do not expand in the
+    `env` block, and OMC joins the value verbatim — so a literal `~` creates a
+    directory *named* `~`. An absolute path cannot be tracked either, since this
+    repo ships to every machine.
+    """
+
+    def test_absolute_and_under_home(self):
+        value = rs.with_omc_state_dir({})["env"]["OMC_STATE_DIR"]
+        assert Path(value).is_absolute()
+        assert "~" not in value
+        assert value.startswith(str(Path.home()))
+
+    def test_does_not_disturb_other_env_keys(self):
+        out = rs.with_omc_state_dir({"env": {"GRAPHIFY_OUT": ".graphify"}})
+        assert out["env"]["GRAPHIFY_OUT"] == ".graphify"
+        assert "OMC_STATE_DIR" in out["env"]
+
+    def test_is_only_a_default(self):
+        out = rs.with_omc_state_dir({"env": {"OMC_STATE_DIR": "/pinned"}})
+        assert out["env"]["OMC_STATE_DIR"] == "/pinned"
+
+    def test_leaves_the_input_untouched(self):
+        base = {"env": {"GRAPHIFY_OUT": ".graphify"}}
+        rs.with_omc_state_dir(base)
+        assert base == {"env": {"GRAPHIFY_OUT": ".graphify"}}
+
+    def test_local_layer_still_wins_through_main(self, tmp_path):
+        base = tmp_path / "settings.json"
+        base.write_text(json.dumps({"model": "sonnet"}))
+        local = tmp_path / "settings.local.json"
+        local.write_text(json.dumps({"env": {"OMC_STATE_DIR": "/elsewhere"}}))
+        out = tmp_path / "home-settings.json"
+
+        rs.main(["--base", str(base), "--local", str(local), "--out", str(out)])
+
+        assert json.loads(out.read_text())["env"]["OMC_STATE_DIR"] == "/elsewhere"
+
+
+class TestDroppedHookCommands:
+    """Foreign hooks are discarded by design; discarding them silently is the bug.
+
+    `hooks` is in BASELINE_OWNED_KEYS, so anything a third party wrote straight
+    into the rendered file (an IDE integration, an MCP installer, `tokensave
+    install`) is dropped rather than captured. The user has to be told, because
+    the tool that owns the hook simply stops working with nothing to point at.
+    """
+
+    @staticmethod
+    def _settings(*commands):
+        return {
+            "hooks": {
+                "PreToolUse": [{"hooks": [{"command": c} for c in commands]}]
+            }
+        }
+
+    def test_reports_a_command_the_render_removes(self):
+        existing = self._settings("ours", "sh ~/.foreign/hook.sh")
+        rendered = self._settings("ours")
+        assert rs.dropped_hook_commands(existing, rendered) == ["sh ~/.foreign/hook.sh"]
+
+    def test_silent_when_nothing_is_lost(self):
+        same = self._settings("ours")
+        assert rs.dropped_hook_commands(same, same) == []
+
+    def test_a_hook_that_only_moved_events_is_not_reported(self):
+        existing = {"hooks": {"Stop": [{"hooks": [{"command": "ours"}]}]}}
+        rendered = {"hooks": {"SessionStart": [{"hooks": [{"command": "ours"}]}]}}
+        assert rs.dropped_hook_commands(existing, rendered) == []
+
+    def test_no_previous_render_reports_nothing(self):
+        assert rs.dropped_hook_commands(None, self._settings("ours")) == []
+
+    def test_tolerates_settings_without_hooks(self):
+        assert rs.dropped_hook_commands({"model": "opus"}, {"model": "opus"}) == []
+
+    def test_main_warns_on_stdout(self, tmp_path, capsys):
+        base = tmp_path / "settings.json"
+        base.write_text(json.dumps(self._settings("ours")))
+        out = tmp_path / "home-settings.json"
+        out.write_text(json.dumps(self._settings("ours", "sh ~/.foreign/hook.sh")))
+
+        rs.main([
+            "--base", str(base),
+            "--local", str(tmp_path / "absent.json"),
+            "--out", str(out),
+        ])
+
+        printed = capsys.readouterr().out
+        assert "dropped 1 hook command(s)" in printed
+        assert "sh ~/.foreign/hook.sh" in printed

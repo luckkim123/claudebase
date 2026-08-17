@@ -131,6 +131,70 @@ def strip_installer_keys(settings: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def with_omc_state_dir(base: dict[str, Any]) -> dict[str, Any]:
+    """Return `base` with a machine-resolved `env.OMC_STATE_DIR` default.
+
+    Computed at render time rather than written into `config/settings.json`,
+    because neither form survives the tracked file. `~` and `$HOME` do NOT expand
+    in the `env` block (docs/ARCHITECTURE.md) and OMC joins the value verbatim
+    (`path.join`, oh-my-claudecode scripts/lib/state-root.mjs), so a literal `~`
+    would create a directory *named* `~` in whatever the process's cwd happens to
+    be. A tracked absolute path is equally wrong: this repo ships to every
+    machine, and hardcoding one is exactly what config/CLAUDE.md forbids.
+
+    Why centralise the state at all: OMC keeps `.omc/` beside the checkout, so in
+    a linked worktree the notepad, plans, research and handoffs are deleted with
+    `git worktree remove`. A single-checkout user is unaffected either way — the
+    state simply moves out of the repo — which is what makes this safe to default.
+
+    `setdefault` keeps it a *default*: `settings.local.json` merges on top, so a
+    machine that wants the state somewhere else still wins.
+    """
+    out = dict(base)
+    env = dict(out.get("env", {}))
+    env.setdefault("OMC_STATE_DIR", str(Path.home() / ".omc-state"))
+    out["env"] = env
+    return out
+
+
+def _hook_commands(settings: dict[str, Any]) -> list[str]:
+    """Every `hooks[*][*].hooks[*].command` string, order preserved."""
+    out: list[str] = []
+    for groups in (settings.get("hooks") or {}).values():
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            for hook in group.get("hooks") or []:
+                cmd = hook.get("command") if isinstance(hook, dict) else None
+                if isinstance(cmd, str):
+                    out.append(cmd)
+    return out
+
+
+def dropped_hook_commands(
+    existing: dict[str, Any] | None, rendered: dict[str, Any]
+) -> list[str]:
+    """Hook commands the previous render had that this one does not.
+
+    `hooks` is in BASELINE_OWNED_KEYS, so anything a third party wrote straight
+    into the rendered file is discarded rather than captured — deliberately, for
+    the reason recorded on that constant. Discarding it silently is the part that
+    surprises people: an IDE integration, an MCP installer, or `tokensave install`
+    writes its hooks into ~/.claude/settings.json, the next install.sh replaces
+    the file, and the tool stops working with nothing announcing why.
+
+    Detection is by command string, so a hook that merely moved between events is
+    not reported. Naming the count is the whole feature — the fix (relaunch the
+    tool, or move the hook into config/settings.json) belongs to the user.
+    """
+    if not existing:
+        return []
+    kept = set(_hook_commands(rendered))
+    return [cmd for cmd in _hook_commands(existing) if cmd not in kept]
+
+
 def _load(path: Path) -> dict[str, Any]:
     """Read a JSON object, returning {} for a missing file.
 
@@ -191,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     base_path, local_path, out_path = Path(args.base), Path(args.local), Path(args.out)
-    base = _load(base_path)
+    base = with_omc_state_dir(_load(base_path))
 
     # The legacy layout symlinked `out` at `base`, so its content carries no
     # per-machine information to capture — only the migration itself matters.
@@ -227,6 +291,24 @@ def main(argv: list[str] | None = None) -> int:
 
     _dump(out_path, rendered)
     print(f"render-settings: wrote {out_path}")
+
+    stray = dropped_hook_commands(existing, rendered)
+    if stray:
+        print(
+            f"render-settings: dropped {len(stray)} hook command(s) that were in the "
+            "previous render but are not in the claudebase baseline."
+        )
+        for cmd in stray[:3]:
+            flat = " ".join(cmd.split())
+            print(f"                 - {flat[:70]}{'...' if len(flat) > 70 else ''}")
+        if len(stray) > 3:
+            print(f"                 - ... and {len(stray) - 3} more")
+        print(
+            "                 Tools that inject their own hooks (IDE integrations, "
+            "MCP installers, `tokensave install`) write straight into this file, and "
+            "a render replaces it. Relaunch that tool so it re-injects, or move the "
+            "hook into config/settings.json to make it survive."
+        )
     return 0
 
 
