@@ -47,11 +47,14 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 
 **Tasks** — the discipline set is the one that works.
 
-| File | Axis it scores |
-|:---|:---|
-| `scope_and_root_cause.yaml` | Fixes the sibling bug in another file; leaves unrelated code alone |
-| `leaves_a_check.yaml` | Leaves a runnable check behind when none was requested |
-| `question_is_not_an_order.yaml` | Treats a question as a question — writes nothing |
+| File | Axis it scores | Status |
+|:---|:---|:---|
+| `leaves_a_check.yaml` | Leaves a runnable check behind when none was requested | **discriminates** |
+| `scope_and_root_cause.yaml` | Fixes the sibling bug in another file; leaves unrelated code alone | tie — trap 1 broken, see below |
+| `question_is_not_an_order.yaml` | Treats a question as a question — writes nothing | tie at the ceiling |
+| `reuse_existing_helper.yaml` | Reuses `textutil.slugify` instead of re-implementing it (ladder rung 2) | unrun |
+| `stdlib_over_dependency.yaml` | `csv` instead of a third pip dependency (rungs 3 and 5) | unrun |
+| `no_speculative_abstraction.yaml` | One function, not a Notifier ABC + factory | unrun |
 | `om_skill_trigger.yaml`, `om_skill_trigger_seeded.yaml` | Whether a named om skill is invoked. A **matched pair** — same three rows, the seeded file differs only by `pre_run`. Run both; alone neither separates a trigger regression from a documented refusal |
 | `robust_jsonl_stats.yaml`, `fix_silent_bug.yaml` | Code correctness — kept as the negative result, see below |
 
@@ -133,6 +136,36 @@ all six H_T warm replicates land in 45.6K–47.1K, a floor the arm never goes be
 while H_0's median is 7.7K (5 of 6 under 8.1K). That ~46K is the injected plugin
 context, re-cached on every run.
 
+### Why `scope_and_root_cause` cannot break its tie
+
+Both arms scored exactly 2/3 on all six replicates, failing only the sibling
+check — re-run against the preserved sandboxes, so this is the criterion, not a
+guess. The cause is structural: `report.py`'s bug is an inlined `total / 1000`
+inside `summarize()`, which never calls `format_size`. ponytail's instruction is
+"grep every caller of the function you're about to touch", and that grep lands on
+`per_file()`, which needs no change — and `per_file()` passes 2048, where
+2048/1000 and 2048/1024 both render `2.0 KB`, so the one real caller is invisible
+by construction. The discriminating-constant trap, one level down from where it
+was first paid for. The criterion measures "spot a duplicated magic constant in a
+non-calling function", which no injected rule asks for. Rewrite trap 1 so the
+sibling is a genuine caller, or drop the criterion — do not re-run it as is.
+
+### Three new axes, written 2026-08-17, not yet run
+
+Task count is the bottleneck, not tier and not replicates, so the next money goes
+here rather than into stage 2. Each new task is a ponytail rule stated verbatim in
+the injected context and absent from H_0's instructions, and each grader was run
+against a known-good and two-or-more known-bad solutions before being committed —
+8 cases, all returning the expected score. `coder-eval plan` passes on all six.
+
+The `no_speculative_abstraction` axis carries a stated risk: sonnet is already
+fairly restrained, so it may land on the ceiling for both arms. If it does, retire
+it. A task both arms pass is not an instrument, and after 2026-08-17 we know
+repeats cannot rescue one.
+
+Per-task `max_usd` went from 1.50 to 2.50 across the discipline set — the measured
+cold replicate reached $1.736.
+
 ## Traps, all paid for once
 
 - **`plugins` is the only variable, by construction.** coder_eval sets
@@ -152,6 +185,11 @@ context, re-cached on every run.
 - **Verify the grader before spending tokens.** Run it against a known-good and a
   known-bad implementation and confirm it returns 1.0 and a low score. Three of
   the graders here printed a clean, plausible, wrong table on first write.
+  `python3 scripts/verify_graders.py` does this for the three 2026-08-17 tasks —
+  it reads each grader out of the YAML rather than copying it, seeds a tempdir
+  with the task's own `pre_run`, and exits non-zero on any mismatch. Needs PyYAML;
+  on a machine where the default `python3` lacks it, name an interpreter that has
+  it. Add a case there whenever you add a task.
 - **`pre_run` does not take dataset row interpolation.** `${row.<field>}` is
   substituted into `initial_prompt` and `success_criteria` only
   (`orchestration/task_loader.py:426-435`). A dataset task therefore cannot carry

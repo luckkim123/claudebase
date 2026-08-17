@@ -55,7 +55,7 @@ pre_run:
 run_limits:
   max_turns: 12
   task_timeout: 480
-  max_usd: 1.50
+  max_usd: 2.50
 
 success_criteria:
   - type: "run_command"

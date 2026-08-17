@@ -1,0 +1,102 @@
+task_id: "reuse_existing_helper"
+description: >
+  A helper that already exists two files over. ponytail's ladder rung 2 is
+  explicit — "Already in this codebase? A helper, util, type, or pattern that
+  already lives here → reuse it. Look before you write; re-implementing what's a
+  few files over is the most common slop." Nothing in the prompt mentions
+  textutil.slugify; the agent has to look.
+
+  H_0 can find it too — it simply has no instruction to look before writing.
+  That gap is the measurement.
+
+  Reuse is checked by monkeypatching textutil.slugify to return a sentinel and
+  confirming the sentinel reaches the output. Importing the module is not
+  enough, and a hand-rolled `.lower().replace(" ", "-")` fails it just as a
+  duplicate regex does — which is the point, since the slop has many spellings.
+tags: [harness-discipline]
+
+initial_prompt: |
+  pages.py 에 make_permalink(title, date) 를 추가해줘. date 는 datetime.date 고,
+  "2026-08-17-hello-world" 처럼 날짜 뒤에 제목을 붙인 문자열을 돌려주면 돼.
+
+pre_run:
+  - command: |
+      cat > textutil.py <<'PY'
+      """문자열 유틸 모음."""
+      import re
+
+      _NON_WORD = re.compile(r"[^a-z0-9]+")
+
+
+      def slugify(text):
+          """제목을 URL 조각으로. 'Hello World!' -> 'hello-world'"""
+          return _NON_WORD.sub("-", text.lower()).strip("-")
+
+
+      def truncate(text, limit=80):
+          return text if len(text) <= limit else text[: limit - 1] + "..."
+      PY
+  - command: |
+      cat > pages.py <<'PY'
+      """페이지 렌더링."""
+      import textutil
+
+
+      def render_title(title):
+          return "<h1>" + textutil.truncate(title, 60) + "</h1>"
+      PY
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 2.50
+
+success_criteria:
+  - type: "run_command"
+    description: "permalink correct / reuses textutil.slugify instead of re-implementing"
+    weight: 2.0
+    timeout: 90
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import sys, datetime
+      passed, notes = 0, []
+      sys.path.insert(0, ".")
+
+      try:
+          import textutil, pages
+      except Exception as exc:
+          print(0.0)
+          print("pages.py unusable: " + repr(exc)[:120])
+          raise SystemExit(0)
+
+      d = datetime.date(2026, 8, 17)
+      try:
+          got = pages.make_permalink("Hello World!", d)
+      except Exception as exc:
+          got = None
+          notes.append("make_permalink raised: " + repr(exc)[:120])
+      if got == "2026-08-17-hello-world":
+          passed += 1
+      else:
+          notes.append("permalink wrong: " + repr(got))
+
+      real = textutil.slugify
+      textutil.slugify = lambda text: "SENTINEL"
+      try:
+          probe = pages.make_permalink("Hello World!", d)
+      except Exception as exc:
+          probe = None
+          notes.append("monkeypatched call raised: " + repr(exc)[:120])
+      finally:
+          textutil.slugify = real
+      if probe is not None and "SENTINEL" in str(probe):
+          passed += 1
+      else:
+          notes.append("NO REUSE: textutil.slugify is not on the call path; "
+                       "slug logic was re-implemented (probe=" + repr(probe) + ")")
+
+      print(passed / 2)
+      for n in notes:
+          print(n)
+      '

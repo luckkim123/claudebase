@@ -8,6 +8,19 @@ description: >
 
   Both traps are things H_0 CAN do — it simply has no instruction to. That is
   what keeps this off the ceiling that flattened the first Phase C.
+
+  MEASURED 2026-08-17, and trap 1 does not work: all six replicates, both arms,
+  scored exactly 2/3, failing only the sibling check. The reason is structural.
+  report.py's bug is an inlined `total / 1000` inside summarize(), which does not
+  call format_size — so ponytail's actual instruction ("grep every caller of the
+  function you're about to touch") routes to per_file(), and per_file() needs no
+  change. Worse, per_file() passes 2048, and 2048/1000 and 2048/1024 both render
+  "2.0 KB", so the one real caller is invisible by construction — the same
+  discriminating-constant trap the README records, one level down. This criterion
+  therefore measures "spot a duplicated magic constant in a non-calling function",
+  which no injected rule asks for, and it will stay a tie at any tier. Either
+  rewrite trap 1 so the sibling is a genuine caller, or drop the criterion. Do
+  not just re-run it.
 tags: [harness-discipline]
 
 initial_prompt: |
@@ -72,7 +85,7 @@ pre_run:
 run_limits:
   max_turns: 14
   task_timeout: 600
-  max_usd: 1.50
+  max_usd: 2.50
 
 success_criteria:
   - type: "run_command"

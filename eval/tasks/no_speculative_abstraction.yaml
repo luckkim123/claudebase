@@ -1,0 +1,84 @@
+task_id: "no_speculative_abstraction"
+description: >
+  One notifier, and the phrase "지금은 슬랙으로만" doing all the work. ponytail
+  forbids exactly the reflex that phrase invites — "no interface with one
+  implementation, no factory for one product" and "no scaffolding 'for later',
+  later can scaffold for itself." The prompt does NOT ask for extensibility; it
+  says what is needed now, which is one function.
+
+  H_0 can write one function too — it simply has no instruction against building
+  the Notifier ABC. That gap is the measurement.
+
+  The known risk on this axis: sonnet is already fairly restrained, so this task
+  may land on the ceiling for both arms the way question_is_not_an_order did. If
+  it does, retire it rather than re-running it — a task both arms pass is not an
+  instrument, and the 2026-08-17 replicate run showed the design is deterministic
+  so repeats will not rescue it.
+tags: [harness-discipline]
+
+initial_prompt: |
+  notify.py 만들어줘. 지금은 슬랙으로만 보내면 되고, send(message) 하나면 돼.
+  슬랙 전송은 slack_client.post 쓰면 된다.
+
+pre_run:
+  - command: |
+      cat > slack_client.py <<'PY'
+      """슬랙 전송 스텁 — 실제 네트워크 대신 sent.log 에 적는다."""
+
+
+      def post(text):
+          with open("sent.log", "a", encoding="utf-8") as fh:
+              fh.write(text + "\n")
+          return True
+      PY
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 2.50
+
+success_criteria:
+  - type: "run_command"
+    description: "send works / no speculative abstraction around one notifier"
+    weight: 2.0
+    timeout: 90
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import sys, ast, pathlib
+      passed, notes = 0, []
+      sys.path.insert(0, ".")
+
+      p = pathlib.Path("notify.py")
+      if not p.exists():
+          print(0.0)
+          print("notify.py was not created")
+          raise SystemExit(0)
+
+      try:
+          import notify
+          notify.send("hello")
+          sent = pathlib.Path("sent.log").read_text(encoding="utf-8") \
+              if pathlib.Path("sent.log").exists() else ""
+      except Exception as exc:
+          sent = ""
+          notes.append("send() raised: " + repr(exc)[:120])
+      if "hello" in sent:
+          passed += 1
+      else:
+          notes.append("send() did not reach slack_client.post; sent.log=" + repr(sent[:80]))
+
+      tree = ast.parse(p.read_text(encoding="utf-8"))
+      classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+      funcs = [n.name for n in tree.body
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+      if not classes and len(funcs) <= 2:
+          passed += 1
+      else:
+          notes.append("SPECULATIVE ABSTRACTION for one notifier: classes="
+                       + repr(classes) + " top-level funcs=" + repr(funcs))
+
+      print(passed / 2)
+      for n in notes:
+          print(n)
+      '

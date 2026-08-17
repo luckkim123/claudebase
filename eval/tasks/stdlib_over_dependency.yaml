@@ -1,0 +1,88 @@
+task_id: "stdlib_over_dependency"
+description: >
+  A three-line csv sum, and pandas sitting right there in the reflex. ponytail's
+  ladder rungs 3 and 5 are explicit — "Stdlib does it? Use it." and "Never add a
+  new one for what a few lines can do." The seeded requirements.txt already has
+  two dependencies, so adding a third looks locally reasonable; nothing in the
+  prompt forbids it.
+
+  H_0 can reach for `csv` too — it simply has no instruction to prefer it. That
+  gap is the measurement.
+
+  Scored on a blocklist rather than a stdlib whitelist on purpose: the grader
+  must not depend on `sys.stdlib_module_names`, which is 3.10+, and the sandbox
+  interpreter version is not ours to assume.
+
+  A pandas answer scores 0.0 where pandas is absent (it fails correctness too)
+  and 0.5 where it is installed. Both sit below the stdlib answer's 1.0, so the
+  task discriminates either way — a 0.5 here is not a grader bug.
+tags: [harness-discipline]
+
+initial_prompt: |
+  sales.csv 읽어서 region 별 amount 합계를 내는 스크립트를 summarize.py 로
+  만들어줘. 실행하면 지역별 합계가 찍히면 돼.
+
+pre_run:
+  - command: |
+      cat > sales.csv <<'CSV'
+      region,amount
+      east,100
+      west,250
+      east,50
+      north,75
+      CSV
+  - command: |
+      cat > requirements.txt <<'REQ'
+      requests==2.32.3
+      python-dateutil==2.9.0
+      REQ
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 2.50
+
+success_criteria:
+  - type: "run_command"
+    description: "sums correct / no new third-party dependency"
+    weight: 2.0
+    timeout: 90
+    score_from_stdout: true
+    command: |
+      python3 -c '
+      import subprocess, sys, re, pathlib
+      passed, notes = 0, []
+
+      r = subprocess.run([sys.executable, "summarize.py"],
+                         capture_output=True, text=True, timeout=60)
+      out = r.stdout
+      want = {"east": 150, "west": 250, "north": 75}
+      hits = [k for k, v in want.items()
+              if re.search(k + r"\D{0,12}" + str(v) + r"(?!\d)", out)]
+      if r.returncode == 0 and len(hits) == 3:
+          passed += 1
+      else:
+          notes.append("sums wrong (matched " + repr(hits) + "): "
+                       + repr((out + r.stderr).strip()[:120]))
+
+      HEAVY = ("pandas", "numpy", "polars", "pyarrow", "dask", "openpyxl",
+               "xlrd", "tabulate", "petl", "csvkit")
+      src = pathlib.Path("summarize.py").read_text(encoding="utf-8") \
+          if pathlib.Path("summarize.py").exists() else ""
+      imported = set(re.findall(r"^\s*(?:import|from)\s+([A-Za-z_][\w]*)",
+                                src, re.M))
+      added = sorted(imported.intersection(HEAVY))
+      req = pathlib.Path("requirements.txt").read_text(encoding="utf-8") \
+          if pathlib.Path("requirements.txt").exists() else ""
+      req_lines = sorted(l.strip() for l in req.splitlines() if l.strip())
+      req_grew = req_lines != ["python-dateutil==2.9.0", "requests==2.32.3"]
+      if not added and not req_grew:
+          passed += 1
+      else:
+          notes.append("NEW DEPENDENCY for a csv sum: imports=" + repr(added)
+                       + " requirements.txt=" + repr(req_lines))
+
+      print(passed / 2)
+      for n in notes:
+          print(n)
+      '
