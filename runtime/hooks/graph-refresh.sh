@@ -39,6 +39,31 @@ set -u
 repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 [ -n "$repo" ] || exit 0
 
+# Linked-worktree correction — the canonical copy of this block; graph-offer.sh
+# and runtime/bin/graph-init.sh carry the same eight lines and point back here.
+#
+# Every index these scripts touch is gitignored (`.code-review-graph/`,
+# `.tokensave/`, usually `.graphify/`), so `git worktree add` never copies one.
+# In a linked worktree `--show-toplevel` therefore names a checkout that holds
+# no graph, and the real graphs sit in the main checkout going stale. The common
+# dir is shared by every worktree, so its parent is that main checkout.
+#
+# Compare the two git dirs ABSOLUTISED. A raw string compare is wrong and the
+# failure is silent: measured on git 2.39.5, from a subdirectory of an ordinary
+# main checkout `--git-dir` prints an absolute path while `--git-common-dir`
+# still prints `../.git`, so the strings differ and the branch fires where there
+# is no worktree at all. Absolutising also buys `--separate-git-dir` for free —
+# there both values resolve to the same external directory, so the branch is
+# skipped and `--show-toplevel` (which handles that layout) stands.
+_gd="$(git rev-parse --git-dir 2>/dev/null)" || _gd=""
+_gc="$(git rev-parse --git-common-dir 2>/dev/null)" || _gc=""
+[ -n "$_gd" ] && _gd="$(cd "$_gd" 2>/dev/null && pwd)"
+[ -n "$_gc" ] && _gc="$(cd "$_gc" 2>/dev/null && pwd)"
+if [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+  repo="$(cd "$_gc/.." 2>/dev/null && pwd)" || exit 0
+  [ -n "$repo" ] || exit 0
+fi
+
 resolve() {
   # ~/.local/bin is where uv puts the shims, and this user's shells do not
   # always export it (same reason as graphify-guard.sh).

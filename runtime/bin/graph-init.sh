@@ -87,6 +87,19 @@ if [ -n "$TARGET" ]; then
   ROOT="$(cd "$TARGET" && pwd)"
 else
   ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
+  # Linked-worktree correction — see runtime/hooks/graph-refresh.sh for why both
+  # git dirs are absolutised before the compare. Building inside a worktree
+  # would mint a second graph that dies with the worktree while the main
+  # checkout's stays stale, and would drop the two exclusion files somewhere
+  # they vanish from. Pass a directory argument to override: that path is taken
+  # above and never reaches this branch.
+  _gd="$(git rev-parse --git-dir 2>/dev/null)" || _gd=""
+  _gc="$(git rev-parse --git-common-dir 2>/dev/null)" || _gc=""
+  [ -n "$_gd" ] && _gd="$(cd "$_gd" 2>/dev/null && pwd)"
+  [ -n "$_gc" ] && _gc="$(cd "$_gc" 2>/dev/null && pwd)"
+  if [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+    ROOT="$(cd "$_gc/.." 2>/dev/null && pwd)" || ROOT=""
+  fi
   [ -n "$ROOT" ] || ROOT="$PWD"
 fi
 

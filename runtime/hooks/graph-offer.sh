@@ -39,6 +39,18 @@ set -u
 # a reason that does not hold. Using git as a proxy for "can be graphed" was
 # simply wrong, and the failure was a silent no-op.
 repo="$(git rev-parse --show-toplevel 2>/dev/null)" || repo=""
+
+# Linked-worktree correction — see graph-refresh.sh for the measured reasoning
+# behind absolutising both git dirs before the compare. Here it stops the hook
+# offering a second graph for a repository that already answered the question in
+# its main checkout, since the indexes are gitignored and never reach a worktree.
+_gd="$(git rev-parse --git-dir 2>/dev/null)" || _gd=""
+_gc="$(git rev-parse --git-common-dir 2>/dev/null)" || _gc=""
+[ -n "$_gd" ] && _gd="$(cd "$_gd" 2>/dev/null && pwd)"
+[ -n "$_gc" ] && _gc="$(cd "$_gc" 2>/dev/null && pwd)"
+if [ -n "$_gc" ] && [ "$_gd" != "$_gc" ]; then
+  repo="$(cd "$_gc/.." 2>/dev/null && pwd)" || repo=""
+fi
 is_git=1
 if [ -z "$repo" ]; then
   is_git=0
@@ -63,11 +75,19 @@ done
 [ -d "$repo/.code-review-graph" ] && exit 0
 
 if [ "$is_git" -eq 1 ]; then
-  git_dir="$(git rev-parse --git-dir 2>/dev/null)" || exit 0
-  case "$git_dir" in
-    /*) ;;
-    *) git_dir="$repo/$git_dir" ;;  # relative when run from the repo root
-  esac
+  # The COMMON dir, so the marker is one per repository rather than one per
+  # worktree — `repo` above already resolves to the main checkout, so asking
+  # again from each new worktree would re-offer a graph that exists.
+  # `_gc` is absolute or empty; the per-worktree `--git-dir` is the fallback for
+  # the git versions that do not know `--git-common-dir`.
+  git_dir="$_gc"
+  if [ -z "$git_dir" ]; then
+    git_dir="$(git rev-parse --git-dir 2>/dev/null)" || exit 0
+    case "$git_dir" in
+      /*) ;;
+      *) git_dir="$repo/$git_dir" ;;  # relative when run from the repo root
+    esac
+  fi
   marker="$git_dir/claudebase-graph-offered"
 else
   # No .git to hide it in, and writing a dotfile into someone's working tree to
