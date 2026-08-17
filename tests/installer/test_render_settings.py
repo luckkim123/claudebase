@@ -341,3 +341,23 @@ class TestDroppedHookCommands:
         printed = capsys.readouterr().out
         assert "dropped 1 hook command(s)" in printed
         assert "sh ~/.foreign/hook.sh" in printed
+
+    def test_dry_run_warns_too(self, tmp_path, capsys):
+        # A dry-run is what someone reads *before* deciding to render, so this is
+        # the mode where the warning matters most. It was missing at first.
+        base = tmp_path / "settings.json"
+        base.write_text(json.dumps(self._settings("ours")))
+        out = tmp_path / "home-settings.json"
+        out.write_text(json.dumps(self._settings("ours", "sh ~/.foreign/hook.sh")))
+        before = out.read_text()
+
+        rs.main([
+            "--base", str(base),
+            "--local", str(tmp_path / "absent.json"),
+            "--out", str(out),
+            "--dry-run",
+        ])
+
+        printed = capsys.readouterr().out
+        assert "would drop 1 hook command(s)" in printed
+        assert out.read_text() == before  # still a dry run

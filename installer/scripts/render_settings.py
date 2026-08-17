@@ -195,6 +195,28 @@ def dropped_hook_commands(
     return [cmd for cmd in _hook_commands(existing) if cmd not in kept]
 
 
+def _report_dropped_hooks(stray: list[str], *, would: bool) -> None:
+    """Name the count and the fix; the user decides what to do about it."""
+    if not stray:
+        return
+    print(
+        f"render-settings: {'would drop' if would else 'dropped'} {len(stray)} hook "
+        "command(s) that were in the previous render but are not in the claudebase "
+        "baseline."
+    )
+    for cmd in stray[:3]:
+        flat = " ".join(cmd.split())
+        print(f"                 - {flat[:70]}{'...' if len(flat) > 70 else ''}")
+    if len(stray) > 3:
+        print(f"                 - ... and {len(stray) - 3} more")
+    print(
+        "                 Tools that inject their own hooks (IDE integrations, MCP "
+        "installers, `tokensave install`) write straight into this file, and a render "
+        "replaces it. Relaunch that tool so it re-injects, or move the hook into "
+        "config/settings.json to make it survive."
+    )
+
+
 def _load(path: Path) -> dict[str, Any]:
     """Read a JSON object, returning {} for a missing file.
 
@@ -272,12 +294,18 @@ def main(argv: list[str] | None = None) -> int:
     if not was_symlink and not captured and existing == rendered:
         return 0
 
+    stray = dropped_hook_commands(existing, rendered)
+
     if args.dry_run:
         if was_symlink:
             print(f"render-settings: would replace symlink with rendered file: {out_path}")
         if captured:
             print(f"render-settings: would capture per-machine keys into {local_path}")
         print(f"render-settings: would write {out_path}")
+        # Reported here too, and this is the mode where it matters most: a
+        # dry-run is what someone reads *before* deciding to render, so hiding
+        # the one warning they would act on defeats the flag.
+        _report_dropped_hooks(stray, would=True)
         return 0
 
     if captured:
@@ -292,23 +320,7 @@ def main(argv: list[str] | None = None) -> int:
     _dump(out_path, rendered)
     print(f"render-settings: wrote {out_path}")
 
-    stray = dropped_hook_commands(existing, rendered)
-    if stray:
-        print(
-            f"render-settings: dropped {len(stray)} hook command(s) that were in the "
-            "previous render but are not in the claudebase baseline."
-        )
-        for cmd in stray[:3]:
-            flat = " ".join(cmd.split())
-            print(f"                 - {flat[:70]}{'...' if len(flat) > 70 else ''}")
-        if len(stray) > 3:
-            print(f"                 - ... and {len(stray) - 3} more")
-        print(
-            "                 Tools that inject their own hooks (IDE integrations, "
-            "MCP installers, `tokensave install`) write straight into this file, and "
-            "a render replaces it. Relaunch that tool so it re-injects, or move the "
-            "hook into config/settings.json to make it survive."
-        )
+    _report_dropped_hooks(stray, would=False)
     return 0
 
 
