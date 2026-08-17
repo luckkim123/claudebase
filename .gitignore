@@ -45,3 +45,7 @@ desktop.ini
 graphify-out/
 .code-review-graph/
 .tokensave/
+
+# coder-eval run artifacts: per-machine sandboxes and logs carrying tempdir
+# absolute paths. The durable numbers live in eval/README.md.
+eval/runs/

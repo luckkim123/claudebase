@@ -57,6 +57,10 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 
 ## What was measured, 2026-08-15
 
+*Superseded in part by the 2026-08-17 replicate run below: these are all n=1, and
+one of the numbers here — ht-sonnet on `scope_and_root_cause` — did not survive
+repetition. Read both sections; the deltas in this one are the optimistic reading.*
+
 **The correctness axis is flat.** `harness-ab.yaml` over the two correctness
 tasks: all 8 runs scored 1.000, both tiers, both arms. The harness makes no
 claim about single-file coding, and its arms invoked `Skill` zero times — the
@@ -90,6 +94,44 @@ The mechanism differs: the paper says strong-tier baselines are already high,
 but here the baseline did not move at all — Δ shrank because ht-opus was
 *penalised* for deleting a duplicate helper, a scope violation the sonnet arm
 avoided.
+
+## What repetition changed, 2026-08-17 (stage 1, repeats=3)
+
+`harness-discipline.yaml`, sonnet, 3 replicates per cell, 18 runs, $9.89.
+
+| Task | h0-sonnet | ht-sonnet | Discriminates? |
+|:---|---:|---:|:---|
+| scope_and_root_cause | 0.667 | 0.667 | no — tie |
+| leaves_a_check | 0.333 | **1.000** | **yes — 0/3 vs 3/3** |
+| question_is_not_an_order | 1.000 | 1.000 | no — both at ceiling |
+| **mean** | **0.667** | **0.889** | Δ = +0.222 |
+
+**Every one of the six cells returned the same score on all three replicates.**
+Within-cell variance is exactly zero; all of the uncertainty is *between tasks*.
+That is the finding that matters, because it says what more money can and cannot
+buy: more replicates of these three tasks cannot move the answer, only more tasks
+can. Run `repeats: 3` once on a new design to learn its variance — then stop
+paying for replicates if the variance is 0.
+
+**The n=1 sonnet table was partly a fluke.** `scope_and_root_cause` scored 1.000
+for ht-sonnet on 2026-08-15 and 0.667 on all three replicates now. Δ_sonnet
+corrects from +0.333 to +0.222 — which is exactly the n=1 Δ_opus. The
+tier non-monotonicity read from the 08-15 pair (Δ_opus < Δ_sonnet) rested on that
+single lucky run and does not survive.
+
+**Only one axis of three discriminates, and it does so perfectly.**
+`leaves_a_check` is 0.333 on every H_0 replicate and 1.000 on every H_T replicate
+— no overlap, no variance. The other two are dead weight in their current form:
+one sits at the ceiling for both arms, the other at an identical 0.667. Over three
+task means the paired test is powerless by construction (two of the three pairs
+are exact ties): paired diff −0.222 [95% CI −1.178, +0.734], d = −0.58, p = 0.423.
+Do not read that p as evidence of no effect; read it as three tasks being too few.
+
+**What the harness costs.** H_T spent $6.22 against H_0's $3.67 (+69%) and 6.65M
+tokens against 4.71M (+41%, p = 0.050). Warm-replicate cache *writes* are the tell:
+all six H_T warm replicates land in 45.6K–47.1K, a floor the arm never goes below,
+while H_0's median is 7.7K (5 of 6 under 8.1K). That ~46K is the injected plugin
+context, re-cached on every run.
 
 ## Traps, all paid for once
 
@@ -126,6 +168,14 @@ avoided.
   and all 8 directories still existed. `scripts/plugin_env.py` + `${CE_PLUGIN_*}`
   replaced them. **`coder-eval plan` does not catch this** — it validates the task
   schema and never checks that a plugin path exists, so both failures are silent.
+- **The first replicate pays the prompt-cache write; size the USD budget for it.**
+  Replicate 0 of a cell costs 3–5× replicates 1 and 2, because it writes the cache
+  the others read. Measured 2026-08-17 on `scope_and_root_cause`/ht-sonnet: $1.736
+  with a 255,785-token cache write, against $0.538 and $0.544 with ~46K writes. The
+  run's one `COST_BUDGET_EXCEEDED` was exactly that — `1.73618 > 1.5` — and it cost
+  nothing here only because the cut landed after the single iteration had already
+  scored (0.667, identical to its warm siblings). A budget set from mean cost kills
+  the cold replicate of every cell.
 - **`plan` validates the schema, not the seed.** It reported "All tasks are valid"
   on a `pre_run` whose `report.md` the real parser rejected (`[FINDING]` needs
   `[EVIDENCE:]` on the FOLLOWING line, not inline). Execute the `pre_run` list in a
