@@ -31,7 +31,12 @@ defaults:
     permission_mode: bypassPermissions
     allowed_tools: ["Skill", "Bash", "Read", "Write", "Edit", "Glob", "Grep"]
     model: "claude-sonnet-5"
-  repeats: 3
+  # 1, not 3, and that is a measurement not a default. The 2026-08-17 replicate
+  # run scored all six cells identically on all three replicates — within-cell
+  # variance is zero, so replicates on this design buy precision that is already
+  # perfect. Spend on tasks instead. Raise this only for a task whose grader is
+  # known to be non-deterministic.
+  repeats: 1
 
 variants:
   - variant_id: h0-sonnet
