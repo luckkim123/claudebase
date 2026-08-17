@@ -254,6 +254,49 @@ def test_ascent_ignores_untrusted_worktreeroot_argument(tmp_path):
     assert out.stdout == str(proj / ".omc")
 
 
+def test_omc_state_dir_overrides_marker_ascent(tmp_path):
+    # The other side of the branch the two tests above exercise, and the one
+    # nothing covered until it broke them: when OMC_STATE_DIR is set it wins,
+    # and the patch must leave that branch alone.
+    #
+    # This gap was invisible because the variable arrived for free — the
+    # rendered ~/.claude/settings.json exports it, so every Claude Code session
+    # silently took this path while the assertions above described the other
+    # one. tests/conftest.py now strips it, which is what makes an explicit
+    # test necessary: with the ambient value gone, nothing else reaches here.
+    cfg = make_mock_omc(tmp_path)
+    assert HELPER.exists()
+    run_patch(cfg)
+    dist = dist_of(cfg)
+
+    proj = tmp_path / "proj3"
+    sub = proj / "sub"
+    sub.mkdir(parents=True)
+    (proj / "CLAUDE.md").write_text("x")
+    custom = tmp_path / "state"
+
+    code = (
+        f"process.env.HOME={json.dumps(str(tmp_path))};"
+        f"process.env.OMC_STATE_DIR={json.dumps(str(custom))};"
+        f"const m=await import({json.dumps(str(dist / 'worktree-paths.js'))});"
+        f"process.chdir({json.dumps(str(sub))});"
+        f"process.stdout.write(m.getOmcRoot());"
+    )
+    out = subprocess.run(
+        ["node", "--input-type=module", "-e", code],
+        capture_output=True, text=True, check=True,
+    )
+
+    # The override wins: state lands under OMC_STATE_DIR, never <root>/.omc.
+    assert out.stdout.startswith(str(custom) + os.sep)
+    assert out.stdout != str(proj / ".omc")
+    # And it resolves through the UNPATCHED anchor — the stub's identifier is
+    # derived from cwd (the subfolder), not from the ascended marker root. That
+    # is the patch's stated scope: only the fallback followed by
+    # `return join(root, OmcPaths.ROOT)` is rewritten.
+    assert out.stdout == str(custom / f"id-{len(str(sub))}")
+
+
 def test_bridge_bundle_is_patched(tmp_path):
     # OMC inlines worktree-paths into the CJS MCP bridge — a second copy. The
     # patch must reach it too (dist/lib alone leaves MCP tools scattering .omc).
