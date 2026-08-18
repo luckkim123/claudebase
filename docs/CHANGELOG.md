@@ -2,6 +2,45 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-18 — an office file that converts, and is then thrown away by your own ignore rule
+
+graphify cannot read a `.docx` directly. `detect()` converts each one to a markdown sidecar under
+`<GRAPHIFY_OUT>/converted/` and extracts *that*, so the pinned extras decide whether those files
+are in the corpus at all — and both ways of losing them are silent.
+
+Missing `[office]` is the loud half, and it is only loud once: the file lands in
+`skipped_sensitive` with a hint, then never appears again. Measured on the obsidian vault
+2026-08-17 — three tracked krit `.docx` produced zero nodes while every other check passed, so the
+same commit yielded two different corpora on two machines pinned differently.
+
+The quiet half is worse, and installing the extra is what exposes it. The sidecar lands *inside*
+`<GRAPHIFY_OUT>/`, which the recommended `.*` ignore rule excludes, and `detect.py:1711` drops it
+with a bare `continue` — no node, and no `skipped_sensitive` entry either. So the extra makes the
+warning disappear while the node count stays zero, which reads exactly like a fix. graphify
+enforces gitignore's parent-exclusion rule (`detect.py:1302`), so one `!` cannot rescue the file;
+the ancestors have to be re-included first.
+
+### Fixed
+- **`installer/lib/deps.sh` `ensure_graphify`** — the pin widens to `graphifyy[mcp,office]`.
+- **`installer/lib/deps.sh` `_graphify_mcp_ready` → `_graphify_extras_ready`** — probes
+  `import mcp, docx` instead of `import mcp`. Renaming it is the point rather than cosmetics: the
+  self-heal is what reaches machines installed under the older pin, because `ensure_uv_tool` skips
+  anything already present, so a widened pin whose readiness probe still passes is inert exactly
+  where it is needed.
+- **`templates/project-code-review-graph.md`** — documents the sidecar path, the four-line ignore
+  exception that lets it through, a node-count check to verify it by (never the warning going
+  away), and that `.pptx` has no conversion path at all (`OFFICE_EXTENSIONS` is `.docx`/`.xlsx`).
+
+### Verification
+Reinstalled with both extras on this machine: `import mcp` and `import docx` both succeed, and the
+three `.docx` converted. With `.*` alone they still produced zero nodes and `skipped_sensitive`
+went 3 → 0 — the false fix, reproduced. After the four-line exception: 3 sidecars detected, 0 files
+leaked from `.graphify/cache`, `.obsidian`, or `.claude`, and 35 nodes merged into the vault graph.
+
+### Notes
+Existing machines repair themselves on the next `install.sh`; no manual step. `.pptx` stays out of
+every graph regardless — that is an upstream limit, not a pin.
+
 ## [Unreleased] — 2026-08-17 — a replaced PATH drops what the launcher put there
 
 `env.PATH` in the rendered settings replaces PATH for every Claude Code subprocess — that is the

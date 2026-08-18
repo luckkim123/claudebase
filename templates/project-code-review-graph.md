@@ -120,10 +120,49 @@ python3 -c "import json;print(json.load(open('.mcp.json'))['mcpServers'].get('gr
 ls -l "${GRAPHIFY_OUT:-graphify-out}/graph.json"     # the path that must exist
 ```
 
-That server needs the `mcp` extra — `uv tool install "graphifyy[mcp]"`, which is
-what `install.sh` does. The `graphify-mcp` shim ships either way, so a plain
-`graphifyy` install looks fine and fails only on connect, with
+That server needs the `mcp` extra — `uv tool install "graphifyy[mcp,office]"`,
+which is what `install.sh` does. The `graphify-mcp` shim ships either way, so a
+plain `graphifyy` install looks fine and fails only on connect, with
 `ModuleNotFoundError: No module named 'mcp'`.
+
+`office` rides along on the same install because its absence is quieter still.
+graphify cannot read a `.docx`/`.xlsx` directly: `detect()` converts each to a
+markdown sidecar under `<GRAPHIFY_OUT>/converted/` and extracts *that*. Without
+the extra the conversion never runs, the file is reported once under
+`skipped_sensitive`, and it is simply absent from the corpus — no error, no node.
+
+**And the sidecar has to survive your own ignore file.** The conversion output
+lands inside `<GRAPHIFY_OUT>/`, which the recommended `.*` rule excludes, so
+`detect.py` drops the sidecar with a bare `continue` — this time without even a
+`skipped_sensitive` entry. Installing the extra makes the warning disappear while
+the node count stays zero, which reads exactly like a fix. graphify enforces
+gitignore's parent-exclusion rule, so a single `!` cannot rescue it; re-include
+the two ancestor directories, re-ignore the rest, then re-include the sidecars
+with a `**` (a directory-only pattern never matches the `.md` itself):
+
+```
+.*
+!.graphify/
+.graphify/*
+!.graphify/converted/
+!.graphify/converted/**
+```
+
+Verify by node count, never by the warning going away:
+
+```bash
+graphify_py=$(cat .graphify/.graphify_python)
+"$graphify_py" -c "
+from pathlib import Path
+from graphify.detect import detect
+r = detect(Path('.'))
+allf = [f for v in r['files'].values() for f in v]
+print('sidecars in:', sum('/converted/' in f for f in allf))
+print('LEAK (must be 0):', sum('/.graphify/' in f and '/converted/' not in f for f in allf))"
+```
+
+`.pptx` has no conversion path at all — `OFFICE_EXTENSIONS` is `.docx` and
+`.xlsx` only, so a slide deck stays out of the graph whatever you install.
 
 ### Three layers, only one of which is binding
 

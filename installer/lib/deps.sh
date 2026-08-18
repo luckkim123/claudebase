@@ -116,6 +116,15 @@ ensure_code_review_graph() {
 # a broken server that looks installed. The extra costs two packages (mcp,
 # starlette) and makes the per-project .mcp.json entry actually work.
 #
+# [office] joins it for the same reason, one layer quieter. graphify cannot read
+# a .docx/.xlsx directly, so detect() converts each to a markdown sidecar and
+# extracts THAT; without the extra the conversion never runs. It does not error
+# — the file is reported once under `skipped_sensitive` and then simply is not
+# in the corpus. Measured on the obsidian vault 2026-08-17: three tracked .docx
+# produced zero nodes on the machine with the extra missing while every other
+# check passed. Two machines pinned differently means two different corpora from
+# the same commit, which is the drift this installer exists to prevent.
+#
 # Always pass --project when running `graphify install` on a claudebase machine.
 # Without it, install.py writes its CLAUDE.md block with Path.write_text into
 # ~/.claude/CLAUDE.md; write_text follows the symlink this installer places
@@ -125,13 +134,18 @@ ensure_code_review_graph() {
 # project's own .claude/, which is where they belong anyway — the hooks are
 # project-scoped in graphify regardless. See templates/project-code-review-graph.md.
 
-# _graphify_mcp_ready — is the [mcp] extra actually importable in graphify's
-# uv-managed environment? `command -v graphify-mcp` is not enough: the shim ships
-# unconditionally, so a graphifyy installed without the extra passes every
-# presence check and only fails when a client connects.
-_graphify_mcp_ready() {
+# _graphify_extras_ready — are BOTH pinned extras actually importable in
+# graphify's uv-managed environment? `command -v graphify-mcp` is not enough: the
+# shim ships unconditionally, so a graphifyy installed without the extra passes
+# every presence check and only fails when a client connects. `docx` is the
+# import behind [office]; python-docx installs under that name.
+#
+# Both are probed in one call because the self-heal below is what actually
+# reaches machines installed under an older pin — `ensure_uv_tool` skips anything
+# already present, so a widened pin alone is inert everywhere it matters.
+_graphify_extras_ready() {
   local py="$HOME/.local/share/uv/tools/graphifyy/bin/python"
-  [[ -x "$py" ]] && "$py" -c 'import mcp' >/dev/null 2>&1
+  [[ -x "$py" ]] && "$py" -c 'import mcp, docx' >/dev/null 2>&1
 }
 
 # ensure_tokensave — the tokensave CLI, github.com/aovestdipaperino/tokensave
@@ -354,15 +368,16 @@ graph_cli_intro_note() {
 }
 
 ensure_graphify() {
-  ensure_uv_tool graphify "graphifyy[mcp]" graphify
-  # Self-heal machines that installed graphifyy before the extra was pinned here:
-  # the presence check above skips them, so the broken MCP server would persist
-  # forever. One --force reinstall fixes it and every later run is silent again.
-  _graphify_mcp_ready && return 0
+  ensure_uv_tool graphify "graphifyy[mcp,office]" graphify
+  # Self-heal machines that installed graphifyy under an older pin: the presence
+  # check above skips them, so the broken MCP server and the silently-unreadable
+  # office files would persist forever. One --force reinstall fixes both and
+  # every later run is silent again.
+  _graphify_extras_ready && return 0
   command -v uv >/dev/null 2>&1 || return 0
-  log "graphify present without the [mcp] extra — reinstalling to repair graphify-mcp"
-  run uv tool install --force "graphifyy[mcp]" \
-    || printf '[install] WARNING: graphify [mcp] reinstall failed — graphify-mcp will not start\n'
+  log "graphify present without the [mcp,office] extras — reinstalling"
+  run uv tool install --force "graphifyy[mcp,office]" \
+    || printf '[install] WARNING: graphify [mcp,office] reinstall failed — graphify-mcp will not start and .docx/.xlsx stay unread\n'
 }
 
 # --- opt-in convenience-tool auto-install (INSTALL_TOOLS=1) ------------------
