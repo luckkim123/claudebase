@@ -2,6 +2,51 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-21 — a port you can see, an owner you cannot kill
+
+`claude-mem` blocks every prompt when a stale worker of a different version squats its
+port, and this skill already carried the cure — `lsof` the port, `kill` the pid. That
+recipe assumes the squatter is reachable. Two containers running with `--network host`
+break the assumption in a way the existing text did not cover: they share one loopback
+while keeping filesystems and PID namespaces apart, so each carries its own plugin cache
+and its own version, and whichever updates first meets a foreign worker it has no way to
+signal.
+
+Measured 2026-08-21 on `ksm-ubuntu`: `marinelab-isaaclab` spawned a v13.14.0 worker on
+`:37700` on 08-14; `stonefish_dev` updated to v13.15.3 and then logged `Worker version
+mismatch — killing stale worker` followed by `Stale worker is serving the port but the
+PID file does not identify it` on every hook until the
+`CLAUDE_MEM_HOOK_FAIL_LOUD_THRESHOLD` of 3 tripped. Inside that container `lsof`, `ss`,
+`netstat`, and `fuser` are all absent and a `/proc` scan finds no owner for the socket —
+`/proc/net/tcp` shows the port at all only because that is the shared *net* namespace
+talking, not the container's own processes.
+
+The half that makes it circular: the block fires at `UserPromptSubmit`, so
+`/sync-claudebase`, the skill holding the recipe, never starts. The prompt that surfaced
+this *was* `/sync-claudebase`. The same day confirmed the mechanism from the other side —
+when `marinelab-isaaclab` updated to v13.15.3 it cleared its own stale worker unaided,
+because that worker was its own child (same PPID) and the kill never left one PID
+namespace. Same port, same tool, opposite outcome.
+
+### Fixed
+- **`runtime/skills/sync-claudebase/SKILL.md`** — the claude-mem worker block gains the
+  container axis: why the `lsof`+`kill` recipe cannot run from inside a `--network host`
+  container, the host-side escape (`docker top <c> | grep worker-service` → `kill`), the
+  durable fix of one `CLAUDE_MEM_WORKER_PORT` per host-network environment, and a warning
+  not to read the recipe's `37701` fallback as the port actually in play — the containers
+  measured here carried `37700`.
+
+### Verification
+- Both containers healthy on distinct ports afterwards, same version: `:37700` →
+  `13.15.3` (marinelab-isaaclab), `:37701` → `13.15.3` (stonefish_dev), each reporting
+  `status: ok` from `/api/health`.
+
+### Notes
+- The port separation on `stonefish_dev` is a hand edit to that container's
+  `~/.claude-mem/settings.json` and does not survive a rebuild. Making it permanent
+  belongs to that container's own provisioning, not to this repo — a machine path has no
+  business in a repo that ships to every machine.
+
 ## [Unreleased] — 2026-08-18 — an office file that converts, and is then thrown away by your own ignore rule
 
 graphify cannot read a `.docx` directly. `detect()` converts each one to a markdown sidecar under

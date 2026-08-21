@@ -432,6 +432,34 @@ echo '{"consecutiveFailures":0,"lastFailureAt":0}' > ~/.claude-mem/state/hook-fa
 Don't run it when claude-mem did *not* update — killing a healthy same-version
 worker just forces a needless respawn.
 
+**The same collision across containers, where the recipe above cannot run.** A
+machine running two or more containers with `--network host` shares one loopback
+between them while keeping filesystems and PID namespaces separate — so each
+container carries its *own* plugin cache, its own version, and its own
+`~/.claude-mem/`, yet they all contend for the single worker port. The container
+whose plugin updates first finds a foreign older worker squatting the port and
+blocks, and it cannot clear it: `kill` does not cross a PID namespace, and the
+owner is unresolvable from inside anyway. Measured 2026-08-21 on `stonefish_dev`
+(v13.15.3) against `marinelab-isaaclab` (v13.14.0, worker up 7 days) — `lsof`,
+`ss`, `netstat`, and `fuser` are all absent in the container, and a `/proc` scan
+finds no owner for the socket; only `/proc/net/tcp` shows the port at all, and
+that is the shared *net* namespace talking, not the container's own processes.
+
+**The block also hides its own cure** — it fires at `UserPromptSubmit`, so
+`/sync-claudebase`, the skill carrying the kill recipe, never starts. The prompt
+that surfaced this was `/sync-claudebase` itself. Clear it from *outside* the
+container:
+
+```bash
+docker top <container> | grep worker-service   # host PID of the squatting worker
+kill <pid>                                     # next hook respawns the new version
+```
+
+The durable fix is one port per environment: give each host-network container a
+distinct `CLAUDE_MEM_WORKER_PORT` in its own `~/.claude-mem/settings.json`. Don't
+read the `37701` fallback in the recipe above as the port actually in play —
+the containers measured here carried `37700`. Read the file.
+
 **Why opt-in, not folded into step 5's install.sh:** keeping `--update` off the
 default install path preserves install.sh's idempotency contract (a second run
 prints zero action lines — step 6 depends on this). Bundling auto-update would
