@@ -44,6 +44,13 @@ import sys
 from pathlib import Path
 
 INSTALLED = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+USER_SETTINGS = Path.home() / ".claude" / "settings.json"
+
+# Fixed, machine-independent path the experiment YAMLs commit as their
+# `claude_settings:` string. The *content* is resolved per machine at run time
+# (same trap as the plugin paths above: a committed list of this machine's
+# plugin ids would silently stop covering another machine's enabledPlugins).
+NEUTRALIZE = Path("/tmp/claudebase-eval-neutralize-settings.json")
 
 # env var suffix -> plugin name as it appears in installed_plugins.json
 PLUGINS = {
@@ -83,6 +90,43 @@ def resolve() -> tuple[dict[str, str], list[str]]:
     return resolved, problems
 
 
+def write_neutralize_settings(
+    out: Path = NEUTRALIZE, user_settings: Path = USER_SETTINGS
+) -> tuple[Path | None, str | None]:
+    """Write the per-machine `--settings` file the A/B yamls point at.
+
+    `enabledPlugins` must be an explicit per-key false-map. Measured 2026-08-22
+    (claudebase-hooks-ab pre-Step-4 probe): an empty `{}` at the `--settings`
+    layer deep-MERGES with the user layer's populated map — a no-op, the omha
+    UserPromptSubmit injection still fired in the treatment arm. A per-key
+    `false` wins the merge; the same probe re-run with this false-map showed
+    zero plugin skills while the user-layer hooks kept firing.
+
+    Returns (path, problem) — problem is non-None only when the user settings
+    file exists but cannot be parsed (a missing file legitimately means there
+    is nothing to disable).
+    """
+    enabled: dict = {}
+    if user_settings.exists():
+        try:
+            enabled = json.loads(user_settings.read_text(encoding="utf-8")).get(
+                "enabledPlugins", {}
+            )
+        except (OSError, json.JSONDecodeError) as e:
+            return None, f"cannot read {user_settings}: {e}"
+    payload = {
+        "enabledPlugins": {k: False for k in enabled},
+        # Scalar neutralization (see the yaml's SCALAR NEUTRALIZATION note):
+        # each value is the built-in default the ["project"]-only arm already
+        # runs with implicitly, pinned so the user-layer arm cannot diverge.
+        "outputStyle": "default",
+        "alwaysThinkingEnabled": True,
+        "effortLevel": "unset",
+    }
+    out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return out, None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--check", action="store_true",
@@ -106,8 +150,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{var:<{width}}  {path}")
         return 0
 
+    neut_path, neut_problem = write_neutralize_settings()
+    if neut_problem:
+        print(f"plugin_env: cannot write neutralize settings: {neut_problem}",
+              file=sys.stderr)
+        return 1
+
     for var, path in resolved.items():
         print(f"export {var}={path}")
+    print(f"# neutralize-settings written: {neut_path}")
     return 0
 
 

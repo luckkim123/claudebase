@@ -84,6 +84,25 @@ description: >
   won by the CAVEAT above and the yaml needs a real fix before Step 4, not a
   rerun.
 
+  PROBE EXECUTED (2026-08-22, this machine) — both directions resolved:
+  (1) With the old inline `enabledPlugins: {}`, the treatment arm still ran
+  the plugin layer: the omha UserPromptSubmit ROUTE injection appeared in its
+  probe output, and omha is wired ONLY as a plugin (grep of
+  ~/.claude/settings.json hooks: no route_emit/omha entry). So `--settings`
+  deep-MERGES with the user layer and an empty map merges as a no-op — the
+  REPLACE branch of the CAVEAT is dead, and so is the hooks-dropped failure
+  mode of the SECOND PROBE ASSERTION (treatment sandbox gained
+  .omc/logs/{hud_ensure,tokensave_guard}.jsonl; control sandbox gained none).
+  (2) Re-run with an explicit per-key false-map over this machine's 16
+  enabledPlugins: zero plugin-namespaced skills visible in the treatment arm,
+  ~/.claude/CLAUDE.md still loaded, firing logs still created. That false-map
+  is therefore the fix, generated per machine (see claude_settings below).
+  Probe sandboxes must NOT live under ~/.claude (a first attempt put them in
+  ~/.claude/jobs/...: ancestor-directory CLAUDE.md discovery walked up into
+  ~/.claude/CLAUDE.md and contaminated the control arm) — use mktemp -d
+  under /tmp. Re-run both probe assertions on any new machine before Step 4;
+  the mechanism is confirmed here, not everywhere.
+
   Sonnet only, mirroring harness-discipline.yaml's stage-1 gate: this axis is
   unproven, so don't spend opus tokens on it yet. Task: leaves_a_check.yaml —
   the only task in this directory confirmed to discriminate (0.333 vs 1.000,
@@ -130,11 +149,16 @@ defaults:
     # model is already pinned above via defaults.agent.model, which the SDK
     # applies independently of setting_sources — no separate claude_settings
     # entry needed.
-    claude_settings:
-      enabledPlugins: {}
-      outputStyle: "default"
-      alwaysThinkingEnabled: true
-      effortLevel: "unset"
+    # FIX ROUND 3 (2026-08-22): the inline dict this used to be is gone — the
+    # probe below proved `enabledPlugins: {}` is a no-op (deep-MERGE with the
+    # user layer, not REPLACE), so the neutralization now lives in a file that
+    # scripts/plugin_env.py writes per machine: an explicit per-key false-map
+    # over this machine's real enabledPlugins, plus the same three scalars.
+    # The path is fixed and machine-independent; the content is not. The
+    # already-mandatory `eval "$(python3 scripts/plugin_env.py)"` pre-run step
+    # is what materializes it — claude_settings as a string passes through to
+    # `--settings` verbatim (claude_code_agent.py:1198-1200).
+    claude_settings: "/tmp/claudebase-eval-neutralize-settings.json"
   repeats: 3
 
 variants:
