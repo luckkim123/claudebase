@@ -44,7 +44,7 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 | `harness-ab.yaml` | 2×2, sonnet + opus | First Phase C. Scored code correctness — flat, see below |
 | `harness-discipline.yaml` | 2 arms, sonnet | Redesigned Phase C, stage 1 |
 | `harness-discipline-opus.yaml` | 2 arms, opus | Stage 2, run only after stage 1 separated |
-| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the 22 claudebase hooks every prior experiment above excluded (see Traps) |
+| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the 22 claudebase hooks every prior experiment above excluded (see Traps). **Before running**: the yaml's own description has an unverified plugin-layer fix and a mandated pre-run probe — read it first. |
 
 **Tasks** — the discipline set is the one that works.
 
@@ -205,7 +205,7 @@ cold replicate reached $1.736.
 
 - **`plugins` is the only variable, by construction.** coder_eval sets
   `setting_sources=["project"]` (`claude_code_agent.py:1196`) and the sandbox is a
-  fresh tempdir, so **neither arm** loads `~/.claude/CLAUDE.md` or the 21 claudebase
+  fresh tempdir, so **neither arm** loads `~/.claude/CLAUDE.md` or the 22 claudebase
   hooks. These experiments measure the plugin layer, not the whole harness.
 - **Never count harness state dirs as "files the agent created."** `.omc/` is
   produced by oh-my-claudecode and can never appear in an H_0 run, so scoring it

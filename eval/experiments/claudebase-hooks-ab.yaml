@@ -13,10 +13,38 @@ description: >
     - h0-project:       ["project"]          — the condition every prior experiment ran under
     - ht-user-project:  ["user", "project"]  — adds ~/.claude/CLAUDE.md + the 22 hooks
 
-  plugins is fixed to [] for both arms (set once in defaults, not per-variant,
-  so it cannot drift between them) — the plugin layer's own effect was already
-  measured separately in harness-discipline.yaml, and mixing it in here would
-  confound plugin effect with hook/CLAUDE.md effect.
+  PLUGIN-LAYER FIX (Fix Round 1): `plugins: []` alone does NOT make the plugin
+  layer identical. `plugins` maps only to `--plugin-dir`
+  (claude_code_agent.py:1153/1185, subprocess_cli.py:722-728), an ad-hoc local-
+  directory loader that is entirely separate from `enabledPlugins`, a sibling
+  top-level key in ~/.claude/settings.json (confirmed: 16 entries on this
+  machine). `setting_sources: ["user", "project"]` loads that file wholesale,
+  so ht-user-project would silently pick up 16 real plugins that h0-project
+  never sees — exactly the confound this design is supposed to rule out.
+  Fix: `claude_settings.enabledPlugins: {}`, set once in defaults so both arms
+  get the identical override. `claude_settings` maps to the SDK's `--settings`
+  flag, documented as "the flag settings layer, which has the highest priority
+  among user-controlled settings" (claude_agent_sdk types.py:2006-2012) and
+  applied unconditionally regardless of setting_sources
+  (subprocess_cli.py:647-650) — so it is not itself gated by the variable under
+  test. CAVEAT: whether an empty object at that layer REPLACES or MERGES with
+  the lower `user`-layer's populated `enabledPlugins` could not be confirmed
+  from readable SDK source (the merge algorithm lives in the compiled `claude`
+  CLI, not the Python wrapper) — do not treat this as proven. A hardcoded list
+  of this machine's 16 plugin ids as a belt-and-suspenders `false` map was
+  considered and rejected: this is a distributed repo (claudebase ships to
+  every machine, see scripts/plugin_env.py's own docstring on exactly this
+  trap) and `claude_settings` has no `${VAR}` expansion — only `plugins[].path`
+  gets that (utils.py:42, process_plugins) — so a hardcoded list would silently
+  stop covering the true enabledPlugins set on any other machine.
+
+  BEFORE STEP 4: verify empirically, don't trust the above. Run one cheap probe
+  per arm (a single `claude -p` turn per arm asking it to list every
+  plugin/skill it can see is enough — not a full `coder-eval run`) and confirm
+  ht-user-project's active plugin list is empty and equals h0-project's. If it
+  is not empty, the mechanism above did not hold and the design needs a real
+  fix (e.g. extending plugin_env.py to also resolve a per-machine
+  enabledPlugins-off file), not another guess.
 
   Sonnet only, mirroring harness-discipline.yaml's stage-1 gate: this axis is
   unproven, so don't spend opus tokens on it yet. Task: leaves_a_check.yaml —
@@ -33,6 +61,12 @@ defaults:
     allowed_tools: ["Skill", "Bash", "Read", "Write", "Edit", "Glob", "Grep"]
     model: "claude-sonnet-5"
     plugins: []
+    # Best-effort suppression of settings-derived plugins (see description,
+    # "PLUGIN-LAYER FIX") — set once here, identically for both arms. Not
+    # proven to REPLACE (vs merge with) the user-layer's enabledPlugins; the
+    # pre-Step-4 probe is the actual verification gate.
+    claude_settings:
+      enabledPlugins: {}
   repeats: 3
 
 variants:
