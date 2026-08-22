@@ -44,6 +44,7 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 | `harness-ab.yaml` | 2×2, sonnet + opus | First Phase C. Scored code correctness — flat, see below |
 | `harness-discipline.yaml` | 2 arms, sonnet | Redesigned Phase C, stage 1 |
 | `harness-discipline-opus.yaml` | 2 arms, opus | Stage 2, run only after stage 1 separated |
+| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the 22 claudebase hooks every prior experiment above excluded (see Traps) |
 
 **Tasks** — the discipline set is the one that works.
 

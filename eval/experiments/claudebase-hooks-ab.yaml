@@ -1,0 +1,47 @@
+experiment_id: claudebase-hooks-ab
+description: >
+  DEC-2. Every prior experiment in this directory — harness-ab, harness-discipline,
+  om-plugins, om-with-only — ran under coder_eval's setting_sources default,
+  ["project"] (claude_code_agent.py:1196), because no experiment YAML here ever
+  set it otherwise. That default means NEITHER arm of any prior experiment
+  loaded ~/.claude/CLAUDE.md or the 22 claudebase hooks wired into
+  ~/.claude/settings.json (PreToolUse/UserPromptSubmit/Stop/SessionStart) — see
+  eval/README.md's "Traps" section, "`plugins` is the only variable, by
+  construction". This experiment lifts exactly that boundary.
+
+  The only variable is setting_sources itself:
+    - h0-project:       ["project"]          — the condition every prior experiment ran under
+    - ht-user-project:  ["user", "project"]  — adds ~/.claude/CLAUDE.md + the 22 hooks
+
+  plugins is fixed to [] for both arms (set once in defaults, not per-variant,
+  so it cannot drift between them) — the plugin layer's own effect was already
+  measured separately in harness-discipline.yaml, and mixing it in here would
+  confound plugin effect with hook/CLAUDE.md effect.
+
+  Sonnet only, mirroring harness-discipline.yaml's stage-1 gate: this axis is
+  unproven, so don't spend opus tokens on it yet. Task: leaves_a_check.yaml —
+  the only task in this directory confirmed to discriminate (0.333 vs 1.000,
+  reproduced at n=3 on 2026-08-17). repeats: 3 because this is a new design
+  with unmeasured variance (the harness-discipline stage-1 trap: run 3 once to
+  learn a new design's variance, then stop paying for replicates only once
+  that variance comes back 0).
+
+defaults:
+  agent:
+    type: claude-code
+    permission_mode: bypassPermissions
+    allowed_tools: ["Skill", "Bash", "Read", "Write", "Edit", "Glob", "Grep"]
+    model: "claude-sonnet-5"
+    plugins: []
+  repeats: 3
+
+variants:
+  - variant_id: h0-project
+    description: "setting_sources=[project] — CLAUDE.md and the 22 claudebase hooks excluded (the condition every prior experiment ran under, unchanged)"
+    agent:
+      setting_sources: ["project"]
+
+  - variant_id: ht-user-project
+    description: "setting_sources=[user, project] — loads ~/.claude/CLAUDE.md and the 22 claudebase hooks in ~/.claude/settings.json"
+    agent:
+      setting_sources: ["user", "project"]
