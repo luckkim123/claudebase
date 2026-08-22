@@ -70,6 +70,13 @@ def make_crg_graph(repo: Path, nodes: int = 1) -> Path:
     return gdir
 
 
+def firing_log_lines(repo: Path) -> list[str]:
+    """Lines in the hook's own firing log (Fix Round 1: must be exactly one per
+    invocation, however many graphs that invocation touched)."""
+    p = repo / ".omc" / "logs" / "graph_refresh.jsonl"
+    return p.read_text().splitlines() if p.exists() else []
+
+
 def calls(log: Path, expected: int) -> list[str]:
     """Read the detached stubs' log once it has `expected` lines, or give up."""
     deadline = time.monotonic() + SETTLE_TIMEOUT
@@ -110,6 +117,7 @@ class TestRefresh:
         run_hook(repo, bin_dir)
 
         assert calls(log, 2) == ["graphify update .", "code-review-graph update --brief"]
+        assert len(firing_log_lines(repo)) == 1
 
     def test_a_second_run_within_the_minute_is_debounced(self, sandbox):
         # A chatty session fires Stop after every turn; re-parsing each time buys
@@ -172,6 +180,7 @@ class TestRefresh:
         run_hook(repo, bin_dir)
 
         assert calls(log, 2) == ["code-review-graph update --brief"] * 2
+        assert len(firing_log_lines(repo)) == 1
 
     def test_the_update_runs_in_the_graphs_own_directory(self, sandbox):
         # `code-review-graph update` resolves the repo from its cwd, so a nested

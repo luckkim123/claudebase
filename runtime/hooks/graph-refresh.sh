@@ -95,16 +95,19 @@ launch() {
   ( cd "$dir" && "$@" >/dev/null 2>&1 & ) &
 }
 
+# 발화 여부 플래그 — 두 블록(graphify / code-review-graph) 모두 그래프가 실재할
+# 때만 1로 세팅한다. 실제 파일 기록은 두 블록이 끝난 뒤 한 번만 한다: 한 훅
+# 호출이 그래프를 여러 개 건드리면(예: CRG 중첩 디렉터리 2개, 또는 graphify+CRG
+# 동시 존재) 예전엔 블록/루프 반복마다 한 줄씩 찍혀 발화 1회가 로그 여러 줄이
+# 됐다 — harness_stats.py 는 `len(_read_jsonl(path))`로 발화 횟수를 세므로 다른
+# 5개 훅과 달리 이 훅만 수치가 부풀려졌다. Fix Round 1에서 단일 지점으로 통합.
+_touched=0
+
 # graphify — GRAPHIFY_OUT relocates the whole output tree (config/settings.json
 # sets .graphify on claudebase machines); fall back to the upstream default.
 gout="${GRAPHIFY_OUT:-graphify-out}"
 if [ -f "$repo/$gout/graph.json" ]; then
-  # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-  # 이 if 안에서만: 그래프가 실제로 있는 저장소에서만 기록해야
-  # test_repo_without_a_graph_is_left_alone (새 디렉터리 0개 단언)이 깨지지 않는다.
-  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
-  mkdir -p "$(dirname "$_log")" 2>/dev/null \
-    && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+  _touched=1
 
   # A semantic extraction runs for hours, streaming per-chunk results into
   # cache/ as it goes. Racing it is not worth the CPU, so recent write activity
@@ -165,17 +168,23 @@ cbin="$(resolve code-review-graph)"
 if [ -n "$cbin" ]; then
   while IFS= read -r gdir; do
     [ -n "$gdir" ] || continue
-    # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-    # gdir 이 확인된 뒤에만: .code-review-graph 가 실제로 있을 때만 기록한다.
-    _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
-    mkdir -p "$(dirname "$_log")" 2>/dev/null \
-      && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+    _touched=1
     has_nodes "$gdir/graph.db" || continue
     should_refresh "$gdir/.last-refresh" || continue
     launch "$(dirname "$gdir")" "$cbin" update --brief
   done <<EOF
 $(find "$repo" -maxdepth 3 -type d -name .code-review-graph -prune 2>/dev/null)
 EOF
+fi
+
+if [ "$_touched" = 1 ]; then
+  # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+  # 여기 한 곳에서만: 그래프가 실제로 있는 저장소에서만 기록해야
+  # test_repo_without_a_graph_is_left_alone (새 디렉터리 0개 단언)이 깨지지 않고,
+  # 한 번의 호출에서 그래프를 여럿 건드려도 줄 수는 항상 1개다.
+  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
+  mkdir -p "$(dirname "$_log")" 2>/dev/null \
+    && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
 fi
 
 exit 0
