@@ -44,7 +44,7 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 | `harness-ab.yaml` | 2×2, sonnet + opus | First Phase C. Scored code correctness — flat, see below |
 | `harness-discipline.yaml` | 2 arms, sonnet | Redesigned Phase C, stage 1 |
 | `harness-discipline-opus.yaml` | 2 arms, opus | Stage 2, run only after stage 1 separated |
-| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the 22 claudebase hooks every prior experiment above excluded (see Traps). **Before running**: the yaml's own description has an unverified plugin-layer fix and a mandated pre-run probe — read it first. |
+| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the `env` block + the 22 claudebase hooks every prior experiment above excluded (see Traps); `enabledPlugins` and the `outputStyle`/`alwaysThinkingEnabled`/`effortLevel` scalars are neutralized to identical values on both arms, so they are not part of what's measured. **Before running**: the yaml's own description has an unverified plugin-layer fix and two mandated pre-run probe assertions — read it first. |
 
 **Tasks** — the discipline set is the one that works.
 

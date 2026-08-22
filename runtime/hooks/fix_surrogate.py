@@ -146,6 +146,8 @@ def main():
 
     fix = args.fix or args.fix_current
     found_any = False
+    total_repaired = 0
+    total_found = 0
     for path in files:
         if not os.path.exists(path):
             print(f"skip (missing): {path}", file=sys.stderr)
@@ -153,10 +155,16 @@ def main():
         total, fixed = process_file(path, fix=fix, backup=not args.no_backup)
         if total:
             found_any = True
+            total_found += total
+            total_repaired += total if fix else 0
             verb = "fixed" if fix else "found"
             print(f"{verb} {total} lone surrogate(s) in {path} (lines {fixed})", file=sys.stderr)
-            hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
-                         repaired=(total if fix else 0), found=total)
+    # One firing per invocation, not per file — a `--fix a b c` CLI call touching
+    # several files must still log as a single event (same "1 firing = 1 line"
+    # contract as graph-refresh.sh's dedup fix).
+    if found_any:
+        hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
+                     repaired=total_repaired, found=total_found)
     # check mode: nonzero exit signals detection; fix mode: always 0 (never block the session)
     if (args.check or args.check_current) and found_any:
         return 1

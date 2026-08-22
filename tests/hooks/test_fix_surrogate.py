@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -76,3 +78,24 @@ def test_process_file_missing_returns_silently(tmp_path):
     total, lines = fs.process_file(str(p), fix=False, backup=False)
     assert total == 0
     assert lines == []
+
+
+def test_fix_multiple_files_fires_hooklog_once(tmp_path):
+    """CLI `--fix a b` touching two files with lone surrogates must still log
+    ONE aggregate firing (repaired = sum across files), not one per file —
+    same "1 firing = 1 line" contract as graph-refresh.sh's dedup fix."""
+    a = tmp_path / "a.jsonl"
+    b = tmp_path / "b.jsonl"
+    a.write_text('{"dirty": "broken\\ud83dend"}\n', encoding="utf-8")
+    b.write_text(
+        '{"dirty": "broken\\ud83dend"}\n{"dirty2": "more\\udcffbad"}\n',
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [sys.executable, str(HOOK_PATH), "--fix", "--no-backup", str(a), str(b)],
+        cwd=str(tmp_path), capture_output=True, text=True, check=True,
+    )
+    log = tmp_path / ".omc" / "logs" / "fix_surrogate.jsonl"
+    rows = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1, "one invocation touching two files must fire once"
+    assert rows[0]["repaired"] == 3  # 1 surrogate in a.jsonl + 2 (two lines) in b.jsonl

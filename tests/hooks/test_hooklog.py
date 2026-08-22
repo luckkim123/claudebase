@@ -41,7 +41,11 @@ def test_never_raises_on_unwritable_cwd(tmp_path):
     hooklog.fire("demo.jsonl", str(blocked))  # 예외가 새면 이 테스트가 실패한다
 
 
-def test_never_raises_on_none_cwd():
+def test_never_raises_on_none_cwd(tmp_path, monkeypatch):
+    # cwd=None falls back to the process cwd (hooklog.py: `cwd or "."`).
+    # Without pinning it to tmp_path, this write lands in the real repo's
+    # .omc/logs/demo.jsonl whenever pytest runs from the repo root.
+    monkeypatch.chdir(tmp_path)
     hooklog = _load()
     hooklog.fire("demo.jsonl", None)
 

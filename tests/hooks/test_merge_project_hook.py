@@ -34,9 +34,13 @@ def _fragment(tmp: Path, body_command: str) -> Path:
 
 
 def _run(fragment: Path, target: Path) -> tuple[int, str, str]:
+    # The hook fires hooklog with cwd=None, which falls back to the process
+    # cwd. Pin the subprocess's cwd to the fragment's tmp_path so that
+    # fallback lands in the test sandbox, not the real repo's .omc/logs.
     r = subprocess.run(
         [sys.executable, str(HOOK), str(fragment), str(target), MARKER],
         capture_output=True, text=True,
+        cwd=str(fragment.parent),
         check=False,
     )
     return r.returncode, r.stdout, r.stderr

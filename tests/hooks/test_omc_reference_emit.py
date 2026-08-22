@@ -19,7 +19,13 @@ HOOK = REPO_ROOT / "runtime" / "hooks" / "omc-reference-emit.py"
 def _run(env_home: Path) -> dict:
     env = os.environ.copy()
     env["HOME"] = str(env_home)
-    r = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env, check=False)
+    # The hook fires hooklog with cwd=None, which falls back to the process
+    # cwd. Pin the subprocess's cwd to env_home so that fallback lands in
+    # the test sandbox, not the real repo's .omc/logs.
+    r = subprocess.run(
+        [sys.executable, str(HOOK)], capture_output=True, text=True,
+        env=env, cwd=str(env_home), check=False,
+    )
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 

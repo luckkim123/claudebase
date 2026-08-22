@@ -9,9 +9,31 @@ description: >
   eval/README.md's "Traps" section, "`plugins` is the only variable, by
   construction". This experiment lifts exactly that boundary.
 
+  What ht-user-project actually loads beyond h0-project, after both fix rounds
+  below: ~/.claude/CLAUDE.md + the env block (7 vars, including 3 route-gate
+  vars — see NOT NEUTRALIZED below) + the 22 hooks wired into
+  ~/.claude/settings.json's hooks block. NOT what it loads: enabledPlugins (16
+  entries, neutralized to {} for both arms) or the outputStyle /
+  alwaysThinkingEnabled / effortLevel scalars (neutralized to h0-project's
+  implicit defaults for both arms — see SCALAR NEUTRALIZATION below). `model`
+  needs no neutralization: defaults.agent.model pins "claude-sonnet-5" for
+  both arms already, applied independently of setting_sources.
+
   The only variable is setting_sources itself:
     - h0-project:       ["project"]          — the condition every prior experiment ran under
-    - ht-user-project:  ["user", "project"]  — adds ~/.claude/CLAUDE.md + the 22 hooks
+    - ht-user-project:  ["user", "project"]  — adds ~/.claude/CLAUDE.md + env + the 22 hooks
+
+  NOT NEUTRALIZED — env: ~/.claude/settings.json's `env` block (7 vars,
+  including the 3 route-gate vars documented in
+  machine_thinking_effort_coupling and the omha routing hooks) is left to
+  diverge between arms on purpose. Unlike the plugin/scalar confounds above,
+  the env block is not incidental settings-file noise — it is how the
+  deployed hook layer itself is switched on (route gates read these vars at
+  hook-fire time), so it is part of what "the 22 hooks" under test actually
+  are, not a confound alongside them. claude_settings has no mechanism to
+  neutralize env selectively without also stripping the vars the hooks
+  themselves depend on, so this axis stays unpinned and is treated as within
+  scope of what the experiment measures.
 
   PLUGIN-LAYER FIX (Fix Round 1): `plugins: []` alone does NOT make the plugin
   layer identical. `plugins` maps only to `--plugin-dir`
@@ -46,6 +68,22 @@ description: >
   fix (e.g. extending plugin_env.py to also resolve a per-machine
   enabledPlugins-off file), not another guess.
 
+  SECOND PROBE ASSERTION (Fix Round 2, I2) — the plugin-list check above only
+  rules out ONE failure direction (settings loaded when they shouldn't be).
+  It cannot detect the opposite: if `--settings` REPLACES rather than MERGES
+  with the `user`-layer settings (the CAVEAT above, still unconfirmed), then
+  `claude_settings: {enabledPlugins: {}, ...}` alone could wipe out the
+  user-layer's `hooks` block along with `enabledPlugins`, silently dropping
+  all 22 claudebase hooks from ht-user-project too — the probe would still
+  pass (plugin lists equal and empty) while the experiment measured nothing.
+  This branch's own firing-log instrumentation (runtime/hooks/hooklog.py,
+  wired into all 12 previously-silent hooks) makes that checkable for free:
+  after the same probe turn, assert ht-user-project's sandbox cwd gained at
+  least one `.omc/logs/*.jsonl` file (any hook fired) AND h0-project's sandbox
+  cwd gained none. If ht-user-project's `.omc/logs/` is empty too, REPLACE
+  won by the CAVEAT above and the yaml needs a real fix before Step 4, not a
+  rerun.
+
   Sonnet only, mirroring harness-discipline.yaml's stage-1 gate: this axis is
   unproven, so don't spend opus tokens on it yet. Task: leaves_a_check.yaml —
   the only task in this directory confirmed to discriminate (0.333 vs 1.000,
@@ -65,8 +103,38 @@ defaults:
     # "PLUGIN-LAYER FIX") — set once here, identically for both arms. Not
     # proven to REPLACE (vs merge with) the user-layer's enabledPlugins; the
     # pre-Step-4 probe is the actual verification gate.
+    #
+    # SCALAR NEUTRALIZATION (Fix Round 2, I1): this machine's
+    # ~/.claude/settings.json also carries outputStyle: "Concise",
+    # alwaysThinkingEnabled: true, effortLevel: "xhigh" — h0-project never
+    # loads that file (setting_sources=["project"]) but ht-user-project does,
+    # so without pinning these here the two arms would silently diverge on
+    # reasoning budget and response-formatting discipline, not just on hooks.
+    # Each value below is the one h0-project already runs with implicitly
+    # (verified against claude-agent-sdk 0.1.77's cli.js, not assumed):
+    #   - outputStyle: "default" — cli.js: `xD="default"`; `UQ()?.outputStyle
+    #     || xD` is the fallback used everywhere the style is read, and
+    #     `if (Q === xD) return []` skips injecting any style content — this
+    #     is the literal built-in-default sentinel, not a placeholder string.
+    #   - alwaysThinkingEnabled: true — settings schema: "When absent or
+    #     true, thinking is enabled automatically." Key-absent (h0-project's
+    #     actual state) and explicit true are the same behavior, so pinning
+    #     true changes nothing for h0-project and only stops ht-user-project
+    #     from reading it off ~/.claude/settings.json instead.
+    #   - effortLevel: "unset" — cli.js `h4A()`: `if (B === "unset") return`
+    #     is checked before the `B !== void 0` branch that applies an actual
+    #     override, so the string "unset" and true key-absence resolve
+    #     identically (no reasoning-effort override sent). Using the literal
+    #     sentinel (rather than omitting the key) keeps this arm-symmetric —
+    #     both arms get the identical explicit key via claude_settings.
+    # model is already pinned above via defaults.agent.model, which the SDK
+    # applies independently of setting_sources — no separate claude_settings
+    # entry needed.
     claude_settings:
       enabledPlugins: {}
+      outputStyle: "default"
+      alwaysThinkingEnabled: true
+      effortLevel: "unset"
   repeats: 3
 
 variants:

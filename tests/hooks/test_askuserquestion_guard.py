@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,10 @@ def _load_module():
 
 
 def _run(payload: dict, capsys, monkeypatch) -> tuple[int, str]:
+    # A payload without "cwd" hits the guard's `cwd or "."` fallback (same
+    # class as C1) — pin the process cwd so that fallback lands in a scratch
+    # dir, not the real repo's .omc/logs/askuserquestion_guard.jsonl.
+    monkeypatch.chdir(tempfile.mkdtemp())
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     mod = _load_module()
     rc = mod.main()
