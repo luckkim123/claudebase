@@ -13,11 +13,16 @@ import json
 import os
 import sys
 
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parent))
-import hooklog  # noqa: E402
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def fire(*_a, **_k):
+            pass
 
 
 def main() -> int:
