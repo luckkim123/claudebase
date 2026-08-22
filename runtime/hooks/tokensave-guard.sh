@@ -39,4 +39,12 @@ tokensave_bin="$(command -v tokensave 2>/dev/null || true)"
 
 [ -x "$tokensave_bin" ] || exit 0
 
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+# exec 앞에 두는 이유: exec 는 현재 프로세스를 교체해서 그 뒤 줄은 절대 실행되지
+# 않는다. stdin 은 여기서 건드리지 않으니 "stdin passes through untouched via
+# exec" 그대로 유지된다.
+_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/tokensave_guard.jsonl"
+mkdir -p "$(dirname "$_log")" 2>/dev/null \
+  && printf '{"ts":"%s","hook":"tokensave-guard"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
 exec "$tokensave_bin" "hook-$mode"

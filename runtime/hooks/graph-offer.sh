@@ -136,6 +136,14 @@ else
   verb="~/.local/bin/graph-init"
 fi
 
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+# python3 heredoc 뒤가 아니라 앞에 두는 이유: 이 스크립트는 명시적 exit 없이
+# 끝나서 마지막 명령의 종료 코드가 곧 훅의 종료 코드다. 뒤에 붙이면 그 코드가
+# 로깅 명령의 것으로 바뀐다 — 그래서 python3 호출이 계속 마지막 명령이어야 한다.
+_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_offer.jsonl"
+mkdir -p "$(dirname "$_log")" 2>/dev/null \
+  && printf '{"ts":"%s","hook":"graph-offer"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
 # python3 rather than hand-rolled escaping: the message is multi-line and the
 # project name is arbitrary text.
 python3 - "$repo_name" "$code_count" "$verb" <<'PY'

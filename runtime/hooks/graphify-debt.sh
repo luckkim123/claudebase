@@ -105,6 +105,13 @@ esac
 # and a below-threshold project must not pay it again next session.
 printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$count" >"$marker" 2>/dev/null || true
 
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+# 임계값 게이트보다 앞: 실제 debt 계산이 끝난 지점이 이 훅의 일이 끝난 지점이고,
+# 통지가 뜨는지 여부는 부차적 결정이다.
+_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_debt.jsonl"
+mkdir -p "$(dirname "$_log")" 2>/dev/null \
+  && printf '{"ts":"%s","hook":"graphify-debt"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
 [ "$count" -ge "$MIN_UNCACHED" ] || exit 0
 
 python3 - "$(basename "$repo")" "$count" "$DEBOUNCE_HOURS" <<'PY'

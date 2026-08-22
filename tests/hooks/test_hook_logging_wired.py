@@ -29,3 +29,20 @@ def test_hook_carries_its_log_literal(name):
 def test_hook_imports_hooklog(name):
     text = (HOOKS / name).read_text(encoding="utf-8")
     assert "hooklog" in text
+
+
+WIRED_SH = [
+    "graph-offer.sh",
+    "graph-refresh.sh",
+    "graphify-debt.sh",
+    "graphify-guard.sh",
+    "hud-ensure.sh",
+    "tokensave-guard.sh",
+]
+
+
+@pytest.mark.parametrize("name", WIRED_SH)
+def test_shell_hook_carries_its_log_literal(name):
+    text = (HOOKS / name).read_text(encoding="utf-8")
+    stem = name.replace(".sh", "").replace("-", "_") + ".jsonl"
+    assert stem in text, f"{name} 에 {stem} 리터럴이 없다"

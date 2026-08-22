@@ -73,6 +73,10 @@ if [[ -f "$WRAPPER" ]] \
    && grep -qF "$MARKER" "$WRAPPER" \
    && [[ -f "$DEST_CFG" ]] \
    && cmp -s "$CFGDIR" "$DEST_CFG"; then
+  # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/hud_ensure.jsonl"
+  mkdir -p "$(dirname "$_log")" 2>/dev/null \
+    && printf '{"ts":"%s","hook":"hud-ensure"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
   exit 0
 fi
 
@@ -88,5 +92,10 @@ debug() { :; }   # keep these quiet so a healthy/repaired HUD adds no noise.
 if [[ -f "$REPO_DIR/installer/lib/omc.sh" ]]; then
   source "$REPO_DIR/installer/lib/omc.sh" 2>/dev/null && install_omc_hud 2>/dev/null || true
 fi
+
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/hud_ensure.jsonl"
+mkdir -p "$(dirname "$_log")" 2>/dev/null \
+  && printf '{"ts":"%s","hook":"hud-ensure"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
 
 exit 0

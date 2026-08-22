@@ -99,6 +99,13 @@ launch() {
 # sets .graphify on claudebase machines); fall back to the upstream default.
 gout="${GRAPHIFY_OUT:-graphify-out}"
 if [ -f "$repo/$gout/graph.json" ]; then
+  # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+  # 이 if 안에서만: 그래프가 실제로 있는 저장소에서만 기록해야
+  # test_repo_without_a_graph_is_left_alone (새 디렉터리 0개 단언)이 깨지지 않는다.
+  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
+  mkdir -p "$(dirname "$_log")" 2>/dev/null \
+    && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
   # A semantic extraction runs for hours, streaming per-chunk results into
   # cache/ as it goes. Racing it is not worth the CPU, so recent write activity
   # anywhere under cache/ means "in flight, leave it alone". Two details are
@@ -158,6 +165,11 @@ cbin="$(resolve code-review-graph)"
 if [ -n "$cbin" ]; then
   while IFS= read -r gdir; do
     [ -n "$gdir" ] || continue
+    # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+    # gdir 이 확인된 뒤에만: .code-review-graph 가 실제로 있을 때만 기록한다.
+    _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
+    mkdir -p "$(dirname "$_log")" 2>/dev/null \
+      && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
     has_nodes "$gdir/graph.db" || continue
     should_refresh "$gdir/.last-refresh" || continue
     launch "$(dirname "$gdir")" "$cbin" update --brief

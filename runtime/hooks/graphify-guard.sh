@@ -115,5 +115,10 @@ if [ -n "${guard_out:-}" ] && [ "$out_name" != "graphify-out" ]; then
   guard_out="${guard_out//"$needle"/$out_name/graph.json}"
 fi
 
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
+mkdir -p "$(dirname "$_log")" 2>/dev/null \
+  && printf '{"ts":"%s","hook":"graphify-guard"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
 [ -n "${guard_out:-}" ] && printf '%s\n' "$guard_out"
 exit "${rc:-0}"
