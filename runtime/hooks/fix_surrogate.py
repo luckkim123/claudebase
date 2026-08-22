@@ -24,6 +24,12 @@ import os
 import sys
 import time
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 REPLACEMENT = "�"
 
 
@@ -112,6 +118,8 @@ def main():
     args = ap.parse_args()
 
     files = list(args.files)
+    hook_cwd = None
+    hook_session_id = None
     if args.check_current or args.fix_current:
         # Claude Code hooks pass a JSON object on stdin containing "transcript_path".
         # Fall back to env vars for manual/testing use.
@@ -120,7 +128,10 @@ def main():
             if not sys.stdin.isatty():
                 payload = sys.stdin.read()
                 if payload.strip():
-                    tp = json.loads(payload).get("transcript_path")
+                    data = json.loads(payload)
+                    tp = data.get("transcript_path")
+                    hook_cwd = data.get("cwd")
+                    hook_session_id = data.get("session_id")
         except Exception:  # noqa: BLE001 — a raising hook blocks the user's turn; failing open is the contract
             tp = None
         tp = tp or os.environ.get("CLAUDE_TRANSCRIPT_PATH") or os.environ.get("TRANSCRIPT_PATH")
@@ -139,6 +150,8 @@ def main():
             found_any = True
             verb = "fixed" if fix else "found"
             print(f"{verb} {total} lone surrogate(s) in {path} (lines {fixed})", file=sys.stderr)
+            hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
+                         repaired=(total if fix else 0), found=total)
     # check mode: nonzero exit signals detection; fix mode: always 0 (never block the session)
     if (args.check or args.check_current) and found_any:
         return 1

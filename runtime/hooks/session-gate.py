@@ -68,6 +68,12 @@ import re
 import sys
 import tempfile
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 CONFIG_NAME = os.path.join(".claude", "session-gate.json")
 BYPASS_ENV = "SESSION_GATE"
 ACT_TOOLS = ("Bash", "Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -217,6 +223,8 @@ def main():
         if blocked:
             missing = [g for g in gates if (g.get("id") or g.get("match")) not in seen]
             if missing:
+                hooklog.fire("session_gate.jsonl", payload.get("cwd"), payload.get("session_id"),
+                             decision="deny")
                 return _deny(_deny_reason(
                     cfg,
                     "이 명령은 상태 확인 전에는 실행할 수 없다. 아직 안 돌린 게이트:",
@@ -228,6 +236,8 @@ def main():
         missing = [r for r in required
                    if ("read:" + (r.get("id") or r.get("path"))) not in seen]
         if missing:
+            hooklog.fire("session_gate.jsonl", payload.get("cwd"), payload.get("session_id"),
+                         decision="deny")
             return _deny(_deny_reason(
                 cfg,
                 "이 프로젝트를 건드리기 전에 인수인계·계획 정본을 먼저 열어라. "
@@ -235,6 +245,8 @@ def main():
                 [(r.get("id"), "%s\n  %s" % (r.get("path"), r.get("hint", "")))
                  for r in missing]))
 
+    hooklog.fire("session_gate.jsonl", payload.get("cwd"), payload.get("session_id"),
+                 decision="allow")
     _save_state(state_path, seen)
     return 0
 

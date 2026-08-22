@@ -25,6 +25,12 @@ import re
 import sys
 from pathlib import Path
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 # Redirects and tool locations, not search targets: `find . -name x > /dev/null`
 # targets cwd despite naming an absolute path.
 _SYSTEM_PREFIXES = ("/dev", "/tmp", "/usr", "/bin", "/sbin", "/etc", "/var",
@@ -84,7 +90,10 @@ def main() -> int:
         root = root.resolve()
     except (OSError, RuntimeError):
         return 0
-    return 0 if in_scope(cmd, root) else 1
+    allowed = in_scope(cmd, root)
+    hooklog.fire("graphify_scope_filter.jsonl", d.get("cwd"), d.get("session_id"),
+                 filtered=not allowed)
+    return 0 if allowed else 1
 
 
 def _self_check() -> None:

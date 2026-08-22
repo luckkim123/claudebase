@@ -25,6 +25,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 
 def load_json(path: Path) -> dict:
     if not path.exists():
@@ -99,10 +105,12 @@ def main() -> int:
 
     if not changed:
         print(f"unchanged: {target_path}")
+        hooklog.fire("merge_project_hook.jsonl", None, None, merged=False)
         return 0
 
     target_path.write_text(json.dumps(target, indent=2) + "\n")
     print(f"merged: {target_path}")
+    hooklog.fire("merge_project_hook.jsonl", None, None, merged=True)
     return 0
 
 

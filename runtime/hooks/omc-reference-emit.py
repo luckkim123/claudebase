@@ -13,6 +13,12 @@ import json
 import os
 import sys
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 
 def main() -> int:
     pattern = os.path.expanduser(
@@ -35,6 +41,7 @@ def main() -> int:
             "additionalContext": ctx,
         }
     }))
+    hooklog.fire("omc_reference_emit.jsonl", None, None, emitted_chars=len(ctx))
     return 0
 
 

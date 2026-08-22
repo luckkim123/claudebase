@@ -19,6 +19,12 @@ import json
 import re
 import sys
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import hooklog  # noqa: E402
+
 # ponytail: flat verb list, no POS tagging. Covers the verbs a coding-session
 # title actually uses; a title with none just keeps its own word order.
 # Swap for a real tagger only if misordering shows up in practice.
@@ -72,6 +78,8 @@ def main() -> int:
     if not new or new == title:
         return 0
 
+    hooklog.fire("session_title_3words.jsonl", payload.get("cwd"), payload.get("session_id"),
+                 titled=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
