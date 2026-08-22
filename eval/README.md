@@ -44,7 +44,7 @@ a shell bug that would otherwise have burned a full run (see Traps). Note that
 | `harness-ab.yaml` | 2×2, sonnet + opus | First Phase C. Scored code correctness — flat, see below |
 | `harness-discipline.yaml` | 2 arms, sonnet | Redesigned Phase C, stage 1 |
 | `harness-discipline-opus.yaml` | 2 arms, opus | Stage 2, run only after stage 1 separated |
-| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the `env` block + the 22 claudebase hooks every prior experiment above excluded (see Traps); `enabledPlugins` and the `outputStyle`/`alwaysThinkingEnabled`/`effortLevel` scalars are neutralized to identical values on both arms, so they are not part of what's measured. **Before running**: the yaml mandates two pre-run probe assertions — read its description first. Probed 2026-08-22 on the vault machine: the original `enabledPlugins: {}` fix FAILED (deep-merge no-op — the omha plugin hook still fired in the treatment arm); the working fix is a per-machine false-map that `scripts/plugin_env.py` now writes to the fixed path the yaml's `claude_settings` string points at. Both assertions passed after that fix on this machine; re-probe on any other machine. |
+| `claudebase-hooks-ab.yaml` | 2 arms, sonnet | `setting_sources` ["project"] vs ["user", "project"] — measures `~/.claude/CLAUDE.md` + the `env` block + the 22 claudebase hooks every prior experiment above excluded (see Traps); `enabledPlugins` and the `outputStyle`/`alwaysThinkingEnabled`/`effortLevel` scalars are neutralized to identical values on both arms, so they are not part of what's measured. **Before running**: the yaml mandates two pre-run probe assertions — read its description first. Probed 2026-08-22 on the vault machine: the original `enabledPlugins: {}` fix FAILED (deep-merge no-op — the omha plugin hook still fired in the treatment arm); the working fix is a per-machine false-map that `scripts/plugin_env.py` now writes to the fixed path the yaml's `claude_settings` string points at. Both assertions passed after that fix on this machine; re-probe on any other machine. **Run 2026-08-22**: tie, 0.333 both arms at variance 0 — a genuine null, see "What the hooks arm measured". |
 
 **Tasks** — the discipline set is the one that works.
 
@@ -200,6 +200,42 @@ and turned out to be the property of the whole class.
 
 Per-task `max_usd` went from 1.50 to 2.50 across the discipline set — the measured
 cold replicate reached $1.736.
+
+## What the hooks arm measured, 2026-08-22 (claudebase-hooks-ab, repeats=3)
+
+The pre-Step-4 probe ran first and falsified the Fix-Round-1 mechanism — see the
+yaml's PROBE EXECUTED note and commit 8b1881f (per-machine false-map via
+`plugin_env.py`). Both probe assertions then passed, and the n=3 run went ahead
+on `leaves_a_check`, the one task known to discriminate.
+
+| Metric | h0 (["project"]) | ht (["user","project"]) |
+|:---|---:|---:|
+| Score (all 3 replicates identical) | 0.333 | 0.333 |
+| Avg duration | 17.5 s | 30.7 s |
+| Assistant turns | 7.0 | 13.0 |
+| Tokens | 1.23M | 2.62M |
+
+Treatment integrity is proven, not assumed: all three ht sandboxes contain
+`.omc/logs/{graphify_guard,graphify_scope_filter,hud_ensure,tokensave_guard}.jsonl`
+(the Phase-1 firing instrumentation, doing exactly the job it was wired for) and
+all three h0 sandboxes contain none. The arms really differed; the score did not.
+
+**The null is genuine and it completes the 08-17 finding.** `leaves_a_check`
+separates on the *leave-a-check* instruction, and that instruction lives in the
+ponytail **plugin** — which this experiment neutralizes on both arms by design.
+`~/.claude/CLAUDE.md` §2 explicitly defers the rule to ponytail rather than
+restating it. So: plugins-only treatment moves this task 0.333→1.000 (08-17);
+CLAUDE.md + env + the 22 hooks with plugins off moves it not at all (this run).
+The discipline gain measured so far lives in the plugin layer, and the
+user-settings layer adds cost without effect here — 2.1× tokens and 1.9× turns
+for the same score, which is what 22 guard/logging/routing hooks plus a rules
+file cost when nothing they say is what the task grades.
+
+Variance came back 0/0 across all six runs, so per the stage-1 rule no more
+replicates on this pairing. What this run cannot say: whether the hooks layer
+moves tasks that grade what it *does* instruct — summary-layer sync,
+evidence-before-assertion, check-result-is-not-state. Those are commission-class
+tasks that do not exist yet; that is where the next task-writing money goes.
 
 ## Traps, all paid for once
 
