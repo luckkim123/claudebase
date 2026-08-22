@@ -208,6 +208,21 @@ class TestRefresh:
 
         assert calls(log, 1) == []
 
+    def test_the_no_auto_refresh_marker_keeps_graphify_out(self, sandbox):
+        # `graphify update .` re-scans; a graph assembled from an explicit file
+        # list (code in gitignored checkouts, a hand-built scope) is not
+        # reproducible by that scan, so the update prunes every file it cannot
+        # see. Measured: a 6,427-node graph replaced by a 20-node heading index.
+        repo, bin_dir, log = sandbox
+        (repo / ".graphify").mkdir()
+        (repo / ".graphify" / "graph.json").write_text("{}")
+        (repo / ".graphify" / ".no-auto-refresh").write_text("")
+
+        run_hook(repo, bin_dir)
+
+        assert calls(log, 1) == []
+        assert firing_log_lines(repo) == []
+
     def test_graphify_out_relocation_is_honoured(self, sandbox):
         # GRAPHIFY_OUT moves the whole output tree; the hook reads it so the
         # hidden-directory machines are not silently skipped.

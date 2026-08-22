@@ -239,6 +239,17 @@ tokensave is absent from the update row on purpose: it re-indexes itself when
 files change, and its CLI mutates `~/.claude/settings.json` even on read-only
 looking commands, so no automation may execute that binary.
 
+**A graph the CLI cannot regenerate must opt out of the update row.** `graphify
+update .` re-scans, so it can only keep current a graph whose corpus that scan
+finds. A graph assembled from an explicit file list — code sitting in gitignored
+checkouts, any scope a rebuild script collects by hand — is invisible to it, and
+every file it cannot see reads as *deleted*: the update prunes the graph down to
+whatever the root scan does find, reporting no error. Measured on a three-repo
+workspace (2026-08-21): a deliberate 434-file / 6,427-node code graph was replaced
+by a 20-node markdown heading index two minutes after it was built, and again on
+an earlier build. Drop a `.no-auto-refresh` file next to `graph.json` to keep the
+Stop hook off it, and refresh it deliberately instead.
+
 Creation is the one that must not be automatic, and cost is not the reason —
 the free builds take seconds. The reason is that a blindly built graph is
 **worse than none**, because the guards then require the agent to consult it.

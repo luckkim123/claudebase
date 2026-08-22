@@ -105,8 +105,19 @@ _touched=0
 
 # graphify — GRAPHIFY_OUT relocates the whole output tree (config/settings.json
 # sets .graphify on claudebase machines); fall back to the upstream default.
+#
+# `.no-auto-refresh` next to graph.json is the opt-out, and it exists because
+# `graphify update .` can only re-scan what graphify itself can see. A graph
+# built from an explicit file list — a workspace whose real code lives in
+# gitignored checkouts, any scope a rebuild script assembles by hand — is not
+# reproducible by that scan: every file the scan cannot see reads as deleted and
+# is pruned, leaving whatever the root scan does find. Measured on a three-repo
+# workspace (2026-08-21): a deliberate 434-file / 6,427-node code graph was
+# replaced by a 20-node markdown heading index two minutes after it was built,
+# and again on an earlier build, with nothing reporting an error. Graphs the
+# CLI cannot regenerate get the marker and are refreshed deliberately instead.
 gout="${GRAPHIFY_OUT:-graphify-out}"
-if [ -f "$repo/$gout/graph.json" ]; then
+if [ -f "$repo/$gout/graph.json" ] && [ ! -f "$repo/$gout/.no-auto-refresh" ]; then
   _touched=1
 
   # A semantic extraction runs for hours, streaming per-chunk results into
