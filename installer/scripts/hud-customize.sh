@@ -21,6 +21,15 @@ if [[ ! -f "$WRAPPER" ]]; then
   exit 0
 fi
 
+# The route module is copied on EVERY run, before the marker short-circuit below:
+# the injected block imports it by path, so an updated module must land even when
+# the wrapper itself already carries the marker.
+REPO_DIR="${CLAUDEBASE_DIR:-$HOME/claudebase}"
+if [[ -f "$REPO_DIR/runtime/hud/omha-route.mjs" ]]; then
+  mkdir -p "$CLAUDE_HOME/hud/lib"
+  cp "$REPO_DIR/runtime/hud/omha-route.mjs" "$CLAUDE_HOME/hud/lib/omha-route.mjs"
+fi
+
 if grep -qF "$MARKER" "$WRAPPER"; then
   echo "[hud-customize] already applied — skipping"
   exit 0
@@ -71,6 +80,10 @@ const __hudExtras = (() => {
     }
 
     const j = raw ? JSON.parse(raw) : {};
+    // omha declares the lane in the assistant's visible text, so the transcript
+    // is the only place the HUD can read it from. Stashed here because this is
+    // the one point that sees the raw stdin JSON.
+    const transcript = j?.transcript_path || null;
     const rawName = j?.model?.display_name || j?.model?.id || null;
     // Lowercase and drop the trailing "(… context)" qualifier so the segment
     // stays compact: "Opus 4.7 (1M context)" -> "opus 4.7".
@@ -78,9 +91,9 @@ const __hudExtras = (() => {
       ? rawName.toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").trim()
       : null;
     const effort = j?.effort?.level || null;
-    return { model, effort };
+    return { model, effort, transcript };
   } catch {
-    return { model: null, effort: null };
+    return { model: null, effort: null, transcript: null };
   }
 })();
 EOF
@@ -95,6 +108,14 @@ read -r -d '' TRANSFORM <<'EOF' || true
 // via the omcHud config. We therefore rewrite the plugin's stdout here. Re-running
 // /oh-my-claudecode:hud setup regenerates this file and DROPS both blocks;
 // claudebase install.sh re-applies them via installer/scripts/hud-customize.sh.
+// Dynamic, and deliberately in Block 2: a static import would kill the whole HUD
+// if the module were missing, and ANY import in Block 1 would drain the stdin
+// pipe before readFileSync(0) runs. Block 2 sits after the config-dir import, so
+// stdin is already consumed and re-injected by then.
+const { routeSegment: __hudRouteSegment } = await import(
+  pathToFileURL(join(__dirname, "lib", "omha-route.mjs")).href
+).catch(() => ({ routeSegment: () => null }));
+
 const CYAN = "\x1b[36m";
 const RESET = "\x1b[0m";
 
@@ -109,14 +130,17 @@ function customizeHudOutput(text) {
     /\x1b\[2mbranch:\x1b\[0m\x1b\[36m([^\x1b]+)\x1b\[0m/,
     (_m, name) => `${CYAN}branch:${name}${RESET}`,
   );
-  const { model: versionedModel, effort } = __hudExtras;
+  const { model: versionedModel, effort, transcript } = __hudExtras;
+  const route = transcript ? __hudRouteSegment(transcript) : null;
   text = text.replace(
     /\x1b\[36mModel: ([^\x1b]+)\x1b\[0m/,
     (_m, name) => {
       // Prefer the versioned name from stdin; fall back to the plugin's short name.
       const label = versionedModel || name.toLowerCase();
-      const effortSeg = effort ? `\x1b[2m | \x1b[0m${CYAN}effort:${effort}${RESET}` : "";
-      return `${CYAN}model:${label}${RESET}${effortSeg}`;
+      const seg = (v) => `\x1b[2m | \x1b[0m${CYAN}${v}${RESET}`;
+      return `${CYAN}model:${label}${RESET}`
+        + (effort ? seg(`effort:${effort}`) : "")
+        + (route ? seg(`route:${route}`) : "");
     },
   );
   return text;
