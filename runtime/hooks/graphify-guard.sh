@@ -73,28 +73,56 @@ case "$out_name" in
     ;;
 esac
 
+payload="$(cat)"
+
+# One nudge per session per mode. The text graphify returns is byte-identical on
+# every call, so repeating it buys nothing the first one did not — and it is
+# unlatched and unbounded, scaling with tool calls rather than turns. Measured
+# 2026-08-23 on this vault: 397 chars on EVERY Read/Glob and 187 on EVERY
+# Bash/Grep, three identical emissions from three identical calls; one 20-tool
+# turn paid ~5,000 chars, more than the omha (3,118) and omp (1,593) prompt
+# injections combined. The first nudge is the one that can still change the
+# plan; the rest are a tax on having already been told.
+#
+# Latched BEFORE graphify runs, so a repeat also skips the ~100 ms process
+# start. That keeps --strict correct by construction: it blocks the FIRST raw
+# read of a session, which is exactly the call that still reaches the guard.
+#
+# Keyed on session_id, so a new session is nudged again and the latch cannot
+# outlive its session. No session_id in the payload (older Claude Code, or a
+# hand-run invocation) → no latch at all, i.e. exactly today's behaviour.
+_sid="$(printf '%s' "$payload" \
+        | python3 -c 'import sys,json;print(json.load(sys.stdin).get("session_id") or "")' \
+        2>/dev/null || true)"
+if [ -n "$_sid" ]; then
+  _latch="${TMPDIR:-/tmp}/graphify-guard-${_sid}-${mode}.seen"
+  if [ -e "$_latch" ]; then
+    # Still record the firing so harness_stats' rate stays honest — a suppressed
+    # call IS a call, and counting only the emitted one would report a 20x drop
+    # in guard activity that never happened.
+    _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
+    mkdir -p "$(dirname "$_log")" 2>/dev/null \
+      && printf '{"ts":"%s","hook":"graphify-guard","suppressed":true}\n' \
+         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+    exit 0
+  fi
+fi
+
 # `hook-guard search` never inspects what the command searches — it fires on any
 # grep/find token whenever cwd has a graph, so a grep against another repo gets a
 # "MANDATORY: query the graph first" about a graph that does not cover it (six
 # such misfires in one session). The read guard already skips out-of-project
 # targets (#1840); this supplies the missing search-side equivalent. Filter absent
 # or python3 missing → behave exactly as before.
-ran=0
 if [ "$mode" = "search" ]; then
   filter="$(dirname "$0")/graphify_scope_filter.py"
   if [ -f "$filter" ] && command -v python3 >/dev/null 2>&1; then
-    payload="$(cat)"
     printf '%s' "$payload" | python3 "$filter" || exit 0
-    guard_out="$(printf '%s' "$payload" | "$graphify_bin" hook-guard "$mode")"
-    rc=$?
-    ran=1
   fi
 fi
 
-if [ "$ran" -eq 0 ]; then
-  guard_out="$("$graphify_bin" hook-guard "$mode")"
-  rc=$?
-fi
+guard_out="$(printf '%s' "$payload" | "$graphify_bin" hook-guard "$mode")"
+rc=$?
 
 # Correct the one thing graphify gets wrong on a machine that relocates its
 # output tree. The nudge text hardcodes the literal `graphify-out/graph.json`
@@ -119,6 +147,13 @@ fi
 _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
 mkdir -p "$(dirname "$_log")" 2>/dev/null \
   && printf '{"ts":"%s","hook":"graphify-guard"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+
+# Arm the latch only once a nudge was actually emitted. A repo with no graph
+# produces no output and must stay unlatched, so that adding a graph mid-session
+# still gets its first nudge.
+if [ -n "${guard_out:-}" ] && [ -n "${_latch:-}" ]; then
+  : > "$_latch" 2>/dev/null || true
+fi
 
 [ -n "${guard_out:-}" ] && printf '%s\n' "$guard_out"
 exit "${rc:-0}"

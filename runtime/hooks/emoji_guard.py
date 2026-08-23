@@ -24,15 +24,25 @@ dividers lean on non-emoji symbols that MUST pass, so widening a range would
 block normal responses every turn):
   INCLUDE  U+1F300-1FAFF, U+1F1E6-1F1FF (flags), U+2600-26FF EXCEPT the text
            stars U+2605-2606 (see below) — incl. warning U+26A0; U+2700-27BF
-           (dingbats incl. check U+2705); U+2B00-2BFF (incl. emoji star U+2B50);
+           (dingbats incl. check U+2705) EXCEPT the text marks and the bracket
+           ornaments (see below); U+2B00-2BFF (incl. emoji star U+2B50);
            U+FE0F (emoji variation selector).
   EXCLUDE  arrows (U+2190-21FF, incl. right-arrow), geometric shapes
            (U+25A0-25FF, incl. black square / right-triangle), dashes
            (U+2010-2015, em dash), middle dot (U+00B7), bullet (U+2022) — these
-           sit OUTSIDE every INCLUDE range. PLUS the text stars U+2605-2606,
-           carved OUT of the 2600-26FF range on purpose: the learning
-           output-style's "star Insight" dividers use U+2605, while the emoji
-           star U+2B50 is still caught. A future edit must not re-close the gap.
+           sit OUTSIDE every INCLUDE range. PLUS three carve-outs INSIDE them:
+             * text stars U+2605-2606 — the learning output-style's "star
+               Insight" dividers use U+2605; the emoji star U+2B50 stays caught.
+             * text check / ballot marks U+2713-2718 — monochrome, width-1,
+               text-presentation by default (U+2714 and U+2716 do carry
+               Emoji=Yes, but Emoji_Presentation=No). They do NOT break
+               drag-select copy, which is the only damage this hook exists to
+               prevent. The emoji check U+2705 and cross U+274C stay caught.
+             * bracket ornaments U+2768-2775 — incl. U+276F, the shell prompt
+               chevron. None of these is an emoji at all; quoting a terminal
+               screen used to cost a whole-response rewrite.
+           Measured 2026-08-23 over 22 recorded blocks: 10 were the last two
+           carve-outs. A future edit must not re-close any of the three gaps.
 
 Hook event: Stop (no matcher). Reads last_assistant_message from stdin
 (present at runtime, per the sibling hooks); falls back to parsing
@@ -56,7 +66,9 @@ _EMOJI_RE = re.compile(
     "\U0001F1E6-\U0001F1FF"  # regional indicator symbols (flags)
     "\U00002600-\U00002604"  # misc symbols, up to just below the text stars
     "\U00002607-\U000026FF"  # ...resuming after them (U+2605-2606 text stars carved out)
-    "\U00002700-\U000027BF"  # dingbats (incl. check mark U+2705)
+    "\U00002700-\U00002712"  # dingbats, up to just below the text check/ballot marks
+    "\U00002719-\U00002767"  # ...resuming after them (U+2713-2718 carved out)
+    "\U00002776-\U000027BF"  # ...and after the bracket ornaments (U+2768-2775 carved out)
     "\U00002B00-\U00002BFF"  # misc symbols & arrows (incl. star U+2B50)
     "\U0000FE0F"              # emoji variation selector-16
     "]"
@@ -64,7 +76,9 @@ _EMOJI_RE = re.compile(
 
 REASON = (
     "직전 응답에 이모지가 포함됨. 이모지를 전부 제거하고 같은 내용을 다시 작성하라. "
-    "화살표/가운뎃점/대시/기하도형(→ · — ■ ▸)은 이모지가 아니니 유지."
+    "화살표/가운뎃점/대시/기하도형(→ · — ■ ▸)은 이모지가 아니니 유지. "
+    "직전 응답 맨 앞에 라우팅/머리말 줄이 있었다면 재작성본 맨 앞에도 그대로 다시 넣어라 "
+    "— 빠뜨리면 다른 Stop 가드가 또 차단해 한 턴에 재생성이 두 번 일어난다."
 )
 
 

@@ -2,6 +2,81 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-23 — a chevron that is not an emoji, and a nudge that will not stop
+
+Two guards were charging for the same sentence twice, in opposite ways.
+
+`emoji_guard` blocks a Stop and asks for the whole response again — the right
+trade when a real emoji is in the text, since the block is what leaves a clean
+copyable answer as the last message. The problem was what counts. Its own
+docstring says the scope is "deliberately narrow", then admits the entire
+dingbats block U+2700-27BF, which sweeps in the monochrome check and ballot
+marks and every bracket ornament. Those are width-1 text-presentation
+characters; U+2714 and U+2716 carry `Emoji=Yes` but `Emoji_Presentation=No`,
+and none of them breaks drag-select copy, which is the only damage the guard
+exists to prevent. Over the 22 blocks in `.omc/logs/emoji_guard.jsonl`, **10
+were these**. One was U+276F, the shell prompt chevron: quoting a terminal
+screen cost a whole-response rewrite.
+
+`graphify-guard` had the inverse defect. Its nudge is byte-identical on every
+call and it emitted it on every matching tool call, unlatched and unbounded —
+so the cost scaled with tool calls rather than turns. Measured on the obsidian
+vault: 397 chars on every Read/Glob, 187 on every Bash/Grep, three identical
+emissions from three identical calls. One 20-tool turn paid about 5,000 chars,
+more than the omha (3,118) and omp (1,593) prompt injections combined. The
+wrapper's own comment already noted the nudge fires "every turn, for as long as
+a graph is present", but treated the stale path inside it as the bug.
+
+### Fixed
+
+- **`emoji_guard.py`** — three carve-outs inside the include ranges instead of
+  one. The existing text-star gap (U+2605-2606) is joined by the text check and
+  ballot marks (U+2713-2718) and the bracket ornaments (U+2768-2775). The emoji
+  check U+2705, the cross U+274C, and the warning sign U+26A0 all stay caught —
+  the last deliberately, because `config/CLAUDE.md` tells the model to write
+  status as a word rather than a glyph.
+- **`emoji_guard.py`** — the block reason now tells the rewrite to carry the
+  response's leading routing/header line over. Without it, an emoji block
+  produced a response missing its ROUTE line, which tripped a second Stop guard:
+  **two full regenerations in one turn**, observed live in this session.
+- **`graphify-guard.sh`** — one nudge per session per mode, keyed on
+  `session_id` and latched *before* graphify runs so a repeat also skips the
+  ~100 ms process start. `--strict` stays correct by construction: it blocks the
+  first raw read of a session, which is the call that still reaches the guard.
+  A payload with no `session_id` is not latched at all, so the old behaviour is
+  the fail-open default; a call that produced no output never arms the latch, so
+  a session that starts outside a graph still gets its first nudge after moving
+  into one. Suppressed calls are still logged, with `"suppressed": true`, so
+  `harness_stats`' firing rate does not report a 20x drop that never happened.
+
+### Verification
+
+- `pytest tests/` — **383 passed**, exit 0.
+- `tests/hooks/test_emoji_guard.py` — 16 tests (3 new): the carved-out marks and
+  ornaments pass, the codepoints immediately either side of each gap still
+  match, and the reason carries the header-line instruction.
+- `tests/hooks/test_graphify_guard.py` — 10 tests (5 new): a repeat is silent, a
+  new session is nudged again, a missing `session_id` keeps the old behaviour,
+  read and search latch independently, and a silent guard never arms the latch.
+- Live, against the real hook: a message quoting the shell chevron plus check
+  and ballot marks now passes with empty stdout, while a message carrying the
+  emoji check still returns `{"decision": "block"}`. Three identical
+  `graphify-guard read` calls under one `session_id` returned 484, 0, 0 bytes;
+  a different `session_id` returned 484.
+
+### Notes
+
+- `emoji_guard`'s full-rewrite instruction was reviewed and **kept**. A localized
+  correction would be cheaper, but a Stop hook fires after the message is already
+  on screen, so the rewrite is what leaves a complete, copyable answer as the
+  last message — which is the entire point. Narrowing what counts as an emoji
+  removes the waste without giving that up.
+- Four hooks that ship unwired (`askuserquestion_stats.py`, `loop_lint.py`,
+  `omc-reference-emit.py`, `hooklog.py`) were re-checked as deletion candidates
+  and **none is dead**: `hooklog` is imported by `session-gate.py` at five call
+  sites, and the other three are documented in `README.md` as utilities and
+  carry their own tests. "Not registered in `settings.json`" is not "unused".
+
 ## [Unreleased] — 2026-08-21 — a port you can see, an owner you cannot kill
 
 `claude-mem` blocks every prompt when a stale worker of a different version squats its

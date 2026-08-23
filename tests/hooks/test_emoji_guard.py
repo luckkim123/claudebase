@@ -77,6 +77,40 @@ def test_routing_and_divider_symbols_are_not_emoji():
     assert m._find_emoji("☆ ★") == []
 
 
+def test_text_marks_and_bracket_ornaments_are_not_emoji():
+    # The 2026-08-23 false positives: 10 of 22 recorded blocks were these.
+    # Monochrome, width-1, text-presentation — they do not break drag-select
+    # copy, which is the only damage this hook exists to prevent.
+    m = _load_module()
+    for ch in [
+        "✓",  # CHECK MARK
+        "✔",  # HEAVY CHECK MARK (Emoji=Yes but Emoji_Presentation=No)
+        "✕",  # MULTIPLICATION X
+        "✖",  # HEAVY MULTIPLICATION X (same property pair as U+2714)
+        "✗",  # BALLOT X
+        "✘",  # HEAVY BALLOT X
+        "❬", "❭",  # MEDIUM ANGLE BRACKET ORNAMENTS
+        "❮", "❯",  # HEAVY ANGLE QUOTATION MARK — the shell prompt chevron
+        "❨", "❵",  # bounds of the bracket-ornament block
+    ]:
+        assert m._find_emoji("quoting a terminal " + ch + " here") == [], repr(ch)
+
+
+def test_carveout_boundaries_are_exact():
+    # The gaps must cut exactly where the docstring says: the codepoints
+    # immediately either side of each carve-out still match.
+    m = _load_module()
+    for ch in ["✒", "✙", "❧", "❶"]:
+        assert m._find_emoji(ch) == [ch], repr(ch)
+
+
+def test_reason_tells_the_rewrite_to_keep_the_header_line():
+    # An emoji block that drops the routing header line trips a second Stop
+    # guard -> two full regenerations in one turn. The reason must prevent it.
+    m = _load_module()
+    assert "라우팅" in m.REASON and "머리말" in m.REASON
+
+
 def test_common_emoji_are_detected():
     m = _load_module()
     for ch in ["\U0001F604", "\U0001F1FA", "⚠", "✅", "⭐", "🔄"]:
