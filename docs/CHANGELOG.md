@@ -77,6 +77,85 @@ a graph is present", but treated the stale path inside it as the bug.
   sites, and the other three are documented in `README.md` as utilities and
   carry their own tests. "Not registered in `settings.json`" is not "unused".
 
+## [Unreleased] — 2026-08-23 — a chooser that moves but will not answer
+
+A session looked frozen. The chooser was on screen, the arrow keys moved the
+selection, and Enter did nothing — so the question could be neither answered nor
+cancelled, and the only way out was an interrupt that threw the whole question
+away. Two separate reports blamed cross-session messages and then Orca's key
+delivery. A control run in a throwaway terminal cleared both: one session, one
+build, one input path, only the payload changed.
+
+| chooser | arrows | Enter | Esc |
+|:---|:---|:---|:---|
+| options carry `preview` (ASCII-only text) | move | dead | dead |
+| options carry no `preview` | — | selects | — |
+
+The ASCII arm also kills the CJK-width theory the first report floated. Across
+444 local transcripts, preview-bearing calls answered normally on 2.1.218 (1),
+2.1.220 (2) and 2.1.222 (11) and failed on all 3 attempts under 2.1.239 — a
+regression in the current build, not how previews have always behaved.
+
+One caution for anyone re-reading that evidence: `(no option selected) notes:`
+is **not** a wedge signature. It appears on healthy 2.1.218 and 2.1.222 calls
+too — it is simply what the harness records when the human types a note instead
+of picking an option.
+
+### Added
+
+- `runtime/hooks/sendmessage-guard.py` — PreToolUse on `SendMessage`. Holds back
+  a cross-session send while a live Orca terminal on this host is parked on a
+  chooser, because the harness delivers by *enqueueing into the receiver's input
+  box*, which steals focus from the chooser. Host-scoped by necessity: the tool
+  input carries only a display name and nothing maps that name to a terminal, so
+  the guard asks "is any local terminal parked" rather than "is my addressee
+  parked". That is the right population anyway — the wedge needs a human looking
+  at a TUI. Fails open on every probe failure; `SENDMESSAGE_GUARD=off` kills it;
+  `XSESSION_OK:` in the message or summary bypasses one call.
+- `tests/hooks/test_sendmessage_guard.py` — 16 tests, including that the deny
+  reason never quotes the footer strings it matches on (it is printed on the
+  sender's own screen, and a verbatim quote would make the guard match itself).
+
+### Changed
+
+- `runtime/hooks/askuserquestion-guard.py` — denies an option `preview` on builds
+  where the chooser cannot be answered, reading the running version from the
+  session transcript's last record rather than from `PATH`. Unknown version, or
+  a build below 2.1.239, passes. `ASKUSERQUESTION_PREVIEW_GUARD=off` kills it.
+  The upper bound is open because no fixed release is known yet; when one is,
+  bound it rather than deleting the check.
+- `shell/tmux.conf` — `update-environment` now carries the `ORCA_*` handles. A
+  tmux session inherits the environment the *server* started with, so every
+  session created against an already-running server lost `ORCA_PANE_KEY` and
+  `orca claude-teams` refused with "must be run inside an Orca terminal". Token-
+  bearing `ORCA_AGENT_*` variables are deliberately excluded — spraying session
+  credentials into every pane is a wider exposure, and a stale token is worse
+  than none.
+
+### Verification
+
+- `pytest tests/ -q` → 416 passed, exit 0.
+- tmux, before and after, server started with the variable stripped:
+  `grep -c '^ORCA_PANE_KEY=' probe` → `0` then `1`. End-to-end inside such a
+  session: `orca claude-teams --version` → `2.1.239 (Claude Code)`.
+  Off Orca (all `ORCA_*` removed from the client): `new-session exit=0`, 0 set.
+- The SendMessage matcher fires, checked without reaching any session — a
+  throwaway terminal printed the footer text and a send addressed to a
+  nonexistent name came back denied by the hook; the same call carrying
+  `XSESSION_OK:` passed the guard and failed at the tool with "No agent named
+  … is reachable".
+
+### Notes
+
+- `orca claude-teams` needs only `ORCA_PANE_KEY` to clear its guard — verified
+  directly (`env -u ORCA_PANE_KEY orca claude-teams --version` refuses, with it
+  set the version prints).
+- A named `Agent` dispatch failing with "Could not determine current tmux
+  pane/window" did **not** reproduce: a fresh `orca claude-teams` session spawned
+  a named teammate and it replied. Team tmux servers are per-team sockets, so
+  `%1` in a stale session can name a pane on a different server; relaunching the
+  team session is the workaround.
+
 ## [Unreleased] — 2026-08-21 — a port you can see, an owner you cannot kill
 
 `claude-mem` blocks every prompt when a stale worker of a different version squats its

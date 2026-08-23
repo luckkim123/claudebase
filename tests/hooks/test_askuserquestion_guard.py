@@ -272,3 +272,78 @@ def test_valid_call_writes_no_log(tmp_path, capsys, monkeypatch):
     _ = capsys  # output already captured via the _run helper
     log = tmp_path / ".omc" / "logs" / "askuserquestion_guard.jsonl"
     assert not log.exists(), "a passing call must not be logged as a failure"
+
+
+# --- option `preview` on the builds where the chooser cannot be answered ------
+# Measured 2026-08-23: with previews the chooser moves under the arrow keys but
+# ignores Enter and Esc. Gated on the running version, read from the transcript,
+# because previews answered normally on 2.1.218 / 2.1.220 / 2.1.222.
+
+def _transcript(tmp_path, version):
+    p = tmp_path / "session.jsonl"
+    p.write_text(json.dumps({"type": "assistant", "version": version}) + "\n",
+                 encoding="utf-8")
+    return str(p)
+
+
+def _preview_payload(tmp_path, version, preview="LINE-A1 LINE-A2"):
+    opts = [{"label": "Alpha", "description": "first", "preview": preview},
+            {"label": "Beta", "description": "second"}]
+    return {
+        "tool_name": "AskUserQuestion",
+        "cwd": str(tmp_path),
+        "session_id": "prev-sess",
+        "transcript_path": _transcript(tmp_path, version),
+        "tool_input": {"questions": [
+            {"question": "Pick one", "header": "Pick",
+             "options": opts, "multiSelect": False}]},
+    }
+
+
+def test_preview_denied_on_broken_build(tmp_path, capsys, monkeypatch):
+    rc, out = _run(_preview_payload(tmp_path, "2.1.239"), capsys, monkeypatch)
+    assert rc == 0
+    d = json.loads(out)["hookSpecificOutput"]
+    assert d["permissionDecision"] == "deny"
+    assert "preview" in d["permissionDecisionReason"]
+
+
+def test_ascii_preview_is_denied_too(tmp_path, capsys, monkeypatch):
+    """The first report blamed CJK width; an ASCII-only preview wedged it too."""
+    rc, out = _run(_preview_payload(tmp_path, "2.1.240", preview="plain ascii"),
+                   capsys, monkeypatch)
+    assert rc == 0
+    assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_preview_allowed_on_working_build(tmp_path, capsys, monkeypatch):
+    rc, out = _run(_preview_payload(tmp_path, "2.1.222"), capsys, monkeypatch)
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_preview_allowed_when_version_unknown(tmp_path, capsys, monkeypatch):
+    """No transcript to read -> fail open rather than ban a working field."""
+    payload = _preview_payload(tmp_path, "2.1.239")
+    payload["transcript_path"] = str(tmp_path / "does-not-exist.jsonl")
+    rc, out = _run(payload, capsys, monkeypatch)
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_preview_kill_switch(tmp_path, capsys, monkeypatch):
+    mod = _load_module()
+    monkeypatch.setenv(mod.PREVIEW_GUARD_ENV, "off")
+    rc, out = _run(_preview_payload(tmp_path, "2.1.239"), capsys, monkeypatch)
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_no_preview_passes_on_broken_build(tmp_path, capsys, monkeypatch):
+    payload = _preview_payload(tmp_path, "2.1.239")
+    for q in payload["tool_input"]["questions"]:
+        for o in q["options"]:
+            o.pop("preview", None)
+    rc, out = _run(payload, capsys, monkeypatch)
+    assert rc == 0
+    assert out.strip() == ""

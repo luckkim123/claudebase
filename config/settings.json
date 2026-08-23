@@ -59,6 +59,16 @@
         ]
       },
       {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# SENDMESSAGE_GUARD\npython3 ~/claudebase/runtime/hooks/sendmessage-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Agent|Task",
         "hooks": [
           {

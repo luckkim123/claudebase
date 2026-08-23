@@ -65,6 +65,31 @@ Exit 0 with JSON on stdout = standard decision channel.
   scrub), so the very next serialization is clean. Stop/SessionStart repair
   remain as the outer safety net; this is the inner, same-turn one.
 
+★★★ 2026-08-23 — option `preview` wedges the chooser on Claude Code 2.1.239:
+  A chooser rendered with per-option `preview` boxes still MOVES with the arrow
+  keys but stops accepting Enter and Esc, so the question can never be answered
+  and the session looks frozen. Measured in a throwaway Orca terminal on this
+  machine — one session, one version, one input path, only the payload differed:
+
+    options WITH preview (ASCII-only text)   arrows move · Enter dead · Esc dead
+    options WITHOUT preview                  Enter selects, session continues
+
+  That control also kills the CJK-width theory the first report floated: the
+  preview here was pure ASCII and it wedged anyway. It is `preview` itself.
+  The escape is `orca terminal send --interrupt`, which lands as "User declined
+  to answer questions" — the whole question is thrown away.
+
+  Version scope, from 444 local transcripts: preview-bearing calls answered
+  normally on 2.1.218 (1), 2.1.220 (2) and 2.1.222 (11) — every one recorded a
+  selected option. On 2.1.239 all 3 preview-bearing calls failed while the one
+  call without preview that day succeeded. So this is a 2.1.239 regression, not
+  how previews have always behaved, and the check is gated on the running
+  version rather than blanket-banning a field that used to work.
+
+  Kill switch for THIS check only: ASKUSERQUESTION_PREVIEW_GUARD=off|0|false.
+  When a release fixes the chooser, give BROKEN_PREVIEW_FROM an upper bound
+  instead of deleting the check, so installs still on 2.1.239 stay protected.
+
 Idempotent marker in the settings command field: ASKUSERQUESTION_GUARD
 """
 import json
@@ -111,6 +136,76 @@ SURROGATE_REASON = (
     "Korean/English is safe, but avoid 4-byte CJK extensions and emoji "
     "prefixes that may have been truncated mid-pair during decoding."
 )
+
+
+PREVIEW_GUARD_ENV = "ASKUSERQUESTION_PREVIEW_GUARD"
+# First version measured broken. Open-ended on purpose: no fixed release is
+# known yet, so every later build is assumed broken until one is verified.
+BROKEN_PREVIEW_FROM = (2, 1, 239)
+
+PREVIEW_REASON = (
+    "AskUserQuestion call carries an option 'preview' — dropped, because on "
+    "this Claude Code build the preview chooser cannot be answered.\n"
+    "Measured 2026-08-23 on 2.1.239: with per-option previews the chooser still "
+    "moves under the arrow keys but ignores Enter and Esc, so the question hangs "
+    "until someone interrupts the session and the answer is lost entirely. The "
+    "same chooser without previews accepts Enter immediately. Previews worked on "
+    "2.1.218 / 2.1.220 / 2.1.222, so this is a regression in the current build, "
+    "not a rule about how to ask questions.\n"
+    "Re-emit the SAME questions with every 'preview' field removed. If the "
+    "comparison mattered, do not throw it away — put it in your reply body as "
+    "prose or a fenced block right before the call, and keep each option's "
+    "'description' carrying the one-line difference. multiSelect questions never "
+    "rendered previews anyway, so nothing is lost there."
+)
+
+
+def _preview_guard_disabled() -> bool:
+    return os.environ.get(PREVIEW_GUARD_ENV, "").lower() in ("off", "0", "false")
+
+
+def _session_version(transcript_path):
+    """Version of the Claude Code build writing this session's transcript, as an
+    int tuple, or None when it cannot be read. Every transcript record carries a
+    `version` field, so the last parseable line is the cheapest exact source —
+    no PATH lookup, no subprocess, and correct even when several builds are
+    installed. None means 'unknown', and the caller then allows the call."""
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return None
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 65536))
+            chunk = f.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    for line in reversed(chunk.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ver = json.loads(line).get("version")
+        except ValueError:
+            continue
+        if not isinstance(ver, str):
+            continue
+        parts = ver.split(".")
+        try:
+            return tuple(int(p) for p in parts[:3])
+        except ValueError:
+            return None
+    return None
+
+
+def _has_option_preview(questions) -> bool:
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        for o in q.get("options") or []:
+            if isinstance(o, dict) and isinstance(o.get("preview"), str) and o["preview"]:
+                return True
+    return False
 
 
 def _log_deny(cwd, session_id) -> None:
@@ -223,6 +318,12 @@ def main() -> int:
         for o in opts:
             if not isinstance(o, dict) or not o.get("label") or not o.get("description"):
                 return _deny(PARTIAL_REASON, cwd, session_id)
+
+    # Version-gated: a build where previews still work must not lose the field.
+    if not _preview_guard_disabled() and _has_option_preview(questions):
+        version = _session_version(payload.get("transcript_path"))
+        if version is not None and version >= BROKEN_PREVIEW_FROM:
+            return _deny(PREVIEW_REASON, cwd, session_id)
 
     if _has_lone_surrogate(tool_input):
         # Deny is not enough on its own: the poisoned tool_use block is already
