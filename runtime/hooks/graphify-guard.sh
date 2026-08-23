@@ -91,9 +91,28 @@ payload="$(cat)"
 # Keyed on session_id, so a new session is nudged again and the latch cannot
 # outlive its session. No session_id in the payload (older Claude Code, or a
 # hand-run invocation) → no latch at all, i.e. exactly today's behaviour.
-_sid="$(printf '%s' "$payload" \
-        | python3 -c 'import sys,json;print(json.load(sys.stdin).get("session_id") or "")' \
-        2>/dev/null || true)"
+# The same call also yields WHAT was about to be read, because the firing count
+# alone cannot say why the nudge is ignored. Measured 2026-08-23: 442 emitted
+# nudges against 3 uses, and the record carried only ts/hook/suppressed — so
+# "the tool had no graph-answerable question" and "it had one and ignored the
+# nudge" stayed indistinguishable. This costs nothing: the interpreter start was
+# already being paid on every firing to get session_id.
+_meta="$(printf '%s' "$payload" | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+i = d.get("tool_input") or {}
+t = i.get("file_path") or i.get("path") or i.get("pattern") or i.get("command") or ""
+print((d.get("session_id") or "") + "\t" + json.dumps(str(t)[:200]))
+' 2>/dev/null || true)"
+_sid="${_meta%%$'\t'*}"
+_tgt="${_meta#*$'\t'}"
+# No tab (python failed / empty payload) → emit a valid empty JSON string, never
+# a bare word that would make the whole log line unparseable.
+case "$_meta" in *"$(printf '\t')"*) : ;; *) _tgt='""' ;; esac
+[ -n "$_tgt" ] || _tgt='""' 
 if [ -n "$_sid" ]; then
   _latch="${TMPDIR:-/tmp}/graphify-guard-${_sid}-${mode}.seen"
   if [ -e "$_latch" ]; then
@@ -102,8 +121,8 @@ if [ -n "$_sid" ]; then
     # in guard activity that never happened.
     _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
     mkdir -p "$(dirname "$_log")" 2>/dev/null \
-      && printf '{"ts":"%s","hook":"graphify-guard","suppressed":true}\n' \
-         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+      && printf '{"ts":"%s","hook":"graphify-guard","suppressed":true,"mode":"%s","target":%s}\n' \
+         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$_tgt" >> "$_log" 2>/dev/null || true
     exit 0
   fi
 fi
@@ -146,7 +165,8 @@ fi
 # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
 _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
 mkdir -p "$(dirname "$_log")" 2>/dev/null \
-  && printf '{"ts":"%s","hook":"graphify-guard"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+  && printf '{"ts":"%s","hook":"graphify-guard","mode":"%s","target":%s}\n' \
+     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$_tgt" >> "$_log" 2>/dev/null || true
 
 # Arm the latch only once a nudge was actually emitted. A repo with no graph
 # produces no output and must stay unlatched, so that adding a graph mid-session
