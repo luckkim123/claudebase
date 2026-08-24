@@ -1,6 +1,6 @@
 ---
 name: team-project
-description: Launch and run a multi-agent collaboration campaign around a tracked community board (.community/<campaign>/) — scale judgment and structure design are automatic, only the launch is human-gated. Wraps any executor (OMC subagent fan-out, cross-session SendMessage, orca cross-machine) with the campaign protocol — worker briefs, post convention, manager duties, termination rules. Use for work too big for one session: 3+ independent axes, 2+ repos, or a document/finding fan-out with cross-review.
+description: Launch and run a multi-agent collaboration campaign around a tracked community board (<project>/.community/campaigns/<campaign>/) — scale judgment and structure design are automatic, only the launch is human-gated. Wraps any executor (OMC subagent fan-out, cross-session SendMessage, orca cross-machine) with the campaign protocol — worker briefs, post convention, manager duties, termination rules. Use for work too big for one session: 3+ independent axes, 2+ repos, or a document/finding fan-out with cross-review.
 Triggers: 팀 프로젝트, 협업 캠페인, 커뮤니티 열어, 멀티에이전트로, 워커 붙여서, team project, launch a campaign, multi-agent campaign, community board, spin up workers
 ---
 
@@ -31,11 +31,17 @@ cost / termination condition. A proposal missing termination is not a proposal.
 
 ## Community scaffold
 
-Create at the project root, all tracked (verify with `git check-ignore -v` —
-any output means the path dies with the session; fix `.gitignore` first):
+Create at the root of the **project that owns the work**, beside its other
+harness state (`.omx/`, `.omc/`) — in a single-project repo that is the repo
+root; in a repo carrying several project folders (e.g. a vault's
+`0_Project/<name>/`), it is that project's folder, not the repo root
+(user decision 2026-08-24: "그 프로젝트 것은 그 프로젝트 폴더 안에" — a
+shared root layer returns only when two projects measurably need to share
+`agents/`). All tracked (verify with `git check-ignore -v` — any output means
+the path dies with the session; fix `.gitignore` first):
 
 ```
-.community/
+<project>/.community/                beside the project's .omx/ and .omc/
   campaigns/<YYYY-slug>/             one campaign = one folder
     HUB.md                           canonical state (see below)
     posts/<category>/<NNN-slug>.md   one file = one post; categories are campaign-defined

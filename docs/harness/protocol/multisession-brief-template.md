@@ -295,6 +295,12 @@ claudebase 전역 grep 0건. 즉 스위치를 켜도 파일만 쌓이는 미완 
 머신에서 인용이 끊겼고, 사후 이관에 포인터 갱신 14파일이 들었다. 처음부터 tracked였으면 0이었다.
 `.gitignore` 확인 완료(2026-08-24): `.community/`는 어떤 패턴에도 안 걸린다.
 
+위치는 2026-08-24 밤 사용자 결정으로 **작업을 소유한 프로젝트 폴더 밑**이다
+(vault 는 `0_Project/in_progress/albc/.community/` — `.omx`·`.omc` 와 나란히,
+"그 프로젝트 것은 그 프로젝트 폴더 안에"). vault 루트 공통층 안은 기각 —
+"krit 캠페인이 생기면 `agents/` 가 갈라진다"는 소비자 1개 시점의 가설이라,
+실제로 갈라질 필요가 생기면 그때 근거를 갖고 공통층으로 승격한다.
+
 구조의 이름은 **blackboard architecture**다 — 중앙 게시판에 요청·발견을 올리고 에이전트가
 읽고 반응하는 형태. LLM 판 실증([arXiv:2510.01285](https://arxiv.org/abs/2510.01285),
 master-slave 대비 13~57% 상대 개선)이 있으나, 그 이득의 원천인 **자발 참여는 이 rig에서 관측
@@ -303,7 +309,7 @@ master-slave 대비 13~57% 상대 개선)이 있으나, 그 이득의 원천인 
 ### 구조
 
 ```
-.community/
+<project>/.community/                ← 작업 소유 프로젝트 폴더 밑 (.omx·.omc 와 나란히)
   campaigns/<YYYY-slug>/             ← 캠페인 하나 = 폴더 하나 (예: 2026-ral-paper-hub)
     HUB.md                           ← 정본. 목적·규칙·제약·사용자 결정 표·작업 보드·기한·소유 세션
     posts/<category>/<NNN-slug>.md   ← 게시글. 카테고리는 캠페인이 정한다 (예: findings, reviews)

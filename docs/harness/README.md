@@ -14,7 +14,7 @@
 근거고, 그중 하나가 **이 문서가 원래 팬아웃을 제외했던 전제를 뒤집었다** — 종료만 자동이었다.
 compact 자동화 두 경로(유도·내성)도 같은 절에 있다: `claudebase/runtime/hooks/compact-guard.py`.
 **커뮤니티 판 (2026-08-24, 사용자 결정)**: 같은 문서의 "커뮤니티 판" 절 — 다음 캠페인부터 협업
-공간을 **`.community/campaigns/<campaign>/` tracked**로 승격(HUB.md + `posts/<category>/` 게시글 +
+공간을 **`<project>/.community/campaigns/<campaign>/` tracked**로 승격(작업 소유 프로젝트 폴더 밑, HUB.md + `posts/<category>/` 게시글 +
 `sessions/` 워커 이력 + 캠페인 횡단 `agents/<role>.md` 교훈 층, 2026-08-24 추가). 게시글은 파일 하나에 id·작성자·keywords·요약 헤더, 진입 의무는 통독이
 아니라 **검색**. 매니저는 상주 에이전트가 아니라 조정자의 역할(발진·마일스톤·종료 시점).
 진행 중 paper-hub은 이주하지 않는다.
