@@ -1,5 +1,5 @@
 <!-- OMC:START -->
-<!-- OMC:VERSION:4.15.7 -->
+<!-- OMC:VERSION:5.0.0 -->
 
 # oh-my-claudecode - Intelligent Multi-Agent Orchestration
 
@@ -20,7 +20,8 @@ Route code to `executor` (use `model=opus` for complex work). Uncertain SDK usag
 </delegation_rules>
 
 <model_routing>
-`haiku` (quick lookups), `sonnet` (standard), `opus` (architecture, deep analysis).
+`haiku` (quick lookups), `sonnet` (standard), `opus` (architecture, deep analysis), `fable` (Claude Fable 5, above Opus).
+The session model set via `/model` governs the main loop only; delegated agents run on their pinned tier unless you pass `model` explicitly or set a per-agent `agents.<name>.model` override.
 Direct writes OK for: `~/.claude/**`, `.omc/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`.
 Workflow tool (`agent()`/`parallel()`/`pipeline()`) and other multi-agent fan-outs: default `opts.model` to `sonnet` (Sonnet 5) unless the session judges a specific stage needs `opus` (architecture/synthesis/adversarial-verify judgment) or `haiku` (pure lookup/transform). Do not blanket-inherit the parent session's model across a large agent fleet — pick per-stage, per-session. See `feedback-workflow-agents-opus` memory for the incident this guards against (opus-fleet session-limit exhaustion; fable-inherit-fleet token blowout).
 This rule binds pre-built and named workflows too, not just scripts you author inline. Running `Workflow({name: "..."})` (or any `scriptPath`) does NOT exempt you: an `agent()` call with no `model` option silently inherits the *session* model, so launching a named workflow from an Opus session runs the whole fleet on Opus — exactly the failure above. Before firing a named/pre-built workflow, open the script and check each `agent()`'s `model`; if any fan-out stage lacks an explicit non-Opus model, edit the script (Write/Edit the `scriptPath`, add `model: "sonnet"` per stage) and run the edited version. "It's a canned workflow, not my code" is not a pass — the guard is about which model the fleet actually runs on, not who wrote the loop.
@@ -29,10 +30,11 @@ Lean into `sonnet` actively, not just as a grudging default — Sonnet 5's gains
 
 <skills>
 Invoke via `/oh-my-claudecode:<name>`. Trigger patterns auto-detect keywords.
-Tier-0 workflows include `autopilot`, `ultrawork`, `ralph`, `team`, and `ralplan`.
-Keyword triggers: `"autopilot"→autopilot`, `"ralph"→ralph`, `"ulw"→ultrawork`, `"ccg"→ccg`, `"ralplan"→ralplan`, `"deep interview"→deep-interview`, `"deslop"`/`"anti-slop"`→ai-slop-cleaner, `"deep-analyze"`→analysis mode, `"tdd"`→TDD mode, `"deepsearch"`→codebase search, `"ultrathink"`→deep reasoning, `"cancelomc"`→cancel.
-Team orchestration is explicit via `/team`.
-Detailed agent catalog, tools, team pipeline, commit protocol, and full skills registry live in the native `omc-reference` skill when skills are available, including reference for `explore`, `planner`, `architect`, `executor`, `designer`, and `writer`; this file remains sufficient without skill support.
+**Canonical workflows (Tier-0):** `plan` → `execute` → `review` → `verify`. Roles: `planner` → `executor` → `reviewer` → `verifier`. `deep-interview` and `ralplan` are independent Tier-0 planning workflows. `research` and `team` are internal lanes; `autopilot`, `autoresearch`, `ralph`, and `ultragoal` remain directly invocable.
+**Retired in 5.0.0 (removed, not aliased):** `ultrawork`, `ultraqa`, `ultrapilot`, `swarm`, `pipeline`, `merge-readiness`, `deep-dive`, `sciomc`, `ccg`, `omc-teams`, `setup`, `mcp-setup`, `omc-reference`, `learner`, `writer-memory`, `local-build-reminder`. Use `execute`, `verify`, `review`, `research`, `omc-setup`, `wiki`, `remember`, or `team` instead.
+Keyword triggers: `"autopilot"→autopilot`, `"ralplan"→ralplan`, `"deep interview"→deep-interview`, `"deslop"`/`"anti-slop"`→ai-slop-cleaner (→`review`, opt-in), `"deep-analyze"`→analysis mode, `"tdd"`→TDD mode, `"deepsearch"`→codebase search, `"ultrathink"`→deep reasoning, `"cancelomc"`→cancel. Team orchestration is explicit via `/team`.
+Release is maintainer-only `omc release` (see Migration Guide); `/release` remains a compatibility alias and never bypasses the release boundary.
+Detailed agent catalog, tools, team pipeline, commit protocol, and full skill registry live in the `wiki` skill when skills are available, including reference for `explore`, `planner`, `architect`, `executor`, `designer`, and `writer`; this file remains sufficient without skill support. Specialists remain internal/routable modules (document-specialist, test-engineer, designer, etc.) — not Tier-0 workflows.
 </skills>
 
 <verification>
@@ -54,7 +56,7 @@ Before concluding: zero pending tasks, tests passing, verifier evidence collecte
 </execution_protocols>
 
 <hooks_and_context>
-Hooks inject `<system-reminder>` tags. Key patterns: `hook success: Success` (proceed), `[MAGIC KEYWORD: ...]` (invoke skill), `The boulder never stops` (ralph/ultrawork active).
+Hooks inject `<system-reminder>` tags. Key patterns: `hook success: Success` (proceed), `[MAGIC KEYWORD: ...]` (invoke skill), `The boulder never stops` (continuation mode active).
 Persistence: `<remember>` (7 days), `<remember priority>` (permanent).
 Kill switches: `DISABLE_OMC`, `OMC_SKIP_HOOKS` (comma-separated).
 </hooks_and_context>
