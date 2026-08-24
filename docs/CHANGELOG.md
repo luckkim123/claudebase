@@ -2,7 +2,7 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — 2026-08-24 — a loop that stops too early passes all five checks
+## [Unreleased] — 2026-08-24 — a loop that stops too early, and one that never looks back
 
 The loop contract bounded a loop that runs too long and said nothing about one
 that quits. StateM (arXiv 2608.15089) names four ways a long-horizon agent fails
@@ -29,6 +29,13 @@ launch that round passed a gate that had never held anything.
   that never looked.
 - **`resid` and `denom` columns** in `runtime/hooks/loop_lint.py`. Split for the
   same reason `cap`/`escal` are split: the half-failure is the common one.
+- **Contract property 7, lesson reactivation** (`docs/loop-contract.md`) + a
+  `lesson` column. StateM's second uncovered mode. The gap is not in this stack's
+  assets — `.omp/learned.md`, the `.omp`/`.omd`/`.oms`/`.omc` wikis, omx
+  `registry/findings/`, 256 auto-memory files — it is that **0 of 9 loop skills
+  state a read of any of them**. The column requires a read verb, because writing
+  to a knowledge store is not reactivating it: `exp-loop`'s `wiki capture-session`
+  / `lint` / `gc` deliberately do not match.
 
 ### Notes — what the first run showed, and what it could not
 
@@ -47,6 +54,17 @@ skill prose cannot see. A `--` there means "not stated in the skill", never
 "absent from the system" — the same asymmetry check 4 already has with Ralph's
 compiled Stop hook. Both caveats are written into the contract doc rather than
 left for the next reader to rediscover.
+
+`lesson` scored `ok` **once**, and it is the third instance of that same asymmetry
+— structural this time rather than incidental. `exp-loop`'s hit is its backlog
+reconcile (`omx wiki list --status needs-experiment`); the *strong* version of the
+property lives in `exp-design`, which queries the wiki by `--category decision` and
+`--category pattern` with the reason written down. The linter never opens that
+file, because `exp-design` is not itself a loop — loops reactivate lessons through
+**delegated sub-skills**, so the read is absent from the loop's own text by
+construction. Teaching the linter to follow delegation was rejected: the hand-off
+is prose ("Delegate to `exp-design`"), so a name regex would trade a blind spot for
+false positives.
 
 ### Verification
 

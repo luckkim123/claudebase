@@ -1,6 +1,6 @@
 # The loop contract
 
-Six properties every autonomous loop in this stack must be able to point at.
+Seven properties every autonomous loop in this stack must be able to point at.
 `runtime/hooks/loop_lint.py` reports which ones each loop skill can evidence.
 
 This is a **convention plus a checker, not a runtime**. No loop is rewritten to
@@ -55,7 +55,34 @@ Measured across the nine loops the linter tracks (2026-08-24): **two** externali
 the stop, **one** carries the denominator. `docs-revise` names "remaining defects"
 only in the report it prints when it gives up — reporting, not deciding.
 
-## The six
+## Why a seventh, added 2026-08-24
+
+The same StateM list names a second mode the contract did not cover: *"fail to
+reactivate lessons from earlier executions"*. That one is not a gap in the stack's
+**assets** — every plugin has a store — it is a gap in what the loops **read**.
+
+Counted the same day, this machine: `.omp/learned.md` (2 observations in the vault,
+both already closed), `.omp/wiki/` 5 pages, `.omd/wiki/` 11, `.oms/wiki/` 18,
+`.omc/wiki/` 183, omx `registry/findings/` 9, plus 256 auto-memory files across two
+projects. Then the loops: **0 of 9 loop skills state a read of any of them.**
+
+The reactivation that does exist sits **one hop below the loop**. `exp-loop`
+delegates to `exp-analyze` and `exp-design`, and it is `exp-design` that carries the
+best version of this property anywhere in the stack — two category-scoped queries
+with the reason written down:
+
+> `omx wiki query --root <root> "<the symptom you are diagnosing>" --category decision`
+> `omx wiki query … --category pattern`
+> These two categories are queried for a reason: `decision` holds why a cause was
+> adopted/discarded with the data that decided it (= a past confirmed cause), and
+> `pattern` holds recurring metric behaviours.
+
+So the property is a promotion, like the sixth — it has a working exemplar, it is
+just not in any loop's own text. And the cost of not having it is measured, not
+hypothetical: one launch re-walked a cuDNN fix that was already written down,
+because the wiki held it and the launch script did not, at 18.9 s/iter.
+
+## The seven
 
 **1. State file — a path, and what it holds.**
 A file that outlives the session and records where the loop is. Not the artifact
@@ -90,6 +117,13 @@ never by concluding it — that is what stops property 2 from degrading into "th
 model thinks it finished". And it records **how many items were examined** beside
 that count, so a zero can be read instead of trusted. Without the denominator,
 "0 remaining" and "nothing was ever counted" are the same artifact.
+
+**7. Lesson reactivation — the loop reads before it derives.**
+Before acting, the loop consults what earlier runs of it already established: a
+wiki query, `learned.md`, a prior-diagnosis lookup. **A write is not a
+reactivation** — every one of these stores has something writing to it, and a loop
+that only appends to its own knowledge base has not read it. This is the property
+that keeps a loop from re-deriving, at full cost, a conclusion it already owns.
 
 ## What the linter does and does not do
 
@@ -135,6 +169,16 @@ nine loops scored `--`, yet `oh-my-experiments` does carry a denominator —
 body the linter reads. A `--` here means "not stated in the skill", never "absent
 from the system". That asymmetry is the same one check 4 has, below.
 
+**Check 7 has the same one, and it is structural rather than incidental.** The
+loops that reactivate lessons mostly do it through a **delegated sub-skill**, so
+the read is absent from the loop's own text by construction. First run,
+2026-08-24: 1 of 9 scored `ok`, and it was `exp-loop` matching on its backlog
+reconcile (`omx wiki list --status needs-experiment`) — while the strong version
+of the property, `exp-design`'s two category-scoped queries, is a file the linter
+never opens because `exp-design` is not itself a loop. The linter is not taught to
+follow delegation: the hand-off is prose ("Delegate to `exp-design`"), and a
+regex over skill names would trade this blind spot for false positives.
+
 **Check 4 has a blind spot in `oh-my-claudecode`.** Ralph's real anti-self-
 approval enforcement is a Stop hook in compiled JS (`dist/`, referenced from
 `hooks/hooks.json`), not prose — a prose grep finds the reviewer delegation but
@@ -158,7 +202,8 @@ The gaps that motivated writing this down:
 document rather than audited by it, and scores all five of the original
 properties. On the sixth it has the half that matters most — its stop count is
 read from state — and lacks the denominator: `found: 0` does not say how many
-paths the sweep examined.
+paths the sweep examined. On the seventh it scores `--` along with seven others:
+`.omp/learned.md` sits beside `garden-state.json` and no sweep reads it.
 
 Nothing here asks an existing loop to change. The point of writing it down is
-that the sixth loop should not invent a seventh convention.
+that the next loop should not invent its own convention for any of the seven.

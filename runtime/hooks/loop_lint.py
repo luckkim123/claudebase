@@ -12,7 +12,7 @@ built to a shared contract.
 
 Two tables, and the trap each carries:
 
-  [A] Contract compliance per loop skill. Seven columns for the six contract
+  [A] Contract compliance per loop skill. Eight columns for the seven contract
       items — two of them split in two because the half-failure is the common
       one: a numeric cap with no named escalation (cap/escal), and a residue
       count with no denominator to read the zero against (resid/denom). Every
@@ -135,6 +135,17 @@ _DENOM_RE = re.compile(
     r"|\bout of \d+|\b\d+ of \d+\b"
     r"|분모", re.I)
 
+# Contract item 7, added 2026-08-24 — the loop consults what earlier runs learned
+# BEFORE acting, instead of re-deriving it. A READ verb is required: every one of
+# these stores is also written by something, and writing a lesson is not
+# reactivating one. exp-loop's step 6 (`wiki capture-session`, `wiki lint`,
+# `wiki gc`) is the write half and deliberately does not match here.
+_LESSON_RE = re.compile(
+    r"wiki[ _](?:query|read|list)|learned\.md"
+    r"|prior (?:evidence|diagnos|cause)|already diagnosed"
+    r"|from earlier (?:runs?|executions?)|past (?:lesson|diagnos)"
+    r"|이전 교훈|과거 실행", re.I)
+
 _CHECKS = [
     ("state", _STATE_RE),
     ("stop", _STOP_RE),
@@ -143,6 +154,7 @@ _CHECKS = [
     ("verif", _VERIF_RE),
     ("resid", _RESID_RE),
     ("denom", _DENOM_RE),
+    ("lesson", _LESSON_RE),
 ]
 
 # A path literal that could be loop state. Excludes the documents every skill

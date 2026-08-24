@@ -2,8 +2,8 @@
 
 The linter is a keyword matcher over skill prose, which is the kind of scorer
 that fails silently — it produces a clean table whatever the input. So every
-test here is a known-good / known-bad pair: a fixture that must score all five
-contract checks, and one that must score none of them. A matcher that has
+test here is a known-good / known-bad pair: a fixture that must score every
+contract check, and one that must score none of them. A matcher that has
 drifted into matching everything fails the second half.
 
 The shim test is the one that matters most in practice. omc, oms and omd
@@ -46,6 +46,8 @@ Verification: Task(subagent_type="oh-my-claudecode:architect", ...).
 Completion is read from state, not judged: stop when the unresolved count in
 prd.json reaches zero, and record it as "0 of 12 stories" so the zero can be read
 rather than trusted.
+Before round 1, `wiki query` the workspace for prior evidence on this defect so a
+known cause is not re-derived.
 """
 
 KNOWN_BAD = """
@@ -102,6 +104,7 @@ Round state is written to `.omd/{slug}/rounds.json`.
 Each round: Task(subagent_type="oh-my-docs:doc-verifier") re-verifies.
 The unresolved count is read from state, and rounds.json records "0 of 9 checks"
 beside it so an empty result is legible.
+Each round opens with a `wiki read` of the convention page for prior diagnoses.
 """
 
 
