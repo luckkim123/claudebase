@@ -121,6 +121,22 @@
             "type": "command",
             "command": "# TOKENSAVE_PROMPT_SUBMIT\nbash ~/claudebase/runtime/hooks/tokensave-guard.sh prompt-submit",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "# COMPACT_GUARD_CONSUME\npython3 ~/claudebase/runtime/hooks/compact-guard.py prompt-submit 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# COMPACT_GUARD_HUB_SURVIVE\npython3 ~/claudebase/runtime/hooks/compact-guard.py pre-compact 2>/dev/null || true",
+            "timeout": 5
           }
         ]
       }
@@ -274,6 +290,10 @@
   "omcHud": {
     "preset": "focused",
     "locale": "en",
+    "contextLimitWarning": {
+      "threshold": 40,
+      "autoCompact": true
+    },
     "elements": {
       "contextBar": true,
       "agents": true,
