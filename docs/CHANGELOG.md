@@ -2,6 +2,58 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-24 — a loop that stops too early passes all five checks
+
+The loop contract bounded a loop that runs too long and said nothing about one
+that quits. StateM (arXiv 2608.15089) names four ways a long-horizon agent fails
+even when its model can do every step — *"lose track of mutable state, fail to
+reactivate lessons from earlier executions, skip known procedures, or **stop
+prematurely**"* — and only the first was covered here. Worse, property 3 points
+the other way on purpose: an attempt cap exists to cut a loop off, never to keep
+one going.
+
+Two loops had already solved it without the contract naming it, and the second
+solved it better. `omp-garden` stops on "no new findings" and says the count is
+**read from state, not judged**. `oh-my-experiments` writes `open_leads` into its
+approval artifact *and* `wiki_coverage {pages, with_status}` — the denominator —
+because, in its own words, *"'none open' is indistinguishable from 'nobody ever
+filed one' unless the denominator travels with it."* That is measured, not
+hypothetical: one workspace had **0 of 540 pages carrying any status**, so every
+launch that round passed a gate that had never held anything.
+
+### Added
+
+- **Contract property 6, externalised completion** (`docs/loop-contract.md`) — a
+  residue count read out of the state file, *and* the denominator beside it. Both
+  halves, because `found: 0` alone cannot distinguish a clean tree from a sweep
+  that never looked.
+- **`resid` and `denom` columns** in `runtime/hooks/loop_lint.py`. Split for the
+  same reason `cap`/`escal` are split: the half-failure is the common one.
+
+### Notes — what the first run showed, and what it could not
+
+Across the nine loops the linter tracks: `resid` scored `ok` three times and
+`denom` **zero** times.
+
+Two of the three `resid` hits are the column catching *reporting* rather than
+*deciding* — `docs-revise` and `scholar-revise` matched on "Or a stop report
+(… + remaining defects)", which is what they print when they give up. Only
+`omp-garden`'s hit is a rule. The evidence line is what separates them, which is
+this linter's whole posture.
+
+And the all-`--` denominator column is not the finding it looks like:
+`oh-my-experiments` *does* carry one, in `omx_core/loop.py`, which a grep over
+skill prose cannot see. A `--` there means "not stated in the skill", never
+"absent from the system" — the same asymmetry check 4 already has with Ralph's
+compiled Stop hook. Both caveats are written into the contract doc rather than
+left for the next reader to rediscover.
+
+### Verification
+
+`416 passed` (`tests/`), exit code 0. Three tests failed first — `KNOWN_GOOD` and
+the shim `BODY` fixtures assert "scores every check" and predated the new
+properties, so both fixtures gained them.
+
 ## [Unreleased] — 2026-08-23 — a chevron that is not an emoji, and a nudge that will not stop
 
 Two guards were charging for the same sentence twice, in opposite ways.

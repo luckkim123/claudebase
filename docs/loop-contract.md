@@ -1,6 +1,6 @@
 # The loop contract
 
-Five properties every autonomous loop in this stack must be able to point at.
+Six properties every autonomous loop in this stack must be able to point at.
 `runtime/hooks/loop_lint.py` reports which ones each loop skill can evidence.
 
 This is a **convention plus a checker, not a runtime**. No loop is rewritten to
@@ -9,7 +9,7 @@ run on shared machinery: each loop's stop condition is domain knowledge — only
 what `deadline_passed` means. What is shared is the checklist and the linter
 that reads it.
 
-## Why these five
+## Why the first five
 
 `cobusgreyling/loop-engineering`'s `loop-audit` scores loop maturity across 35
 weighted signals. Read from its `auditor.ts` (2026-08-15), three weights
@@ -23,7 +23,39 @@ That is this repo's 2026-08-14 finding from the other direction — *measure a
 guard's firing rate before trusting the guard*. A loop nobody can prove ran is
 a guard nobody measured.
 
-## The five
+## Why a sixth, added 2026-08-24
+
+The five above bound a loop that runs too long. They say nothing about one that
+stops too early, and that is a named failure mode, not a hypothetical: StateM
+(arXiv 2608.15089) lists four ways a long-horizon agent fails even when its model
+can do every step — *"lose track of mutable state, fail to reactivate lessons from
+earlier executions, skip known procedures, or **stop prematurely**."*
+
+Only the first is covered here, by property 1. And the cap in property 3 points
+the **opposite** way: it exists to cut a loop off, never to keep one going.
+
+Two loops in this stack had already solved it without the contract naming it, and
+the second solved it better:
+
+- `omp-garden` stops on "no new findings" and says so explicitly — the count is
+  **read from state, not judged**. Its `garden-state.json` carries
+  `sweeps[].found/new/resolved`.
+- `oh-my-experiments` writes `open_leads` into the approval artifact and also
+  `wiki_coverage {pages, with_status}` — the **denominator**. Its own docstring
+  says why: *"'none open' is indistinguishable from 'nobody ever filed one' unless
+  the denominator travels with it."* That is not theoretical either — one
+  workspace measured **0 of 540 pages carrying any status** (2026-08-10), so every
+  launch that round passed a gate that had never held anything.
+
+The sixth property is that pair, because the first half alone reproduces the trap:
+`found: 0` in `garden-state.json` cannot distinguish a clean tree from a sweep
+that never looked.
+
+Measured across the nine loops the linter tracks (2026-08-24): **two** externalise
+the stop, **one** carries the denominator. `docs-revise` names "remaining defects"
+only in the report it prints when it gives up — reporting, not deciding.
+
+## The six
 
 **1. State file — a path, and what it holds.**
 A file that outlives the session and records where the loop is. Not the artifact
@@ -51,6 +83,14 @@ The state file from (1) exists on disk somewhere, with a timestamp. A loop that
 has never left a trace is scaffolding, and its other four properties are
 untested claims.
 
+**6. Externalised completion — a residue count, and its denominator.**
+Two halves, and one without the other is worse than neither. The loop declares
+itself done by **reading a count of unresolved items out of the state file**,
+never by concluding it — that is what stops property 2 from degrading into "the
+model thinks it finished". And it records **how many items were examined** beside
+that count, so a zero can be read instead of trusted. Without the denominator,
+"0 remaining" and "nothing was ever counted" are the same artifact.
+
 ## What the linter does and does not do
 
 It greps the skill body for each property and **prints the matched line**. That
@@ -72,7 +112,7 @@ while the repo showed working code.
 **It follows the compact-skill shim.** `oh-my-claudecode`, `oh-my-scholar` and
 `oh-my-docs` register a ~12-line `skills/<name>/SKILL.md` pointing at
 `skill-bodies/<name>/SKILL.md`. A linter reading only the registered file scores
-every one of those loops as failing all five checks, and reports no error while
+every one of those loops as failing every check, and reports no error while
 doing it.
 
 **Check 5 over-counts, and the evidence line is the correction.** The activity
@@ -80,6 +120,20 @@ column globs every path literal the skill names — including the ones it names 
 send you elsewhere. `omp-garden` scores activity off `.omp/STRUCTURE.md` because
 its Do_Not_Use_When routes there. Read the example path under the row before
 reading the number as proof the loop ran.
+
+**Check 6 catches reporting and deciding with the same pattern, and only the
+evidence line tells them apart.** First run, 2026-08-24: `resid` scored `ok` for
+three loops, and two of them matched on *"Or a stop report (same defect 3 times /
+max iterations exceeded + **remaining defects**)"* — that is what `docs-revise`
+and `scholar-revise` print when they give up, not what they consult to decide.
+Only `omp-garden`'s hit is a rule: *"the stop condition is 'no new findings', and
+it is **read from state, not judged**."* Read the line before reading the column.
+
+**And `denom` is a code-level property the prose grep cannot see.** Same run: all
+nine loops scored `--`, yet `oh-my-experiments` does carry a denominator —
+`wiki_coverage {pages, with_status}` lives in `omx_core/loop.py`, not in the skill
+body the linter reads. A `--` here means "not stated in the skill", never "absent
+from the system". That asymmetry is the same one check 4 has, below.
 
 **Check 4 has a blind spot in `oh-my-claudecode`.** Ralph's real anti-self-
 approval enforcement is a Stop hook in compiled JS (`dist/`, referenced from
@@ -101,7 +155,10 @@ The gaps that motivated writing this down:
 | all of them | No two share a state-file convention — `.omc/state/sessions/<id>/prd.json`, `pending-launch.json` + ledger, an artifact tree |
 
 `oh-my-project 0.12.0`'s `omp-garden` is the first loop written against this
-document rather than audited by it, and scores all five.
+document rather than audited by it, and scores all five of the original
+properties. On the sixth it has the half that matters most — its stop count is
+read from state — and lacks the denominator: `found: 0` does not say how many
+paths the sweep examined.
 
 Nothing here asks an existing loop to change. The point of writing it down is
 that the sixth loop should not invent a seventh convention.

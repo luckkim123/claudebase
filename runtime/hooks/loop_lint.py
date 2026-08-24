@@ -12,9 +12,10 @@ built to a shared contract.
 
 Two tables, and the trap each carries:
 
-  [A] Contract compliance per loop skill. Five columns for the five contract
-      items — cap and escalation are one item, split into two columns because a
-      numeric cap with no named escalation is the common half-failure. Every
+  [A] Contract compliance per loop skill. Seven columns for the six contract
+      items — two of them split in two because the half-failure is the common
+      one: a numeric cap with no named escalation (cap/escal), and a residue
+      count with no denominator to read the zero against (resid/denom). Every
       hit prints the matched LINE, because a boolean table out of a keyword
       matcher is exactly the artifact that looks clean while being wrong. The
       line is what lets a reader overrule the match: a `3 times` inside a
@@ -115,12 +116,33 @@ _VERIF_RE = re.compile(
     r"subagent_type|(?:doc|scholar)-verifier|\bcritic\b|\barchitect\b"
     r"|\breviewer\b|\bverifier\b|omx eval|campaign-auditor", re.I)
 
+# Contract item 6, added 2026-08-24 — the loop stops because a COUNT in its state
+# said to, not because it concluded it had finished. `no new findings` is
+# omp-garden's phrasing and `open_leads` is omx's; both were in the stack before
+# the contract named the property.
+_RESID_RE = re.compile(
+    r"no new findings|open[_ ]leads|remaining (?:defects?|items?|findings?|work)"
+    r"|unresolved|read from state|not judged"
+    r"|잔여|미해결", re.I)
+
+# The other half, and the one nearly everything fails. A residue count of 0 is
+# worthless unless the denominator travels with it: omx's own docstring records a
+# workspace where 0 of 540 pages carried any status, so every launch that round
+# passed a gate that had never held anything. Kept deliberately tight — a loose
+# match here would turn the column into decoration.
+_DENOM_RE = re.compile(
+    r"wiki_coverage|denominator|with_status"
+    r"|\bout of \d+|\b\d+ of \d+\b"
+    r"|분모", re.I)
+
 _CHECKS = [
     ("state", _STATE_RE),
     ("stop", _STOP_RE),
     ("cap", _CAP_RE),
     ("escal", _ESC_RE),
     ("verif", _VERIF_RE),
+    ("resid", _RESID_RE),
+    ("denom", _DENOM_RE),
 ]
 
 # A path literal that could be loop state. Excludes the documents every skill
