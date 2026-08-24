@@ -35,10 +35,12 @@ Create at the project root, all tracked (verify with `git check-ignore -v` —
 any output means the path dies with the session; fix `.gitignore` first):
 
 ```
-.community/<YYYY-slug>/            one campaign = one folder
-  HUB.md                           canonical state (see below)
-  posts/<category>/<NNN-slug>.md   one file = one post; categories are campaign-defined
-  sessions/<worker-name>.md        3 lines per worker: did / artifact paths / not-verified
+.community/
+  campaigns/<YYYY-slug>/             one campaign = one folder
+    HUB.md                           canonical state (see below)
+    posts/<category>/<NNN-slug>.md   one file = one post; categories are campaign-defined
+    sessions/<worker-name>.md        episodic — 3 lines per worker: did / artifact paths / not-verified
+  agents/<role>.md                   semantic — cross-campaign lessons per role (see Agent memory)
 ```
 
 `HUB.md` must carry: goal · the user's original prompt verbatim · rules ·
@@ -48,7 +50,29 @@ facts) · work board (todo/doing/done) · deadline · **owning session name**
 the user). Coordination scratch shorter-lived than the campaign may stay in
 `.omc/`; nothing else may.
 
+Artifacts may live **outside** the campaign folder (an existing notes tree, a
+separate workspace repo) — **HUB.md is the SSOT for artifact paths**. A worker
+that cannot find something inside the campaign folder reads HUB's artifact map
+before re-investigating; re-deriving what another worker already produced is
+the failure this line prevents.
+
 Commits: coordinator only. Workers never run git against the campaign repo.
+
+## Agent memory — two layers, distill don't dump
+
+Storing raw or compressed transcripts loses to distilled lessons — measured on
+this rig (a 76KB read-all was a no-op; a cross-session cache claim showed 0
+observations over a 514-file read-through) and consistent with the
+experience-distillation literature (arXiv:2604.15877, arXiv:2604.08224).
+
+- `campaigns/<c>/sessions/<worker>.md` — **episodic**, dies with the campaign:
+  did / artifact paths / not-verified. Brief material for re-summoning within
+  the campaign (a completed agent also resumes from its transcript via
+  SendMessage, so keeping full transcripts here is redundant).
+- `agents/<role>.md` — **semantic**, survives campaigns, append-only: what the
+  NEXT holder of this role must know — traps, settled facts, failed
+  approaches. Never an activity log. Stale lessons get a `(stale)` banner,
+  never deleted. When re-summoning a role, paste its file into the brief.
 
 ## Worker brief — nine base items plus four
 
@@ -69,7 +93,9 @@ Add these four — each one paid for by a real incident:
 - A path without a branch means "whatever happens to be checked out".
 
 ## Reporting IS termination    ← 3 workers went idle silently, double-nagged twice
-- When done, SendMessage: conclusion + artifact paths + what you did NOT verify. Then stop.
+- When done: first append distilled lessons to .community/agents/<role>.md
+  (traps / settled facts / failed approaches — not an activity log), then
+  SendMessage: conclusion + artifact paths + what you did NOT verify. Then stop.
 - Going quiet is not completion. If you got nagged, you broke this line.
 
 ## The coordinator is fallible ← a wrong instruction (0.28→0.27) was faithfully applied
@@ -114,7 +140,7 @@ coordinator-class consumer — start as a role:
 |:---|:---|
 | Launch | post rules, categories, owning session in HUB.md |
 | Phase / milestone boundary | banner stale posts, adjudicate contradictions, refresh board |
-| Close | review promotion (posts → permanent stores), close out sessions/ |
+| Close | review promotion (posts → permanent stores), close out sessions/, banner stale agents/ lessons |
 
 Split the manager out only when board upkeep measurably crowds the
 coordinator's context — and even then the manager and the verifier stay

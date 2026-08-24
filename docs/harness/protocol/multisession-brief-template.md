@@ -247,7 +247,7 @@ agent(prompt, { agentType: 'oh-my-scholar:scholar-researcher', model: 'sonnet' }
 이건 §"같은 결정을 두 번 묻지 마라"의 세션 간 판본이다.
 
 > 이 표의 `.omc/` 위치는 paper-hub 세대의 것이다. **다음 캠페인부터는 §"커뮤니티 판"의
-> `.community/<campaign>/`(tracked)이 이 표를 대체한다** — 조율까지 승격되고 산출물은
+> `.community/campaigns/<campaign>/`(tracked)이 이 표를 대체한다** — 조율까지 승격되고 산출물은
 > `posts/`로 간다.
 
 ### 조정자의 컨텍스트 — 병목은 여기뿐이다
@@ -290,7 +290,7 @@ claudebase 전역 grep 0건. 즉 스위치를 켜도 파일만 쌓이는 미완 
 
 ## 커뮤니티 판 — `.community/` (2026-08-24, 사용자 결정)
 
-사용자 결정: 협업 공간을 `.omc/<hub>/`(gitignored, 세션 수명)에서 **`.community/<campaign>/`
+사용자 결정: 협업 공간을 `.omc/<hub>/`(gitignored, 세션 수명)에서 **`.community/campaigns/<campaign>/`
 (tracked, 영구)로 승격한다.** 근거는 T19 실측 — 산출물 34건이 gitignored 공간에 갇혀 다른
 머신에서 인용이 끊겼고, 사후 이관에 포인터 갱신 14파일이 들었다. 처음부터 tracked였으면 0이었다.
 `.gitignore` 확인 완료(2026-08-24): `.community/`는 어떤 패턴에도 안 걸린다.
@@ -303,10 +303,12 @@ master-slave 대비 13~57% 상대 개선)이 있으나, 그 이득의 원천인 
 ### 구조
 
 ```
-.community/<YYYY-slug>/            ← 캠페인 하나 = 폴더 하나 (예: 2026-ral-paper-hub)
-  HUB.md                           ← 정본. 목적·규칙·제약·사용자 결정 표·작업 보드·기한·소유 세션
-  posts/<category>/<NNN-slug>.md   ← 게시글. 카테고리는 캠페인이 정한다 (예: findings, reviews)
-  sessions/<worker-이름>.md        ← 워커 이력: 한 일 + 산출물 경로 + 확인 안 한 것
+.community/
+  campaigns/<YYYY-slug>/             ← 캠페인 하나 = 폴더 하나 (예: 2026-ral-paper-hub)
+    HUB.md                           ← 정본. 목적·규칙·제약·사용자 결정 표·작업 보드·기한·소유 세션
+    posts/<category>/<NNN-slug>.md   ← 게시글. 카테고리는 캠페인이 정한다 (예: findings, reviews)
+    sessions/<worker-이름>.md        ← episodic. 워커 이력: 한 일 + 산출물 경로 + 확인 안 한 것
+  agents/<role>.md                   ← semantic. 캠페인 횡단 역할 교훈 — 증류만, append-only
 ```
 
 - **전부 tracked다.** 커밋은 조정자가 한다 — 워커 git 금지는 그대로다(§wrapper (a)).
@@ -316,6 +318,12 @@ master-slave 대비 13~57% 상대 개선)이 있으나, 그 이득의 원천인 
 - `sessions/`는 재소환용이다: 같은 전문성의 워커를 다시 띄울 때 이 요약을 브리프에 넣는다.
   압축 컨텍스트 전문이 아니라 **한 일 + 산출물 경로 + 확인 안 한 것** 세 줄이면 된다 —
   완료된 에이전트는 `SendMessage`로 transcript에서 재개되므로 전문 보존은 중복이다.
+- `agents/<role>.md`(2026-08-24 신설)는 캠페인 횡단 **semantic** 층이다: 워커가 종료 보고
+  직전에 "다음에 이 역할을 맡는 세션이 알아야 할 것"(함정·확정된 사실·틀렸던 접근)만
+  append 한다 — 활동 로그 금지. 근거: 증류물이 raw/압축 보관을 이긴다는 이 rig 실측
+  (76KB 통독 no-op, learn-codebase 세션 간 캐시 관측 0건)과 experience-distillation 문헌
+  (arXiv:2604.15877, arXiv:2604.08224). 낡은 교훈은 `(stale)` 배너로 보존.
+  재소환 브리프에는 이 파일을 통째로 넣는다.
 
 ### 게시글 규약 — 검색이 통독을 대체한다
 
