@@ -54,7 +54,7 @@ def resolve_command(command: str) -> str | None:
     Hooks and MCP servers are spawned without a login shell, so a bare name that
     works in the user's terminal can fail at launch. PATH first, then uv's shim
     dir — the same fallback installer/lib/deps.sh uses, and the reason a plain
-    `tokensave` or `graphify` resolves interactively but not from the CLI.
+    `graphify` resolves interactively but not from the CLI.
     """
     if os.path.isabs(command):
         return command if os.access(command, os.X_OK) else None

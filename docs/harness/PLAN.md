@@ -425,7 +425,13 @@ T18의 자동 발동 규약에 "도메인 레인은 판단 대상이 아니라 �
 
 ---
 
-#### T21: tokensave 복구 (vault + claudebase)
+#### T21: tokensave 복구 (vault + claudebase) — 무효 (2026-08-25)
+
+> **이 과제는 더 이상 유효하지 않다.** 2026-08-25 에 tokensave 를 claudebase 에서
+> 전면 제거했다 — 인덱스가 죽어서가 아니라 **아무도 조회하지 않아서**다(vault 세션
+> 10,813 tool call 중 MCP 6건, 0.055%). 아래 본문의 실측·복구 절차·상류 버그 분석은
+> 그대로 기록으로 남긴다. 제거 근거와 다른 머신 잔재 제거 절차는
+> `docs/CHANGELOG.md` 2026-08-25 항목과 `sync-claudebase` §4m 을 봐라.
 
 **긴급도 최상.** vault `CLAUDE.md`의 라우팅 표가 "어느 노트가 X를 말하나"의 **첫 번째 도구**로
 `tokensave_search`를 지정하는데, 그 표가 실측 예시로 못박은 `tokensave_search "runaway"` → 2 hits가

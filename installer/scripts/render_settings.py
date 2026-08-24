@@ -181,7 +181,7 @@ def dropped_hook_commands(
     `hooks` is in BASELINE_OWNED_KEYS, so anything a third party wrote straight
     into the rendered file is discarded rather than captured — deliberately, for
     the reason recorded on that constant. Discarding it silently is the part that
-    surprises people: an IDE integration, an MCP installer, or `tokensave install`
+    surprises people: an IDE integration or an MCP installer
     writes its hooks into ~/.claude/settings.json, the next install.sh replaces
     the file, and the tool stops working with nothing announcing why.
 
@@ -211,7 +211,7 @@ def _report_dropped_hooks(stray: list[str], *, would: bool) -> None:
         print(f"                 - ... and {len(stray) - 3} more")
     print(
         "                 Tools that inject their own hooks (IDE integrations, MCP "
-        "installers, `tokensave install`) write straight into this file, and a render "
+        "installers) write straight into this file, and a render "
         "replaces it. Relaunch that tool so it re-injects, or move the hook into "
         "config/settings.json to make it survive."
     )

@@ -113,7 +113,7 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 | | Follows the worktree? | Failure |
 |:---|:---|:---|
 | `.omp/`, a tracked `.graphify/` | yes, as branch content | append-only state (e.g. `.omp/secretary/ledger.jsonl`) forks per branch and collides at merge |
-| `.code-review-graph/`, `.tokensave/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
+| `.code-review-graph/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
 
 The second half is the dangerous one: an absent index is indistinguishable from a healthy one that found nothing — the same silent-success class `templates/project-code-review-graph.md` documents at length. Worse, an MCP query that omits `repo_root` *creates* an empty `graph.db` at its cwd and answers `status: "ok"`, so the worktree ends up holding a plausible-looking 0-node index.
 
@@ -123,7 +123,7 @@ The second half is the dangerous one: an absent index is indistinguishable from 
 
 **What claudebase does about it.** `runtime/hooks/graph-refresh.sh` (canonical copy of the comment), `runtime/hooks/graph-offer.sh` and `runtime/bin/graph-init.sh` all start from `--show-toplevel` and correct only for a linked worktree; graph-offer additionally anchors its once-per-project marker in the common dir. `installer/scripts/render_settings.py` resolves `env.OMC_STATE_DIR` at render time so `.omc/` state outlives `git worktree remove` — it cannot be tracked, because `~`/`$HOME` do not expand in the `env` block and OMC joins the value verbatim, so a literal `~` would create a directory *named* `~`.
 
-**What it does not fix.** `graphify-guard.sh` needed nothing — it already walks ancestors for `graph.json`. tokensave resolves its own repo inside the binary and cannot be redirected from here, so a worktree gets no note index; do not paper over that by auto-indexing, which is slow and, on corpora with long non-ASCII paths, a known crash. `claude-mem` keys observations per path, so a worktree's history is separate. Claude Code's own auto-memory is the happy exception — it already resolves to the main repo.
+**What it does not fix.** `graphify-guard.sh` needed nothing — it already walks ancestors for `graph.json`. `claude-mem` keys observations per path, so a worktree's history is separate. Claude Code's own auto-memory is the happy exception — it already resolves to the main repo.
 
 **Where this came from.** Measured 2026-08-17 on an Obsidian vault opened through an IDE that creates one worktree per workspace. Three checkouts of the same repo were live; both worktrees held a 0-node `graph.db` while the real 12.9 MB index sat in the main checkout, and that project's `CLAUDE.md` instructed every session to consult the graph before grepping. Nothing errored. The IDE is incidental — `claude --worktree <name>`, which `#multisession-git` recommends as the default, reproduces it exactly.
 

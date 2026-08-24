@@ -293,8 +293,8 @@ class TestDroppedHookCommands:
     """Foreign hooks are discarded by design; discarding them silently is the bug.
 
     `hooks` is in BASELINE_OWNED_KEYS, so anything a third party wrote straight
-    into the rendered file (an IDE integration, an MCP installer, `tokensave
-    install`) is dropped rather than captured. The user has to be told, because
+    into the rendered file (an IDE integration or an MCP installer) is dropped
+    rather than captured. The user has to be told, because
     the tool that owns the hook simply stops working with nothing to point at.
     """
 

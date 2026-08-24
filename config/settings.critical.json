@@ -2,9 +2,8 @@
   "_comment": "Critical-key manifest for config/settings.json. The Claude Code CLI re-serializes settings.json on /permissions, plugin toggles, /compact, and HUD changes, silently DROPPING keys it does not recognize (custom hooks block, non-official plugins, omcHud.layout.main). Because ~/.claude/settings.json symlinks into this repo, that shrink lands as git drift. installer/lib/settings_verify.py asserts every invariant below; the git pre-commit hook (installer/githooks/pre-commit) blocks committing a shrunk file, and drift.sh escalates a shrink to a loud CRITICAL on the next install. Update this manifest DELIBERATELY when you intentionally add/remove a critical key — never auto-bless. See docs/specs/2026-06-01-settings-shrink-guard/.",
   "hookMarkers": {
     "_comment": "Each marker string must appear in some hooks[].hooks[].command. These are the defense hooks the CLI shrink drops first.",
-    "PreToolUse": ["ASKUSERQUESTION_GUARD", "GRAPHIFY_SEARCH_GUARD", "GRAPHIFY_READ_GUARD", "TOKENSAVE_PRE_TOOL_USE"],
-    "UserPromptSubmit": ["TOKENSAVE_PROMPT_SUBMIT"],
-    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD", "EMOJI_GUARD", "TOKENSAVE_STOP", "GRAPH_REFRESH"],
+    "PreToolUse": ["ASKUSERQUESTION_GUARD", "GRAPHIFY_SEARCH_GUARD", "GRAPHIFY_READ_GUARD"],
+    "Stop": ["SURROGATE_AUTO_REPAIR", "MALFORMED_TOOLCALL_GUARD", "ASKUSERQUESTION_RETRY_GUARD", "EMOJI_GUARD", "GRAPH_REFRESH"],
     "SessionStart": ["SURROGATE_AUTO_REPAIR_ON_START", "GRAPH_OFFER"]
   },
   "requiredPlugins": [

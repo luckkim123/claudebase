@@ -1,7 +1,7 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "GATEGUARD_EXEMPT_GLOBS": ".omp/**,.omx/**,.oms/**,.omd/**,.omha/**,.sp/**,.graphify/**,.tokensave/**,.code-review-graph/**,node_modules/**,.git/**",
+    "GATEGUARD_EXEMPT_GLOBS": ".omp/**,.omx/**,.oms/**,.omd/**,.omha/**,.sp/**,.graphify/**,.code-review-graph/**,node_modules/**,.git/**",
     "GRAPHIFY_OUT": ".graphify",
     "OMD_ROUTE_GATE": "on",
     "OMP_ROUTE_GATE": "on",
@@ -9,9 +9,7 @@
   },
   "permissions": {
     "defaultMode": "auto",
-    "allow": [
-      "mcp__tokensave__*"
-    ]
+    "allow": []
   },
   "hooks": {
     "PreToolUse": [
@@ -97,16 +95,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "Agent|Grep|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "# TOKENSAVE_PRE_TOOL_USE\nbash ~/claudebase/runtime/hooks/tokensave-guard.sh pre-tool-use",
-            "timeout": 5
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -115,11 +103,6 @@
           {
             "type": "command",
             "command": "# SESSION_TITLE_3WORDS\npython3 ~/claudebase/runtime/hooks/session-title-3words.py 2>/dev/null || true",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "# TOKENSAVE_PROMPT_SUBMIT\nbash ~/claudebase/runtime/hooks/tokensave-guard.sh prompt-submit",
             "timeout": 5
           },
           {
@@ -167,12 +150,6 @@
             "command": "# EMOJI_GUARD\npython3 ~/claudebase/runtime/hooks/emoji_guard.py 2>/dev/null || true",
             "timeout": 10,
             "statusMessage": "Checking response text for emoji"
-          },
-          {
-            "type": "command",
-            "command": "# TOKENSAVE_STOP\nbash ~/claudebase/runtime/hooks/tokensave-guard.sh stop",
-            "timeout": 10,
-            "statusMessage": "Recording tokensave savings for the turn"
           },
           {
             "type": "command",

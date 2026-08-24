@@ -82,20 +82,19 @@ That symlinks `~/.claude/CLAUDE.md`, your skills and hooks into the repo, and **
 
 ### Code graphs (installed by the same run)
 
-Three of them, because they answer different questions. `code-review-graph`
+Two of them, because they answer different questions. `code-review-graph`
 serves callers/importers/blast-radius from an incremental SQLite index;
 `graphify` builds a whole-corpus knowledge graph and exports artifacts a human
-opens; `tokensave` indexes symbols **and markdown headings** — the only one of
-the three that reads prose without an LLM pass, which is what makes it the one
-worth having in a notes repo. Full routing rules, and the failure modes that
-make an empty graph look like a healthy one, are in
+opens. A third, `tokensave`, was dropped on 2026-08-25 — nothing routed to it
+(6 MCP calls against 10,813 tool calls over 22 days) while it cost a resident
+server per session and ~80 deferred tool names in every prompt. Full routing
+rules, and the failure modes that make an empty graph look like a healthy one,
+are in
 [`templates/project-code-review-graph.md`](templates/project-code-review-graph.md).
 
 `installer/install.sh` installs the CLIs, renders graphify's `/graphify` skill
 for this machine's `GRAPHIFY_OUT`, and registers the MCP servers. Prerequisites
-are warned about rather than enforced: **`uv`** for the first two, and **`brew`**
-(macOS) or **`cargo`** (Linux) for tokensave — the cargo path compiles 34
-tree-sitter grammars, so give it several minutes.
+are warned about rather than enforced: **`uv`** for both.
 
 It does **not** build a graph anywhere. That stays per-repo, and two hooks make
 it self-managing:

@@ -616,7 +616,8 @@ lists `add`, `add-json`, `get`, `list`, `login`, `logout`, `remove`,
 someone wired into a config file, so whatever installed it decides how it
 upgrades. Nothing enumerates them for you, which is how a server sits nine minor
 versions behind for months without a single line of output saying so (tokensave
-was on v7.0.2 against v7.9.0 when this step was written).
+was on v7.0.2 against v7.9.0 when this step was written; it was removed from this
+repo on 2026-08-25 — see 4m — but the lesson it taught is why this step exists).
 
 So the step is: enumerate, classify by launch command, apply the matching check.
 
@@ -649,11 +650,11 @@ uv tool upgrade <pkg>     # uv-managed
 ```
 
 **A version bump is not the end of it — re-run the server's own installer.**
-Verified on tokensave 7.0.2 → 7.9.0 (2026-08-10): the upgrade succeeded and the
+Verified on tokensave 7.0.2 → 7.9.0 (2026-08-10, before its removal): the upgrade succeeded and the
 binary reported 7.9.0, but every subsequent tool call printed `81 new tokensave
 tool(s) not yet permitted`. New tools ship with a new version and land outside
 the permission list written at install time. The fix is the tool's own
-reconfigure step (`tokensave reinstall`); a session restart does not do it.
+reconfigure step (there, `tokensave reinstall`); a session restart does not do it.
 
 Two things to know before running one of those reconfigure steps:
 
@@ -844,12 +845,11 @@ Every other step `cd`s into the repo being synced; this one must not.
 ```bash
 PROJ="${CLAUDE_PROJECT_DIR:-$PWD}"          # where the user invoked the sync
 gout="${GRAPHIFY_OUT:-graphify-out}"
-crg=no; gfy=no; tks=no; gjson=""
+crg=no; gfy=no; gjson=""
 [ -f "$PROJ/.code-review-graph/graph.db" ] && crg=yes
 for d in "$gout" .graphify graphify-out; do
   [ -f "$PROJ/$d/graph.json" ] && { gjson="$PROJ/$d/graph.json"; gfy=yes; break; }
 done
-[ -d "$PROJ/.tokensave" ] && tks=yes
 md=$(git -C "$PROJ" ls-files 2>/dev/null | grep -ci '\.md$')
 code=$(git -C "$PROJ" ls-files 2>/dev/null \
   | grep -icE '\.(py|js|jsx|ts|tsx|go|rs|java|kt|c|h|cc|cpp|hpp|rb|php|swift|sh|bash|cs|scala|lua)$')
@@ -868,7 +868,7 @@ g = json.load(open(sys.argv[1]))
 print(sum(1 for x in g.get('nodes', []) if (x.get('source_file') or '').endswith('.md')))
 " "$gjson" 2>/dev/null || echo 0)
 
-echo "(4l) $PROJ — CRG=$crg graphify=$gfy (md nodes: $gfy_md) tokensave=$tks | tracked: ${code} code, ${md} md"
+echo "(4l) $PROJ — CRG=$crg graphify=$gfy (md nodes: $gfy_md) | tracked: ${code} code, ${md} md"
 ```
 
 Report that line in the Outputs table **every** run — state costs nothing, and a
@@ -890,7 +890,7 @@ Marker absent → ask with `AskUserQuestion`, as **two separate decisions**. The
 differ by three orders of magnitude in cost, and bundling them makes a user
 decline a five-second build to avoid a five-hour one:
 
-- **`crg=no` (or `tks=no`) with `code` ≥ 20** → the free tree-sitter builds.
+- **`crg=no` with `code` ≥ 20** → the free tree-sitter builds.
   Offline, seconds, one command: `graph-init`. Nothing to weigh; just offer it.
 - **`gfy_md` = 0 with a substantial `md` count (≥50)** → graphify's prose
   semantic pass, the one nothing else ever names. Note the trigger is the
@@ -916,6 +916,81 @@ Write the marker once the question has been put to the user:
 ```bash
 mkdir -p "$(dirname "$marker")" && date -u +%Y-%m-%dT%H:%M:%SZ >"$marker"
 ```
+
+**4m. tokensave 잔재? (detect-then-ask, once per machine)**
+
+tokensave was removed from this repo on **2026-08-25** — nothing routed to it. It
+was wired as a user-scope MCP server, three hooks, and a per-repo SQLite index, so
+a machine that installed it before that date still carries all of it: `install.sh`
+stops *installing* it but cannot uninstall what is already there. This step finds
+the leftovers and asks once.
+
+Why it earns a step of its own rather than a line in 4j: 4j classifies servers it
+finds in the config and asks about *upgrading* them. A server the repo no longer
+ships is not an upgrade question, and 4j would keep proposing one forever.
+
+```bash
+tk_bin="$(command -v tokensave 2>/dev/null || true)"
+[ -n "$tk_bin" ] || { [ -x "$HOME/.local/bin/tokensave" ] && tk_bin="$HOME/.local/bin/tokensave"; }
+tk_mcp=$(python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude.json")
+try: d = json.load(open(p))
+except Exception: raise SystemExit(print("unreadable"))
+hits = ["user"] if "tokensave" in (d.get("mcpServers") or {}) else []
+hits += [k for k, v in (d.get("projects") or {}).items()
+         if "tokensave" in (v.get("mcpServers") or {})]
+print(",".join(hits) or "none")
+PY
+)
+tk_rules=no; [ -f "$HOME/.claude/rules/tokensave.md" ] && tk_rules=yes
+tk_local=no; grep -q tokensave "$HOME/.claude/settings.local.json" 2>/dev/null && tk_local=yes
+tk_hooks=$(grep -c tokensave "$HOME/.claude/settings.json" 2>/dev/null || echo 0)
+tk_idx=$(find "$HOME" -maxdepth 4 -name .tokensave -type d 2>/dev/null | grep -v '/\.Trash/' | tr '\n' ' ')
+tk_proc=$(ps -eo comm | grep -cx tokensave || true)
+
+echo "(4m) binary=${tk_bin:-none} mcp=$tk_mcp rules=$tk_rules settings.local=$tk_local rendered-hits=$tk_hooks proc=$tk_proc"
+echo "(4m) indexes: ${tk_idx:-none}"
+```
+
+Everything `none`/`no`/`0` → report the line and move on; this machine is clean.
+Any hit → **ask with `AskUserQuestion`** (one question: remove the leftovers, or
+keep tokensave as a machine-local tool). Removal is not urgent — an unregistered
+binary costs nothing — so a "keep" answer is legitimate and needs no argument.
+
+On a yes, in this order (measured on macOS 2026-08-25 while doing exactly this):
+
+```bash
+claude mcp remove tokensave --scope user     # → "Removed MCP server tokensave from user config"
+brew uninstall tokensave                     # macOS (175.8 MB); Linux: cargo uninstall tokensave
+brew untap aovestdipaperino/tap              # macOS only, optional — the tap serves nothing else
+trash ~/.tokensave <each path from tk_idx>   # 45 MB across 3 repos on the machine measured
+```
+
+Three traps, all measured:
+
+- **`pkill -f 'tokensave serve'` does not kill them.** Two attempts left all three
+  processes at unchanged `etime`; `-f` also matches the invoking shell's own
+  command line, which is most of why the result is unreadable. What worked was
+  killing by PID off an exact-name match:
+  `ps -eo pid,comm | awk '$2=="tokensave" {print $1}' | xargs kill`. They are
+  children of live sessions and die on their own when those sessions end, so this
+  is optional cleanup, not a prerequisite.
+- **Clean `settings.local.json` and `settings.json` in the SAME pass, before the
+  next render.** On the machine measured, `settings.local.json` carried a full
+  `GATEGUARD_EXEMPT_GLOBS` string plus two security-review strings naming
+  `.tokensave`. Cleaning only that file and re-rendering put all three **back**:
+  `render_settings.plan` computes `diff_overrides(existing, expected)` against the
+  still-dirty rendered file and captures the difference as a fresh per-machine
+  override. Only `hooks` is exempt (`BASELINE_OWNED_KEYS`), which is why the three
+  hook entries went away on the first render and these strings did not. Edit both
+  files, then run install.sh, then re-grep both — measured clean on the third
+  render, 2026-08-25.
+- **`~/.claude/rules/tokensave.md`** is where tokensave's own installer wrote its
+  prompt rules (documented in 4j). Absent on the machine measured — check anyway,
+  and delete it with the rest.
+
+Report the `(4m)` lines in the Outputs table every run, same contract as 4l.
 
 ### 5. Run installer
 
@@ -1082,7 +1157,7 @@ never as a way of discharging the obligation to ask.
 **A yes to an optional tool needs one more install.sh run.** Installing the
 tool is not the same as wiring it in: `uv`, `cargo` and friends are
 *prerequisites* install.sh checks for, and the things that depend on them
-(`graphify`, `tokensave`, the `arxiv` and `tokensave` MCP registrations) are
+(`graphify`, the `arxiv` MCP registration) are
 installed in the same pass that found the prerequisite missing — so they were
 skipped. Install the prerequisite, then run install.sh **again** and confirm
 the WARNING is gone before reporting the item as handled:
@@ -1094,7 +1169,7 @@ cd ~/claudebase && INSTALL_TOOLS=1 installer/install.sh --verbose 2>&1 \
 ```
 
 Measured 2026-08-10: after `uv` and `cargo` went in, the third pass installed
-`graphify` and `tokensave` and registered both MCP servers. Stopping at the
+`graphify` and (then still shipped) `tokensave` and registered both MCP servers. Stopping at the
 second pass would have left the user with the tool on disk, nothing using it,
 and a run reported complete. Note this pass is *expected* to print action
 lines — it is not a step-6 idempotency check, and does not invalidate the one
@@ -1122,9 +1197,9 @@ already done.
 | "Repo 4i is behind — I'll pull it like I pull `~/claudebase`" | No. `~/claudebase` is the only repo this skill owns end-to-end (auto-pull after triage). A `personalRepos` entry is an independently-released repo — behind-only + clean still requires an explicit ask before `--ff-only`, and dirty/ahead/diverged never auto-anything. Detect-then-ask, per repo, same tier as 4e/4f. |
 | "Pulled new omx-core code in 4i — I'll `pip install -e` it to finish the job" | Out of scope. 4i syncs git state only; a partial editable reinstall after a state change is a known failure mode (`feedback_editable_install_namespace`). Surface "needs reinstall" as a follow-up for the user; never run the build yourself. |
 | "config/settings.json has a stray `model`/`effortLevel` key, I'll ask the user whether to commit it or keep it local" | Already decided — see Step 1.5's "Known pattern" callout. `654484a` + `templates/settings.local.example.json` settle this: those keys are per-machine-only, full stop. Move them to `settings.local.json` and revert the tracked file; don't spend an `AskUserQuestion` re-litigating a convention the repo's own history already answered. Check `git log --grep` for precedent before asking about *any* ambiguous tracked-file drift, not just this one. |
-| "They said yes to `uv`/`cargo`, it installed cleanly, that item is done" | Installing the prerequisite is not installing the thing that needed it. install.sh skipped `graphify`/`tokensave`/the MCP registrations in the pass that found the prerequisite missing, so they are still absent — run install.sh once more and confirm the WARNING is gone. Reporting "installed" off the prerequisite alone leaves the tool on disk with nothing wired to it (measured 2026-08-10). |
+| "They said yes to `uv`/`cargo`, it installed cleanly, that item is done" | Installing the prerequisite is not installing the thing that needed it. install.sh skipped `graphify`/the MCP registrations in the pass that found the prerequisite missing, so they are still absent — run install.sh once more and confirm the WARNING is gone. Reporting "installed" off the prerequisite alone leaves the tool on disk with nothing wired to it (measured 2026-08-10). |
 | "I'll note this optional plugin / install.sh WARNING in the Outputs summary instead of asking" | That's disclosure, not consent — the user can't redirect a decision they were never actually asked about, and a row in a nine-row table is easy to skim past. This exact shortcut (4k's optional plugins + a `code-review-graph`/`uv` WARNING both downgraded to summary notes) shipped a run reported "complete" with two live decisions silently defaulted to "skip" (2026-08-03). Run the Step 9.5 pre-completion ask audit before writing the Outputs table — every detect-then-ask item needs an actual question, not a mention. |
-| "This project already has a code graph, so 4l has nothing to report" | Having *a* graph says nothing about having the *right* one. The three tools answer different questions and CRG contributes **zero nodes** for markdown, so a prose repo with a healthy-looking CRG index has no index of its notes at all. `graph-offer.sh` makes exactly this mistake by design — it exits on the first graph it finds — which is why a vault carried CRG from 08-03 to 08-11 while `/graphify` was never once named to its owner. Report all three states every run; ask about the missing ones. |
+| "This project already has a code graph, so 4l has nothing to report" | Having *a* graph says nothing about having the *right* one. The two tools answer different questions and **both** free passes contribute **zero nodes** for markdown, so a prose repo with a healthy-looking CRG index has no index of its notes at all — and since tokensave's removal (2026-08-25) nothing indexes prose for free at all. `graph-offer.sh` makes exactly this mistake by design — it exits on the first graph it finds — which is why a vault carried CRG from 08-03 to 08-11 while `/graphify` was never once named to its owner. Report both states every run; ask about the missing ones. |
 
 ## Outputs the user expects after a run
 
@@ -1141,7 +1216,8 @@ A short summary table:
 | Plugin updates (4g) | `<"N refreshed" / "offered, deferred" / "none stale">` |
 | MCP servers (4j) | per server: `<name>: up to date / X → Y (upgraded) / X → Y (deferred) / always-latest (npx) / remote` — plus `reconfigure run: <tool>` if a version bump needed one |
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
-| Code graphs, this project (4l) | `CRG=<yes/no> graphify=<yes/no> tokensave=<yes/no>` + `<"built" / "offered, declined" / "already asked (marker set)" / "nothing missing">` |
+| Code graphs, this project (4l) | `CRG=<yes/no> graphify=<yes/no>` + `<"built" / "offered, declined" / "already asked (marker set)" / "nothing missing">` |
+| tokensave leftovers (4m) | the two `(4m)` lines + `<"removed" / "offered, declined" / "clean">` |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |

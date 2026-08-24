@@ -25,9 +25,10 @@
 #      subshell and this script returns immediately; the Stop hook's timeout can
 #      never be hit by a slow repo. graphify's own git hook uses the same shape.
 #
-# tokensave is deliberately absent: it re-indexes itself whenever files change,
-# and its CLI has side effects on ~/.claude/settings.json even for read-only
-# looking commands, so nothing here may execute it.
+# tokensave was a third index here until 2026-08-25 and was never refreshed by
+# this hook — it re-indexed itself, and its CLI had side effects on
+# ~/.claude/settings.json even for read-only looking commands. It is now removed
+# from the repo entirely (docs/CHANGELOG.md).
 #
 # Usage: graph-refresh.sh   (no arguments; Stop hook payload on stdin, ignored)
 
@@ -42,8 +43,8 @@ repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 # Linked-worktree correction — the canonical copy of this block; graph-offer.sh
 # and runtime/bin/graph-init.sh carry the same eight lines and point back here.
 #
-# Every index these scripts touch is gitignored (`.code-review-graph/`,
-# `.tokensave/`, usually `.graphify/`), so `git worktree add` never copies one.
+# Every index these scripts touch is gitignored (`.code-review-graph/`, usually
+# `.graphify/`), so `git worktree add` never copies one.
 # In a linked worktree `--show-toplevel` therefore names a checkout that holds
 # no graph, and the real graphs sit in the main checkout going stale. The common
 # dir is shared by every worktree, so its parent is that main checkout.

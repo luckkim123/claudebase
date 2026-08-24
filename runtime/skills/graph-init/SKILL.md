@@ -63,8 +63,8 @@ will make every session ask it questions it cannot answer.
 
 ## Boundaries
 
-- Not for prose corpora. tokensave already indexes markdown headings for free,
-  and graphify's LLM pass is `/graphify`, deliberately invoked.
+- Not for prose corpora. Both free builds are tree-sitter, which emits zero
+  nodes for markdown; graphify's LLM pass is `/graphify`, deliberately invoked.
 - Refuses `$HOME` and `/` outside a git repo, by design. Pass a project directory.
 - Works fine outside git: both builders walk a plain tree, so a container mount
   like `/workspace` is a legitimate target.

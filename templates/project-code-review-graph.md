@@ -1,9 +1,8 @@
 # code graphs: when to trust them, and when not to
 
 Rules for a project carrying a [code-review-graph](https://github.com/tirth8205/code-review-graph)
-index (CRG), a [graphify](https://github.com/Graphify-Labs/graphify) graph, a
-[tokensave](https://github.com/aovestdipaperino/tokensave) index, or any mix.
-They answer structural questions (callers, importers, blast radius) from a
+index (CRG), a [graphify](https://github.com/Graphify-Labs/graphify) graph, or
+both. They answer structural questions (callers, importers, blast radius) from a
 local index instead of reading files, which is why they are worth reaching for
 first. They also fail **silently** in specific conditions, and every rule below
 exists because of one of them.
@@ -11,12 +10,11 @@ exists because of one of them.
 Copy to `<project>/.claude/rules/code-review-graph.md` and point at it from
 `CLAUDE.md`. Delete it if the project has no graph.
 
-## Which of the three answers this question
+## Which of the two answers this question
 
-All three are installed by `claudebase`; none builds a graph until a project asks
-for one. They are complementary, not redundant — CRG is a query runtime, graphify
-is a corpus builder, tokensave is a symbol-and-heading index with code-health
-metrics — so the split is by *question*, not by preference:
+Both are installed by `claudebase`; neither builds a graph until a project asks
+for one. They are complementary, not redundant — CRG is a query runtime and
+graphify is a corpus builder — so the split is by *question*, not by preference:
 
 | You want | Tool | Why the others are wrong |
 |:---|:---|:---|
@@ -25,15 +23,23 @@ metrics — so the split is by *question*, not by preference:
 | "What is connected to what" across a whole repo, communities, hubs | **graphify** (`god-nodes`, `query`) | CRG answers point queries, not neighbourhood shape |
 | An artifact a human opens — HTML, SVG, an Obsidian vault, a wiki | **graphify** (`export`) | CRG has no human-facing output |
 | Sub-second re-query while editing | **CRG** | graphify rebuilds; `graphify watch` helps but is not free |
-| Find the note/section that discusses X, in a repo of prose | **tokensave** (`search`, `read mode=map`) | CRG sees no prose at all; graphify sees it only after a paid LLM pass |
-| The body of a symbol by name, without knowing its file | **tokensave** (`body`, `signature`) | CRG returns locations, not source; graphify's nodes carry no bodies |
-| Code health — dead code, god classes, complexity, coupling, DSM | **tokensave** | neither of the others computes metrics |
-| Per-symbol git history or blame across renames | **tokensave** (`log`, `blame`) | the others are snapshot-only |
+| Find the note/section that discusses X, in a repo of prose | **neither** — `grep`/`Read` | both free passes are tree-sitter, which emits zero nodes for markdown |
+| The body of a symbol by name, without knowing its file | **neither** — CRG to locate, then `Read` | CRG returns locations, not source; graphify's nodes carry no bodies |
+| Code health — dead code, god classes, complexity, coupling, DSM | **neither** | neither computes metrics |
 
-When several exist, ask the cheapest point query first (CRG or `tokensave_search`
-is ~100–200 tokens) and fall back to graphify only when that returns nothing *and*
-you have confirmed the empty answer is real rather than one of the silent failures
-below.
+**A third index, `tokensave`, was removed on 2026-08-25.** It was the one that
+indexed markdown headings and computed code-health metrics for free, so the three
+rows above are genuine losses, not rewordings — in a prose repo the honest answer
+is now `grep` (or graphify's paid pass). It was dropped because nothing routed to
+it: 6 MCP calls against 10,813 tool calls over 22 days on the repo that had the
+strongest reason to use it, while it cost a resident server per session and ~80
+deferred tool names in every prompt. The binding layer (`PreToolUse`) named
+graphify's CLI and never named tokensave — the three-layer table below is exactly
+the diagnosis. Re-adding it means wiring the hook first, not the server.
+
+When both exist, ask the cheapest point query first (CRG is ~100–200 tokens) and
+fall back to graphify only when that returns nothing *and* you have confirmed the
+empty answer is real rather than one of the silent failures below.
 
 ## Giving a project its graphs
 
@@ -86,7 +92,7 @@ of it lands under the project's `.claude/`.
 
 The output directory here is **`.graphify/`**, not graphify's default
 `graphify-out/`: `GRAPHIFY_OUT` is set in `config/settings.json`, which puts the
-index in the same hidden-dot family as `.tokensave/` and `.code-review-graph/`
+index in the same hidden-dot family as `.code-review-graph/`
 rather than leaving a visible build directory at the project root. A repo indexed
 before that switch keeps its `graphify-out/` — rename it to `.graphify/` when the
 build is idle. Both are gitignored.
@@ -215,8 +221,8 @@ What that pass actually produces, and why it is the only way to graph prose:
 tree-sitter has no symbol concept for a note, so the LLM is asked for the
 entities and relations instead, one chunk at a time, emitting
 `{"nodes": [...], "edges": [...], "hyperedges": [...]}` — concept nodes carrying
-a `label` and a `source_file`. That is the difference between an index of
-headings (tokensave, free) and a graph of ideas across notes.
+a `label` and a `source_file`. That is the difference between a plain text
+search over notes and a graph of ideas across them.
 
 Budget it in hours, not dollars. `--max-concurrency` defaults to 4 but is forced
 to **1** for the `claude-cli` and `ollama` backends, so the chunks run serially:
@@ -234,10 +240,6 @@ either nagged or silently stale:
 | **Update** (code) | 0.46 s (CRG), 1.0 s (graphify) | Automatic — `Stop` hook, detached, debounced to once a minute |
 | **Update** (prose) | hours | Deliberate `/graphify`; `graphify check-update` is the cron-safe *detector* |
 | **Create** | seconds (tree-sitter) | Offered once per repo, then the user decides |
-
-tokensave is absent from the update row on purpose: it re-indexes itself when
-files change, and its CLI mutates `~/.claude/settings.json` even on read-only
-looking commands, so no automation may execute that binary.
 
 **A graph the CLI cannot regenerate must opt out of the update row.** `graphify
 update .` re-scans, so it can only keep current a graph whose corpus that scan
@@ -307,98 +309,6 @@ keying, not measured — the repair below was the one actually run).
 mv "${GRAPHIFY_OUT:-graphify-out}"/.graphify_analysis.json /tmp/analysis.stale.json
 graphify export obsidian
 ```
-
-## tokensave: the only one that reads prose without a bill
-
-tokensave runs from `~/.claude.json` (user scope, absolute path — it is not on
-`PATH` under the Bash tool, so `which tokensave` says "not found" on a machine
-where it is installed and working). It writes one SQLite index per repository at
-`<repo>/.tokensave/`, which belongs in `.gitignore`.
-
-It indexes markdown, and that is what separates it from the other two. Measured
-on one Obsidian vault, same 774 tracked `.md` files, three tools:
-
-| Tool | Nodes from the prose | What they are |
-|:---|---:|:---|
-| CRG | 0 | tree-sitter has no symbol concept for prose |
-| graphify `--code-only` | 0 | prose needs the paid semantic pass |
-| **tokensave** | **~10,356** | one node per heading (~9,582) + one per file (774) |
-
-Do not match on the heading nodes' `kind` string: it was `module` on v7.0.2 and
-`struct` on v7.9.0, for the same headings in the same vault. Filter by file
-extension, or by `kind = 'file'` for the file-level node, and treat everything
-else in a `.md` as a heading.
-
-So in a notes repo tokensave is a heading index with full-text search over the
-whole corpus, available offline and free. That is a different product from the
-call graph it builds over real code, and it is the reason to reach for it here.
-
-**One identifier per query — never a phrase.** Same index, same session:
-
-```
-tokensave_search "runaway"        → 2 hits, file:line, 2703 → 194 tokens (93% less)
-tokensave_search "joint runaway"  → []
-```
-
-Multi-word input drops into keyword/FTS mode and matches nothing, returning `[]`
-rather than an error — the same silent failure CRG has, and the most common way
-to conclude "nothing here" from a healthy index. Query one token, then widen.
-
-**What it is not for in a prose repo.** `dead_code`, `god_class`, `complexity`,
-`coupling`, and `dsm` are real tools, but they need code to measure; in a repo of
-774 notes and 56 scripts they report on the corners. Run those against the code
-repositories, not the vault.
-
-**It costs while idle.** The index is rewritten whenever files change, whether or
-not anything queries it. Measured on one vault: the DB was rewritten mid-session
-while the query count for that session was zero.
-
-**Its CLI writes to your settings — do not call it from anything automated.** The
-side effect is not confined to `install`: a plain `tokensave status`, which reads
-as a pure query, printed `Wrote ~/.claude/settings.json` and re-injected its own
-UserPromptSubmit and Stop hooks into the rendered file. Where claudebase already
-wires those hooks through `runtime/hooks/tokensave-guard.sh`, the result is a
-duplicate pair that runs **twice per prompt**, and it survives until the next
-render. Measured 2026-08-10: execution time and file mtime matched to the second.
-
-The blast radius is narrow but the fix is narrower — just don't call it:
-
-| Path | Re-installs? |
-|:---|:---|
-| `tokensave status` (and other plain CLI verbs) | **yes** |
-| `tokensave sync` | **yes** — confirmed separately, below |
-| `tokensave --help` | no |
-| `tokensave hook-pre-tool-use` / `hook-prompt-submit` / `hook-stop` (what the wrapper calls) | no — measured over 6 min and 3 prompts, mtime unchanged |
-| `code-review-graph status`, graphify read commands | no |
-
-`sync` earns its own row because it is the one verb the tool *asks you to run*:
-`tokensave_status` returns `stale_warning: "N commit(s) since last sync. Run
-\`tokensave sync\` to update the index."` — and there is no MCP equivalent, so
-following that instruction is the documented path into the side effect. Measured
-2026-08-10 with a sha256 taken either side: the sync itself succeeded (19 added,
-0 modified, 0 removed in 52 ms) and `~/.claude/settings.json` changed underneath
-it, gaining two hook entries whose command was the literal string `"#"`.
-
-If you must sync, wrap it — copy `~/.claude/settings.json` aside, run the verb,
-compare hashes, restore from the copy when they differ. That is three lines and
-it is the only reason this measurement cost nothing.
-
-So the per-prompt hook path is safe and the wrapper needs no guard; what is not
-safe is a human or an agent reaching for `tokensave <verb>` in a script, an audit
-step, or a diagnostic. Query the MCP tools instead — they do not touch settings.
-`oh-my-project` encodes this as a hard rule with a test that fails if the binary
-is invoked at all (`omp_graph_audit`, v0.8.0).
-
-**The process count is not a leak — do not "clean it up".** A stdio MCP server is
-a child of the `claude` process that launched it, so `ps` shows one per live
-session *and* one per background worker (`claude bg-spare`), and a busy machine
-shows a lot of them. They are not orphans: measured across 984 sessions in 30
-days, the count of `tokensave serve` processes reparented to init (`PPID 1`) was
-**zero**, and the live count fell on its own from 12 to 9 within an hour as
-sessions ended. The control group settles it — on the same machine at the same
-moment: claude-mem 21 processes, code-review-graph 14, tokensave 9. This is what
-stdio MCP looks like, not a defect in any one server. `pkill -f 'tokensave serve'`
-kills the servers of *live* sessions, including the one you are in.
 
 ## The premise everything follows from
 
@@ -554,8 +464,7 @@ nothing else; depth 2 returned 8 files, 5 of them false positives.
   does not contain the language you actually write here, or a file count far below
   `git ls-files | wc -l`. **Check that before adopting a graph-first rule**, or
   `CLAUDE.md` will instruct every session to consult an index that cannot see the
-  repo. This is graphify's case, not CRG's — or tokensave's, which is the one
-  that indexes the headings for free (above).
+  repo. This is graphify's case, not CRG's.
 
   The same vault makes the vendored-code trap concrete for graphify too: a
   `--code-only` build produced 16,954 nodes, of which **16,044 (94%) came from

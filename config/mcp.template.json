@@ -4,12 +4,9 @@
   "globalServers": {
     "arxiv": {
       "command": "uvx",
-      "args": ["arxiv-mcp-server"]
-    },
-    "tokensave": {
-      "$note": "Code/prose index over 34 languages; the only one of the three graphs that indexes markdown for free. Binary install is handled by ensure_tokensave in installer/lib/deps.sh.",
-      "command": "tokensave",
-      "args": ["serve"]
+      "args": [
+        "arxiv-mcp-server"
+      ]
     }
   }
 }

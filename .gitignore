@@ -36,7 +36,6 @@ desktop.ini
 
 # OMC runtime state (reviews, handoffs, sessions, project memory)
 .omc/
-.tokensave
 
 # Code-graph indexes — build artifacts, rebuilt from source on demand.
 # .graphify/ is the GRAPHIFY_OUT value set in config/settings.json; graphify-out/
@@ -44,7 +43,6 @@ desktop.ini
 .graphify/
 graphify-out/
 .code-review-graph/
-.tokensave/
 
 # coder-eval run artifacts: per-machine sandboxes and logs carrying tempdir
 # absolute paths. The durable numbers live in eval/README.md.

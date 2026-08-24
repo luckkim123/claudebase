@@ -105,17 +105,16 @@ maybe_enable_claude_mouse
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
-# Idempotent install of the three code-graph CLIs → deps.sh.
+# Idempotent install of the two code-graph CLIs → deps.sh.
 # code-review-graph (github.com/tirth8205/code-review-graph) answers structural
 # queries over a SQLite index via MCP; graphify (github.com/Graphify-Labs/graphify,
-# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts;
-# tokensave (github.com/aovestdipaperino/tokensave) indexes symbols AND markdown
-# headings, the only one of the three that reads prose without an LLM pass.
+# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts.
 # Complementary, not redundant — routing rules in templates/project-code-review-graph.md.
 # None of them builds a graph here: that is a per-repo decision.
+# tokensave was the third until 2026-08-25; removed for zero routing (6 MCP calls
+# in 10,813 over 22 days) — see docs/CHANGELOG.md.
 ensure_code_review_graph
 ensure_graphify
-ensure_tokensave
 
 # graphify ships its own /graphify skill — the chunked-extraction BUILD runbook,
 # not documentation. Linked from the installed package (never vendored) so it

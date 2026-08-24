@@ -2,6 +2,78 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-25 — an index nothing routed to
+
+`tokensave` is gone. Not because it was wrong — it was the only one of the three
+graphs that indexed markdown for free, which is exactly what a prose repo needs —
+but because **nothing ever asked it anything**. Measured across 250 session
+transcripts on the vault that had the strongest reason to use it: **6 MCP calls
+against 10,813 tool calls over 22 days**, 0.055%. `Grep` and `Glob` sat at 0 while
+`Bash` took 6,398 and `Read` 2,211, because auto mode routes searching through
+`grep`/`cat` and tokensave never entered that path.
+
+The diagnosis was already written down here. `templates/project-code-review-graph.md`
+says only one of the three integration layers is binding, and it is the
+`PreToolUse` hook — "the only layer that survives an agent that has decided to
+just grep." tokensave had all three layers and its hook was the wrong shape:
+`tokensave-guard.sh pre-tool-use` returns `{"permission":"allow"}` plus index
+context and **never asks for a call**, while the visible nudge on the same
+`Bash` matcher (`graphify-guard.sh`) names graphify's CLI. The routing table said
+tokensave; the enforcement said graphify; the transcripts followed the
+enforcement. This is the same shape as the 2026-08-23 graphify-MCP removal (0
+calls in 30 days) with the arrow reversed.
+
+Cost while idle, all measured on this machine: one resident `tokensave serve`
+per session (~27 MB RSS, 4 live at the time of the audit), ~80 deferred tool
+names injected into every prompt (~740 tokens of names alone, before the server's
+instruction block), and 45 MB of SQLite index across three repos that was still
+being rewritten on session start with a query count of zero.
+
+### Removed
+
+- **`tokensave` from every wiring layer** — `config/mcp.template.json` (the
+  user-scope MCP registration), `ensure_tokensave` in `installer/lib/deps.sh` and
+  its call in `installer/install.sh`, the three hooks and the
+  `mcp__tokensave__*` permission in `config/settings.json`, their markers in
+  `config/settings.critical.json`, `.tokensave/**` from `GATEGUARD_EXEMPT_GLOBS`,
+  and `runtime/hooks/tokensave-guard.sh` itself.
+- **The three routing rows it owned** in `templates/project-code-review-graph.md`
+  ("find the note that discusses X", "the body of a symbol by name", "code health
+  metrics"). They are recorded as **losses, not rewordings** — both remaining free
+  passes are tree-sitter, which emits zero nodes for markdown, so in a prose repo
+  the honest answer is now `grep` or graphify's paid pass. A project that wants a
+  free prose index has nothing to reach for; say so rather than routing it to a
+  tool that cannot see the corpus.
+
+### Added
+
+- **Drift check 4m in `sync-claudebase`** — detect-then-ask for tokensave
+  leftovers on any machine that installed it before today. `install.sh` stops
+  installing it but cannot uninstall what is already there, so the step probes
+  binary / MCP registration (user *and* project scope) / `~/.claude/rules/tokensave.md`
+  / `settings.local.json` / the rendered `settings.json` / index dirs / live
+  processes, and asks once. Keeping it is a legitimate answer — an unregistered
+  binary costs nothing.
+
+### Notes — three traps the removal itself surfaced
+
+- **Cleaning one settings file re-pollutes it.** `render_settings.plan` captures
+  `diff_overrides(existing, expected)` from the *previous rendered file* into
+  `settings.local.json`, so cleaning only the local file and re-rendering put all
+  three `.tokensave` strings back. Only `hooks` is in `BASELINE_OWNED_KEYS`, which
+  is why the hook entries died on the first render and the `env` glob did not.
+  Edit both files, then render, then re-grep both.
+- **`config/settings.critical.json` blocks the render, by design.** Removing the
+  hooks without removing their markers produced a loud `CRITICAL: MISSING critical
+  keys` and a restore instruction. That guard did its job — the manifest is meant
+  to be edited deliberately, in the same commit.
+- **`pkill -f 'tokensave serve'` does not kill the servers.** Two attempts left
+  all three at unchanged `etime`; `-f` also matches the invoking shell's own
+  command line. `ps -eo pid,comm | awk '$2=="tokensave"'` then `kill` worked.
+
+Re-adding it later is fine — but wire the `PreToolUse` nudge **first**, and the
+server second. That order is the whole lesson.
+
 ## [Unreleased] — 2026-08-24 — a loop that stops too early, and one that never looks back
 
 The loop contract bounded a loop that runs too long and said nothing about one

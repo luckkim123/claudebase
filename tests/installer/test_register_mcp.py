@@ -23,7 +23,7 @@ CONFIG = {
     "$comment": "documentation, not a server",
     "globalServers": {
         "arxiv": {"command": "sh", "args": ["-c", "true"]},
-        "tokensave": {"command": "sh", "args": ["serve"]},
+        "probe": {"command": "sh", "args": ["serve"]},
     },
 }
 
@@ -31,14 +31,14 @@ CONFIG = {
 class TestPlan:
     def test_registers_servers_the_machine_does_not_have(self):
         to_add, skipped, bad = rm.plan(CONFIG, existing=set())
-        assert [name for name, _, _ in to_add] == ["arxiv", "tokensave"]
+        assert [name for name, _, _ in to_add] == ["arxiv", "probe"]
         assert skipped == [] and bad == []
 
     def test_existing_server_is_left_alone(self):
         # Re-adding would mean remove+add, silently discarding a deliberate
         # per-machine edit (a different binary path, an extra -e).
         to_add, skipped, _ = rm.plan(CONFIG, existing={"arxiv"})
-        assert [name for name, _, _ in to_add] == ["tokensave"]
+        assert [name for name, _, _ in to_add] == ["probe"]
         assert skipped == ["arxiv"]
 
     def test_meta_keys_are_not_servers(self):

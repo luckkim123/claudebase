@@ -92,15 +92,15 @@ def test_wired_hooks_keys_on_script_not_label():
     settings = {"hooks": {
         "Stop": [{"hooks": [
             {"command": "# EMOJI\npython3 ~/claudebase/runtime/hooks/emoji_guard.py"},
-            {"command": "bash ~/claudebase/runtime/hooks/tokensave-guard.sh stop"},
+            {"command": "bash ~/claudebase/runtime/hooks/graphify-guard.sh stop"},
         ]}],
         "PreToolUse": [{"hooks": [
-            {"command": "bash ~/claudebase/runtime/hooks/tokensave-guard.sh pre"},
+            {"command": "bash ~/claudebase/runtime/hooks/graphify-guard.sh pre"},
         ]}],
     }}
     wired = m.wired_hooks(settings)
-    assert set(wired) == {"emoji_guard.py", "tokensave-guard.sh"}
-    assert sorted(wired["tokensave-guard.sh"]) == ["PreToolUse", "Stop"]
+    assert set(wired) == {"emoji_guard.py", "graphify-guard.sh"}
+    assert sorted(wired["graphify-guard.sh"]) == ["PreToolUse", "Stop"]
 
 
 # ─── per-session join ───────────────────────────────────────────────────────

@@ -20,7 +20,6 @@
 #   ensure_code_review_graph  — uv tool install of the code-review-graph CLI.
 #   ensure_graphify           — uv tool install of the graphify CLI (pkg: graphifyy).
 #   ensure_graphify_skill     — link graphify's own SKILL.md to user scope.
-#   ensure_tokensave          — brew (macOS) / cargo (Linux) install of tokensave.
 #   ensure_convenience_tools  — opt-in best-effort install of tmux + clipboard.
 
 check_runtime_deps() {
@@ -67,7 +66,7 @@ check_runtime_deps() {
 # for the routing rules and the per-project `.mcp.json` snippet.
 
 # _bin_present BIN — is BIN on PATH, or present in ~/.local/bin?
-# uv tool install (and tokensave's own installer) put shims in ~/.local/bin,
+# uv tool install puts shims in ~/.local/bin,
 # which some shells (this user's .zshrc has the export commented out) never put
 # on PATH — check the known install dir too, same pattern as the
 # sync-claudebase skill's bun check.
@@ -146,51 +145,6 @@ ensure_code_review_graph() {
 _graphify_extras_ready() {
   local py="$HOME/.local/share/uv/tools/graphifyy/bin/python"
   [[ -x "$py" ]] && "$py" -c 'import mcp, docx' >/dev/null 2>&1
-}
-
-# ensure_tokensave — the tokensave CLI, github.com/aovestdipaperino/tokensave
-# (MIT). The third graph, and the only one that indexes markdown without an LLM
-# pass, which is why it earns a place next to the two uv tools.
-#
-# Not a uv tool: it is a Rust binary, so macOS gets the tap (a ~155 MB download,
-# but seconds) and Linux falls back to `cargo install`, which COMPILES 34
-# tree-sitter grammars and takes many minutes — hence the explicit log line
-# rather than a silent stall. No cargo, no install: a prebuilt binary from the
-# releases page is the manual path, and the warning names it.
-#
-# MCP registration is NOT done here — installer/scripts/register_mcp.py owns it,
-# because ~/.claude/mcp.json is not a file Claude Code reads.
-ensure_tokensave() {
-  if _bin_present tokensave; then
-    debug "tokensave present (skip)"
-    return 0
-  fi
-  case "$PLATFORM" in
-    macos)
-      if ! command -v brew >/dev/null 2>&1; then
-        printf '[install] WARNING: "tokensave" not found and brew is missing\n'
-        printf '[install]   install: https://github.com/aovestdipaperino/tokensave/releases/latest\n'
-        return 0
-      fi
-      log "installing tokensave via brew (tap: aovestdipaperino/tap)"
-      run brew install aovestdipaperino/tap/tokensave \
-        || printf '[install] WARNING: brew install tokensave failed\n'
-      ;;
-    linux)
-      if ! command -v cargo >/dev/null 2>&1; then
-        printf '[install] WARNING: "tokensave" not found and cargo is missing\n'
-        printf '[install]   install: https://github.com/aovestdipaperino/tokensave/releases/latest\n'
-        return 0
-      fi
-      log "installing tokensave via cargo (compiles from source — expect several minutes)"
-      run cargo install tokensave \
-        || printf '[install] WARNING: cargo install tokensave failed\n'
-      ;;
-  esac
-  [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
-  _bin_present tokensave \
-    && log "tokensave installed" \
-    || printf '[install] WARNING: tokensave install ran but binary still missing\n'
 }
 
 # _graphify_pkg_dir — path of the installed graphify package, or non-zero.
@@ -355,11 +309,10 @@ graph_cli_intro_note() {
   [[ -e "$marker" ]] && return 0
   [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
   # Nothing to introduce where every install above warned-and-skipped.
-  _bin_present code-review-graph || _bin_present graphify || _bin_present tokensave || return 0
+  _bin_present code-review-graph || _bin_present graphify || return 0
 
-  log "hint: this machine carries three code-graph CLIs (shown once)"
+  log "hint: this machine carries two code-graph CLIs (shown once)"
   log "  code-review-graph  callers, importers, blast radius — per-project SQLite index"
-  log "  tokensave          symbol + markdown-heading index — the only one that reads prose free"
   log "  graphify           whole-corpus graph; its prose pass is LLM-priced (hours, not seconds)"
   log "  per project: 'graph-init' builds the two free ones; '/graphify' runs the paid prose pass"
   log "  which to reach for, and how each fails silently: templates/project-code-review-graph.md"

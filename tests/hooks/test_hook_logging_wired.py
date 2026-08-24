@@ -37,7 +37,6 @@ WIRED_SH = [
     "graphify-debt.sh",
     "graphify-guard.sh",
     "hud-ensure.sh",
-    "tokensave-guard.sh",
 ]
 
 
