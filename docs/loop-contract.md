@@ -179,6 +179,23 @@ never opens because `exp-design` is not itself a loop. The linter is not taught 
 follow delegation: the hand-off is prose ("Delegate to `exp-design`"), and a
 regex over skill names would trade this blind spot for false positives.
 
+**Table [B]'s unguarded list is a fact, not a verdict.** It names loop-carrying
+plugins with no blocking Stop hook, and reading that as a defect list is wrong —
+audited 2026-08-24, both entries had a stated reason and neither needed a hook:
+
+| Plugin | Why there is no blocking Stop hook |
+|:---|:---|
+| `oh-my-docs` | **D6**, a plugin-wide decision recorded in three release plans: *"모든 신규 훅은 stdlib-only·fail-open·advisory — `decision: block` 절대 금지."* All six of its hooks honour it. The same transition **is** instrumented, advisorily: `docs_verify_emit` arms a `.verify-pending` sentinel on every build, `docs_stop_guard` surfaces the unresolved ones at Stop, and its docstring states the reason — *"deferring verify is legitimate."* |
+| `oh-my-project` | `omp-garden` is **report-only and ships no scheduler** — "omp does not schedule anything… arming it is the human's call." One sweep is one invocation, so there is no in-session iteration for a Stop hook to hold open. A blocking hook here would hold the *human's* turn open to force a sweep nobody asked for. |
+
+The contrast that makes this legible is `oh-my-scholar`, whose `scholar-revise` is
+the structural twin of `docs-revise` ("the paper-edition of ralph") and *does*
+carry a blocking `scholar_stop_guard.py` — scoped to a live `revise-<slug>.json`
+marker with six exemptions and a durable `stop_blocks` cap. Same loop shape, one
+plugin enforces and one declines, and both positions are written down. That is the
+contract working: it asks a loop to be able to point at its properties, not to
+implement them the same way.
+
 **Check 4 has a blind spot in `oh-my-claudecode`.** Ralph's real anti-self-
 approval enforcement is a Stop hook in compiled JS (`dist/`, referenced from
 `hooks/hooks.json`), not prose — a prose grep finds the reviewer delegation but
@@ -195,7 +212,8 @@ The gaps that motivated writing this down:
 | `ultragoal` | Weakest row — no deterministic stop, no numeric cap, no separate verifier |
 | `ultrawork` | No state file, no cap |
 | `ultraqa` | Cap without a named escalation path |
-| `docs-revise`, `scholar-revise` | Round history lives in the conversation; the `.omd`/`.oms` tree holds artifacts, not loop state |
+| `docs-revise` | Round history lives in the conversation; the `.omd` tree holds artifacts, not loop state |
+| ~~`scholar-revise`~~ | **Closed since.** It now writes `.oms/state/revise-<slug>.json` — round, strike counts, `max_rounds`, `ttl_hours` — and `scholar_stop_guard.py` reads that marker to block a premature stop |
 | all of them | No two share a state-file convention — `.omc/state/sessions/<id>/prd.json`, `pending-launch.json` + ledger, an artifact tree |
 
 `oh-my-project 0.12.0`'s `omp-garden` is the first loop written against this

@@ -66,11 +66,40 @@ construction. Teaching the linter to follow delegation was rejected: the hand-of
 is prose ("Delegate to `exp-design`"), so a name regex would trade a blind spot for
 false positives.
 
+### Changed — table [B]'s unguarded list stops reading as a defect list
+
+It named `oh-my-docs` and `oh-my-project` under *"their loop's stop transition is
+prose only"*, and that framing had already misled one plan into scheduling a hook
+for each. Audited: **neither needs one**, and the reasons differ.
+
+`oh-my-docs` forbids `decision: block` plugin-wide — **D6**, recorded in three
+release plans, honoured by all six of its hooks — and instruments the same
+transition advisorily instead: `docs_verify_emit` arms a `.verify-pending`
+sentinel per build, `docs_stop_guard` surfaces the unresolved ones at Stop, and
+says why in its docstring: *"deferring verify is legitimate."*
+
+`omp-garden` is report-only and omp ships no scheduler — *"arming it is the
+human's call"* — so one sweep is one invocation. There is no in-session iteration
+for a Stop hook to hold open; a blocking hook would hold the **human's** turn open
+to force a sweep nobody asked for.
+
+The contrast that makes this legible: `scholar-revise` is the structural twin of
+`docs-revise` and *does* carry a blocking guard, scoped to a live
+`revise-<slug>.json` marker with six exemptions and a durable `stop_blocks` cap.
+Same loop shape, one plugin enforces and one declines, both written down. The
+warning line now says fact-not-verdict, and the contract doc carries the audit.
+
+Also closed a stale row in the standing table: `scholar-revise` no longer keeps
+round history in the conversation — `.oms/state/revise-<slug>.json` holds it.
+
 ### Verification
 
 `416 passed` (`tests/`), exit code 0. Three tests failed first — `KNOWN_GOOD` and
 the shim `BODY` fixtures assert "scores every check" and predated the new
 properties, so both fixtures gained them.
+
+No hook was added for either plugin, which is this audit's actual output: the
+gap the plan expected to fill did not exist.
 
 ## [Unreleased] — 2026-08-23 — a chevron that is not an emoji, and a nudge that will not stop
 

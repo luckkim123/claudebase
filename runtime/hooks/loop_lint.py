@@ -457,8 +457,15 @@ def report(roots, use_source: bool = False) -> str:
             unguarded.append(plugin)
 
     add("")
+    # NOT a defect list — audited 2026-08-24 and both entries had a stated
+    # reason. omd forbids `decision: block` plugin-wide (D6, recorded in three
+    # release plans; all six of its hooks honour it) and instruments the same
+    # transition advisorily with a `.verify-pending` sentinel. omp-garden is
+    # report-only and ships no scheduler, so one sweep IS one turn and there is
+    # no in-session transition for a Stop hook to hold open.
     add("    loop-carrying plugins with no blocking Stop hook visible —")
-    add("    their loop's stop transition is prose only (or compiled out of view):")
+    add("    read as a fact, not a verdict: absent, compiled out of view, or")
+    add("    declined by a recorded decision (check the plugin before filing it):")
     add("      " + (", ".join(unguarded) if unguarded else "(none)"))
     add("")
     return "\n".join(L)
