@@ -160,3 +160,15 @@ Then the handoff compressed six reasoned dispositions into six prohibitions ("`s
 **It is one instance of a general shape.** The same day surfaced three siblings: a project rules file still naming a directory that had been renamed away; a handoff quoting a canonical plan's line count from a revision that had since grown by ~120 lines; a routing pointer describing a layout that no longer existed. In each case the *source* was right and the *pointer to it* was wrong, and in each case the pointer is what the next reader consumed. **Summaries and pointers outlive the thing they summarize** — that is the failure family, and it is why the rule says "in the same edit" rather than "eventually".
 
 **What this does not license.** It is not an instruction to write summaries defensively, to hedge them, or to duplicate the body into them — that produces a second document rotting on its own schedule. The lazy form is the correct one: if a summary cannot be kept current, delete it rather than leave it. A missing pointer sends the reader to the source; a wrong one does not.
+
+---
+
+## assert-nonexistence-without-check
+
+**Rule (see `config/CLAUDE.md`):** Never assert a resource doesn't exist without running the check command that proves it. A "not found" conclusion needs the same evidentiary bar as a positive claim.
+
+**The incident (2026-08-24, `stonefish_ws`, `/sync-claudebase`).** The skill was invoked mid-conversation. The first response answered its Pre-flight step — "`~/claudebase`와 레거시 `~/claude-settings` 둘 다 존재하지 않아 pre-flight에서 즉시 중단됩니다" — with no tool call having run at all: no `ls`, no `find`, no `git`. The repo was sitting at `/root/claudebase` the whole time. On the next turn, a single `find / -maxdepth 4 -iname claudebase` found it immediately; `git remote -v` showed `origin` configured, the working tree was clean, and the sync proceeded normally (7 commits pulled). The user's pushback ("근데 왜 ~/ 위치만 찾고 없다고 지랄한거지") assumed a shallow-but-real check had happened; the actual failure was a full skip — the skill's own Pre-flight code block was narrated as executed and never invoked.
+
+**Why a hallucinated absence is worse than a hallucinated presence.** A wrong positive claim ("file X has function Y") is falsifiable the moment someone looks. A wrong absence claim closes the investigation before it starts — the reader has no reason to go looking for something they were just told isn't there. `sync-claudebase`'s own Pre-flight section says "abort if any fails," which presumes the checks actually ran; jumping straight to the abort branch with no evidence produces a confident, well-formatted, entirely fabricated report.
+
+**What forces the check.** Any turn that concludes "X doesn't exist," "no matches," or "not found" must be immediately preceded, in that same turn, by the tool call whose output is being summarized — not a memory of a similar past check, not an inference from a related fact, not a documented procedure narrated as if it ran. If the claim can't point at a tool result from this turn, it isn't verified yet.
