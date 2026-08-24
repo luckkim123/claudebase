@@ -80,6 +80,19 @@ experience-distillation literature (arXiv:2604.15877, arXiv:2604.08224).
   approaches. Never an activity log. Stale lessons get a `(stale)` banner,
   never deleted. When re-summoning a role, paste its file into the brief.
 
+Facts go to their owning store **at write time** — "distill later" was
+measured at zero follow-through:
+
+| Content | Owning store | What the post holds |
+|:---|:---|:---|
+| Experiment facts, numbers, thresholds | omx wiki / report | sourced copy or pointer + one-line summary |
+| Role lessons | `agents/<role>.md` | (that file IS the board) |
+| Coordination, decisions, status | HUB.md / posts | (native) |
+
+Fallback: a session that cannot reach the owning store (e.g. the omx index
+lives on another machine) writes the **sourced** copy in its post; the Close
+promotion sweeps it in.
+
 ## Worker brief — nine base items plus four
 
 Base brief (per the vault protocol): background · failure modes · task with
@@ -135,6 +148,17 @@ one file = one post, with a search header:
 - Corrections are edited in place with a one-line edit note. Stale posts are
   never deleted — banner them: `(stale) → superseded by: <id>`. Why a post was
   wrong is data for the next worker.
+- Cross-post references cite the **id** (`<category>/<NNN>`); appending the
+  slug for readability is fine (`finding/010-eval-prep-5arm`). The key is what
+  survives renames — paths broke twice in one day here, ids did not.
+- Posts may carry domain facts, even full command blocks — a sourced copy
+  measurably beat a bare pointer (a worker reused a full eval-command post to
+  build a gated auto-launch in 30 minutes while the SSOT index sat on another
+  machine). But an **unsourced copy is forbidden**: every copied fact carries
+  its source (file:symbol or commit sha) and measurement date. The five
+  handoff numbers three workers later refuted were exactly the unsourced ones;
+  sourced claims re-verified cleanly. Cite symbols, not line numbers — line
+  numbers drift silently (4/4 line-cited anchors had shifted on recheck).
 
 ## Manager — a coordinator role, not a standing agent
 
@@ -146,7 +170,13 @@ coordinator-class consumer — start as a role:
 |:---|:---|
 | Launch | post rules, categories, owning session in HUB.md |
 | Phase / milestone boundary | banner stale posts, adjudicate contradictions, refresh board |
-| Close | review promotion (posts → permanent stores), close out sessions/, banner stale agents/ lessons |
+| Close | promote posts → owning stores, sweep agents/, close out sessions/ |
+
+Close-out promotion, concretely: sweep posts for domain facts not yet in the
+omx wiki (`omx wiki add`; mark the post `(promoted → wiki <slug>)`) and sweep
+agents/ (banner stale lessons) so role lessons outlive the campaign. A
+coordinator that cannot run omx leaves the promotion list as a posts/handoff/
+entry for a session that can.
 
 Split the manager out only when board upkeep measurably crowds the
 coordinator's context — and even then the manager and the verifier stay
