@@ -1,6 +1,6 @@
 ---
 name: team-project
-description: Launch and run a multi-agent collaboration campaign around a tracked community board (<project>/.community/campaigns/<campaign>/) — scale judgment and structure design are automatic, only the launch is human-gated. Wraps any executor (OMC subagent fan-out, cross-session SendMessage, orca cross-machine) with the campaign protocol — worker briefs, post convention, manager duties, termination rules. Use for work too big for one session: 3+ independent axes, 2+ repos, or a document/finding fan-out with cross-review.
+description: Launch and run a multi-agent collaboration campaign around a tracked community board (<project>/.community/ — flat by default; a campaigns/ layer only when the work has a hard end boundary) — scale judgment and structure design are automatic, only the launch is human-gated. Wraps any executor (OMC subagent fan-out, cross-session SendMessage, orca cross-machine) with the campaign protocol — worker briefs, post convention, manager duties, termination rules. Use for work too big for one session: 3+ independent axes, 2+ repos, or a document/finding fan-out with cross-review.
 Triggers: 팀 프로젝트, 협업 캠페인, 커뮤니티 열어, 멀티에이전트로, 워커 붙여서, team project, launch a campaign, multi-agent campaign, community board, spin up workers
 ---
 
@@ -29,25 +29,64 @@ raw measurements live in the doc named under Provenance.
 The launch proposal is **four lines**: workers / each one's scope / expected
 cost / termination condition. A proposal missing termination is not a proposal.
 
-## Community scaffold
+## Community scaffold — flat by default
 
 Create at the root of the **project that owns the work**, beside its other
 harness state (`.omx/`, `.omc/`) — in a single-project repo that is the repo
 root; in a repo carrying several project folders (e.g. a vault's
-`0_Project/<name>/`), it is that project's folder, not the repo root
-(user decision 2026-08-24: "그 프로젝트 것은 그 프로젝트 폴더 안에" — a
+`0_Project/<name>/` or `1_Area/<name>/`), it is that project's folder, not the
+repo root (user decision 2026-08-24: "그 프로젝트 것은 그 프로젝트 폴더 안에" — a
 shared root layer returns only when two projects measurably need to share
 `agents/`). All tracked (verify with `git check-ignore -v` — any output means
 the path dies with the session; fix `.gitignore` first):
 
 ```
-<project>/.community/                beside the project's .omx/ and .omc/
-  campaigns/<YYYY-slug>/             one campaign = one folder
-    HUB.md                           canonical state (see below)
-    posts/<category>/<NNN-slug>.md   one file = one post; categories are campaign-defined
-    sessions/<worker-name>.md        episodic — 3 lines per worker: did / artifact paths / not-verified
-  agents/<role>.md                   semantic — cross-campaign lessons per role (see Agent memory)
+<project>/.community/                  beside the project's .omx/ and .omc/
+  HUB.md                               canonical state (see below)
+  posts/<category>/<NNN-slug>.md       one file = one post; NNN monotonic across the WHOLE posts tree
+  sessions/<YYYY-MM-DD>-<worker>.md    episodic — 3 lines: did / artifact paths / not-verified
+  agents/<role>.md                     semantic — lessons per role, outlives any campaign
 ```
+
+**There is no `campaigns/` layer by default** (user decision 2026-08-25). The
+project folder already separates the work; subdividing again inside it buys
+nothing and costs id collisions — two campaigns each numbering their own
+`finding/001` cannot be merged without renumbering, and renumbering breaks
+every `id: <category>/<NNN>` cross-reference. Measured on one project: 4
+colliding ids across 2 campaigns, plus 5 stale path citations still unresolved.
+
+Add `campaigns/<YYYY-slug>/` **only when the work has a hard end boundary** (a
+submission deadline, a release) and you will actually close the folder. Closing
+is the layer's one real function; a campaign that never closes is depth without
+it. **Never create `campaigns/main/`** — that is the depth with none of the
+function. The rule of thumb is the hosting layer: a Project (has an end) may
+take a campaign, an Area (no end) never does.
+
+Two things the flat form needs, both from the collision above:
+
+- **Date-prefix session files.** Flat `sessions/` accumulates forever and worker
+  names repeat (`coordinator`, `lit-critic`), so `sessions/coordinator.md`
+  collides across months. `sessions/2026-08-25-coordinator.md` does not.
+- **Number posts across the whole tree, not per category** — `finding/007` then
+  `decision/008`. Categories do get revised, and a globally-numbered post keeps
+  a unique id when it moves between them.
+
+### Post categories — five defaults, add but never rename
+
+The axis is **what a reader wants to do with the post**, never its topic. Topic
+axes are reinvented every campaign, which is how everything ends up in one
+`finding/` bucket:
+
+| Category | Holds | The reader is |
+|:---|:---|:---|
+| `finding/` | investigation and measurement results — facts | looking up what is known |
+| `decision/` | a decision and the grounds for it | avoiding re-litigating it |
+| `review/` | critique of someone else's artifact | acting on the critique |
+| `handoff/` | what the next session or worker must pick up | resuming |
+| `question/` | an open question still waiting on an answer | answering it |
+
+A campaign may **add** a category. It may not rename or delete these five —
+a rename breaks every cross-reference citing the id.
 
 `HUB.md` must carry: goal · the user's original prompt verbatim · rules ·
 constraints · **user-decision table** (append-only, decisions close derived
@@ -56,11 +95,11 @@ facts) · work board (todo/doing/done) · deadline · **owning session name**
 the user). Coordination scratch shorter-lived than the campaign may stay in
 `.omc/`; nothing else may.
 
-Artifacts may live **outside** the campaign folder (an existing notes tree, a
+Artifacts may live **outside** `.community/` (an existing notes tree, a
 separate workspace repo) — **HUB.md is the SSOT for artifact paths**. A worker
-that cannot find something inside the campaign folder reads HUB's artifact map
-before re-investigating; re-deriving what another worker already produced is
-the failure this line prevents.
+that cannot find something inside the board reads HUB's artifact map before
+re-investigating; re-deriving what another worker already produced is the
+failure this line prevents.
 
 Commits: coordinator only. Workers never run git against the campaign repo.
 
@@ -71,11 +110,12 @@ this rig (a 76KB read-all was a no-op; a cross-session cache claim showed 0
 observations over a 514-file read-through) and consistent with the
 experience-distillation literature (arXiv:2604.15877, arXiv:2604.08224).
 
-- `campaigns/<c>/sessions/<worker>.md` — **episodic**, dies with the campaign:
-  did / artifact paths / not-verified. Brief material for re-summoning within
-  the campaign (a completed agent also resumes from its transcript via
-  SendMessage, so keeping full transcripts here is redundant).
-- `agents/<role>.md` — **semantic**, survives campaigns, append-only: what the
+- `sessions/<YYYY-MM-DD>-<worker>.md` — **episodic**, scoped to one run of the
+  work: did / artifact paths / not-verified. Brief material for re-summoning
+  that worker (a completed agent also resumes from its transcript via
+  SendMessage, so keeping full transcripts here is redundant). Flat and
+  date-prefixed, so an old entry is dead weight rather than a name collision.
+- `agents/<role>.md` — **semantic**, survives everything, append-only: what the
   NEXT holder of this role must know — traps, settled facts, failed
   approaches. Never an activity log. Stale lessons get a `(stale)` banner,
   never deleted. When re-summoning a role, paste its file into the brief.
@@ -168,7 +208,7 @@ coordinator-class consumer — start as a role:
 
 | When | Manager (= coordinator) does |
 |:---|:---|
-| Launch | post rules, categories, owning session in HUB.md |
+| Launch | post rules, any categories added beyond the five, owning session in HUB.md |
 | Phase / milestone boundary | banner stale posts, adjudicate contradictions, refresh board |
 | Close | promote posts → owning stores, sweep agents/, close out sessions/ |
 
