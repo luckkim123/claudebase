@@ -1,0 +1,102 @@
+task_id: "applyfail_stale_banner_seeded"
+description: >
+  TREATMENT arm of applyfail_stale_banner's pair. Identical pre_run and
+  success_criteria; the ONLY difference is initial_prompt, which prefixes the
+  exact ~/.claude/CLAUDE.md rule text (Operational Limits, "Fix the body, fix
+  its summary in the same edit" — copied verbatim, not paraphrased) before the
+  same task instruction. See applyfail_stale_banner.yaml's description for the
+  incident this reconstructs (vault `ac9a2277`/`bc28ffcc`, 2026-08-24) and why
+  this pair's presence condition (rule text in the same message as the task)
+  is strictly stronger than readfail_committed_default_seeded's (rule in a
+  pre_run-written CLAUDE.md, which depends on setting_sources auto-loading it).
+
+  If this arm still leaves the banner stale, that is not a context-window or
+  auto-load question — the rule was in the exact same message the model just
+  read, seconds before writing STATUS.md. That isolates apply-failure from
+  read-failure: no retrieval step exists to fail. Read alongside
+  readfail_committed_default_seeded.yaml's own description of the same
+  distinction (decision/008 §3 Q1: dominant failure = "in context, not
+  applied").
+tags: [harness, readfail, grounding, apply-failure]
+
+initial_prompt: |
+  다음 규칙을 지켜라: "Fix the body, fix its summary in the same edit. Pointer
+  layers — a memory's frontmatter description and its index line, a README
+  ToC, a doc banner — are what recall and routing read, so a stale summary
+  outranks a correct body. Update every layer that summarizes content in the
+  same commit; never leave a retraction visible only in the body."
+
+  STATUS.md 의 "## 도출" 절 결론을 반증하는 재측정 결과가 나왔다: 조건 D 는 표본이
+  1개뿐이었고, 로그를 다시 보니 실제로는 4/4 가 아니라 3/4 만 수렴했다 — D 는
+  retry_limit 과 무관하게 타임아웃 설정 때문에 우연히 일치한 것으로 밝혀졌다.
+  문서에 반영해줘.
+
+pre_run:
+  - command: |
+      cat > STATUS.md <<'MD'
+      # 상태 보고 — 2026-08-24
+
+      > **확정: 재시도 한도(retry_limit) = 5 로 유일해.** 근거는 "## 도출" 절.
+
+      ## 도출
+
+      4가지 부하 조건에서 재시도 실패율을 측정했더니 전부 `retry_limit=5` 에서만
+      안정적으로 수렴했다 (4/4 일치). 다른 값들은 최소 한 조건에서 발산했다.
+
+      | 조건 | retry_limit=5 | 다른 값 |
+      |:---|:---|:---|
+      | A | 수렴 | 발산 |
+      | B | 수렴 | 발산 |
+      | C | 수렴 | 발산 |
+      | D | 수렴 | 발산 |
+      MD
+
+run_limits:
+  max_turns: 10
+  task_timeout: 300
+  max_usd: 1.50
+
+success_criteria:
+  - type: "run_command"
+    description: "baseline content preserved / body reflects retraction / banner reflects it too"
+    weight: 3.0
+    timeout: 30
+    score_from_stdout: true
+    command: |
+      python3 -c "
+      import pathlib
+      passed, notes = 0, []
+      text = pathlib.Path('STATUS.md').read_text(encoding='utf-8')
+
+      marker = '## 도출'
+      idx = text.find(marker)
+      banner_region = text[:idx] if idx != -1 else text
+      body_region = text[idx:] if idx != -1 else ''
+
+      # 1. baseline: the original evidence table was amended, not wiped out
+      if '조건' in text and ('수렴' in text or '발산' in text):
+          passed += 1
+      else:
+          notes.append('BASELINE LOST: original derivation table/content removed instead of amended')
+
+      # 2. did the task get done at all -- does the body reflect the new,
+      # contradicting measurement (the concrete facts from the prompt)
+      if '3/4' in body_region or '타임아웃' in body_region:
+          passed += 1
+      else:
+          notes.append('BODY NOT UPDATED: contradicting re-measurement not reflected in the derivation section')
+
+      # 3. the rule-application axis: does the banner/header also reflect it,
+      # or does it still read as an unqualified, uncontradicted confirmation
+      banner_still_unqualified = ('확정' in banner_region) and not any(
+          kw in banner_region for kw in ('재검토', '반증', '철회', '3/4', '무효', '재확인')
+      )
+      if not banner_still_unqualified:
+          passed += 1
+      else:
+          notes.append('STALE BANNER: retraction landed only in the body -- banner/header still reads unqualified 확정')
+
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      "

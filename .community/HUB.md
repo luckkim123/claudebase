@@ -88,7 +88,8 @@ Claude 가 **근거 없이 분석하고, 근거 없이 결론 내고, 그걸 사
 | `mechanism` (W3) | opus | 기제 후보 설계 + 문헌 | `posts/finding/003-*` (**조정자가 대필**) | **done** — 후보 6종, 커버리지 행렬, 추천 B'+D+C' |
 | `lit-calibration` (W3-lit) | sonnet | W3 문헌 반쪽 대체 + 인용 독립 검증 | `posts/finding/005-*`, `posts/finding/007-*` | **done** — 독립 조사 12건 + 인용 14/14 실재 |
 | `instrument` (W4) | sonnet | `eval/tasks/` 신설 2~3건, `coder-eval plan` 통과 | `eval/tasks/grounding_*.yaml`, `posts/handoff/004-*` | **done 23:5x** — task 3개, `plan` 통과(조정자 실행) |
-| `refuter` (W5) | opus | 전원 산출물 적대 반증 (표적 6종) | `posts/review/006-*` | **doing** — 마지막 관문 |
+| `refuter` (W5) | opus | 전원 산출물 적대 반증 (표적 **7**종) | `posts/review/006-*` | **done 2026-08-26** — 표적 7 로 G 계열 무너뜨림 |
+| `instrument-2` (W6) | sonnet | D-3 계측기 — 적용 실패율 matched pair | `eval/tasks/readfail_*.yaml`, `posts/handoff/009-*` | **doing** — 쌍 완성·`plan` 통과, 3번째 팔 판단 중 |
 | 조정자 | — | 종합 → `posts/decision/006-*` + 4줄 구현 제안 | `HUB.md`, `posts/decision/` | doing |
 
 ### 7-bis. 발진 중 라우팅 정정 (2026-08-25 23:35)
@@ -188,6 +189,19 @@ eval 4축 0개 판정은 **유지**(W4 의 신설 task 가 축1·2를 부분적�
 
 **진행 중 관측(캠페인 주제의 1인칭 표본)**: Fact-Forcing Gate 가 이 세션에서 스스로 **"denial #4"** 를 찍었다. 매번 4항목을 채웠고 `finding/002` 가 소스에서 확인한 대로 **그 답변은 한 번도 읽히지 않았다.**
 
+### 7-septies. 표적 7 종결 + D-3 개정 (2026-08-26)
+
+`refuter` 가 마지막 구멍(G 계열 반증)을 닫았고, 조정자가 그것이 남긴 미판정 축에 탐침을 돌렸다. **세 겹으로 정리된다.**
+
+1. **G(고아 확언)는 존재하지 않는다.** `finding/003` §2-3 의 사실 주장 셋이 전부 반증 — 철회 커밋 있음(`bc28ffcc`), 본문 무효 표시 있음(2곳), grep 으로 잡힘. 사례 수 1 → **0**. 해당 절에 stale 배너 부착(원문 보존, 규약).
+2. **그 사례는 E 였고, E 는 Q1 의 한 사례다.** 조정자 탐침(`finding/010`): 저자 세션이 배너 문장을 **직접 썼고**(`15305c56...jsonl:2917`) 커밋(`:3984`)까지 **compact 0건**. 도달 실패가 아니라 적용 실패. Q1 세 표본 중 **도피로가 없는 유일한 것**.
+3. **D-3 은 지위 유지, 이름 정정.** "읽기 실패율" → **"적용 실패율"**. 이 사례에서 읽기 실패는 0 이다. `decision/008` §5-bis 로 반영.
+
+🔴 **부수 발견이 방법론에 걸린다 — `.jsonl` 트랜스크립트는 CLAUDE.md 를 기록하지 않는다.** 세션 6개 · 문자열 8종 전부 0, 반면 auto-memory 는 기록된다(56·38·1). 따라서 **"규칙이 컨텍스트에 있었나"는 CLAUDE.md 계열에 대해 사후 확인도 반증도 불가**하다. 이 캠페인의 사후 포렌식 전반에 걸리는 한계이고, 동시에 **계측기가 우회로가 아니라 유일한 길이라는 직접 근거**다(`handoff/009` 는 `pre_run` 으로 규칙 존재를 설계로 보장한다).
+
+**남은 것은 `instrument-2` 하나.** 그 보고가 오면 캠페인 종료 조건(§9)에 걸린다.
+
+
 ## 8. 산출물 지도 (SSOT)
 
 보드 밖 산출물은 여기에만 적는다. 워커는 재조사 전에 이 표를 먼저 읽는다.
@@ -199,6 +213,9 @@ eval 4축 0개 판정은 **유지**(W4 의 신설 task 가 축1·2를 부분적�
 | eval 계측기 | `~/claudebase/eval/` (README 에 실행법·함정) |
 | 훅 정의 | `~/.claude/settings.json`, `~/ksm_Obsidian/.claude/settings.json`, `~/.claude/plugins/marketplaces/omc/hooks/hooks.json` |
 | deep-interview 원본 | `~/.claude/plugins/cache/omc/oh-my-claudecode/5.0.0/skill-bodies/deep-interview/SKILL.md` |
+| E 사례 정본 (요약층 미동기) | `~/ksm_Obsidian/0_Project/in_progress/albc/notes/2026-08-24-classic-teleop-resume-prompt.md` — 배너 `:13`·제목 `:265` stale, 본문 `:484`·`:516` 무효 표시 |
+| 그 사례의 저자 세션 트랜스크립트 | `~/.claude/projects/-Users-kimseungmin-ksm-Obsidian/15305c56-1ca5-445f-8cfe-f41b5443594b.jsonl` — 배너 `:2917`, 커밋 `:3984` |
+| ⚠️ 트랜스크립트 채널 한계 | `.jsonl` 은 **CLAUDE.md 를 기록하지 않는다**(auto-memory 는 기록). "규칙이 컨텍스트에 있었나"를 사후에 묻지 말 것 — `finding/010` §채널 한계 |
 
 ## 9. 종료 조건
 

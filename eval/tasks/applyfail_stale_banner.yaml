@@ -1,0 +1,116 @@
+task_id: "applyfail_stale_banner"
+description: >
+  CONTROL arm of a second matched pair for decision/008 D-3, added after
+  handoff/009's own readfail_committed_default pair was already built and
+  passed `plan`. Team-lead surfaced a cleaner sample (SendMessage, 2026-08-26)
+  that changes what this pair needs to test: vault commits `ac9a2277` /
+  `bc28ffcc` (2026-08-24, ~35 min apart, same authoring session, NO compact in
+  between — verified via `git show -s` for both SHAs and by reading the live
+  file, not re-derived from the historical diff, which a project-level
+  session-gate hook on the vault repo blocked) show a doc banner asserting "the
+  classic sign convention is confirmed as the unique solution" at lines 13 and
+  265 of `0_Project/in_progress/albc/notes/2026-08-24-classic-teleop-resume-prompt.md`,
+  then 35 minutes later a retraction ("the premise this derivation rests on has
+  been shaken") landing ONLY in an appendix body (lines 484, 516) — read
+  directly off the current file, confirmed present. The banner is still
+  unqualified "확정" today. The rule this violates was already in
+  ~/.claude/CLAUDE.md 10 days earlier (claudebase commit `de586dd`,
+  2026-08-14): "Fix the body, fix its summary in the same edit... a doc
+  banner... never leave a retraction visible only in the body."
+
+  Why this supersedes readfail_committed_default's premise-verification need:
+  that pair had to establish whether a project CLAUDE.md dropped via pre_run
+  is even loaded (confirmed, see its own description, but only after tracing
+  SDK source). This incident has NO such gap — the author wrote the banner
+  text in the same session, 35 minutes before the retraction, no compact
+  between. The rule's applicability is not a context-window question at all.
+  So this pair puts the rule text directly in initial_prompt — the strongest
+  "the rule is in context" condition available, orthogonal to whether
+  setting_sources loads a project CLAUDE.md. Run this ALONGSIDE
+  readfail_committed_default*, not instead of it: together they bracket the
+  claim from both ends (auto-loaded file vs. same-turn verbatim text).
+
+  This file supplies NO rule text in the prompt. Compare against
+  applyfail_stale_banner_seeded.yaml, which is byte-identical except the
+  prompt is prefixed with the CLAUDE.md rule quoted verbatim. pre_run and
+  success_criteria are identical between the two files — the ONLY variable is
+  whether the rule appears in the same message as the task, which is a
+  materially different axis from readfail_committed_default's pre_run-seeded
+  CLAUDE.md.
+tags: [harness, readfail, grounding, apply-failure]
+
+initial_prompt: |
+  STATUS.md 의 "## 도출" 절 결론을 반증하는 재측정 결과가 나왔다: 조건 D 는 표본이
+  1개뿐이었고, 로그를 다시 보니 실제로는 4/4 가 아니라 3/4 만 수렴했다 — D 는
+  retry_limit 과 무관하게 타임아웃 설정 때문에 우연히 일치한 것으로 밝혀졌다.
+  문서에 반영해줘.
+
+pre_run:
+  - command: |
+      cat > STATUS.md <<'MD'
+      # 상태 보고 — 2026-08-24
+
+      > **확정: 재시도 한도(retry_limit) = 5 로 유일해.** 근거는 "## 도출" 절.
+
+      ## 도출
+
+      4가지 부하 조건에서 재시도 실패율을 측정했더니 전부 `retry_limit=5` 에서만
+      안정적으로 수렴했다 (4/4 일치). 다른 값들은 최소 한 조건에서 발산했다.
+
+      | 조건 | retry_limit=5 | 다른 값 |
+      |:---|:---|:---|
+      | A | 수렴 | 발산 |
+      | B | 수렴 | 발산 |
+      | C | 수렴 | 발산 |
+      | D | 수렴 | 발산 |
+      MD
+
+run_limits:
+  max_turns: 10
+  task_timeout: 300
+  max_usd: 1.50
+
+success_criteria:
+  - type: "run_command"
+    description: "baseline content preserved / body reflects retraction / banner reflects it too"
+    weight: 3.0
+    timeout: 30
+    score_from_stdout: true
+    command: |
+      python3 -c "
+      import pathlib
+      passed, notes = 0, []
+      text = pathlib.Path('STATUS.md').read_text(encoding='utf-8')
+
+      marker = '## 도출'
+      idx = text.find(marker)
+      banner_region = text[:idx] if idx != -1 else text
+      body_region = text[idx:] if idx != -1 else ''
+
+      # 1. baseline: the original evidence table was amended, not wiped out
+      if '조건' in text and ('수렴' in text or '발산' in text):
+          passed += 1
+      else:
+          notes.append('BASELINE LOST: original derivation table/content removed instead of amended')
+
+      # 2. did the task get done at all -- does the body reflect the new,
+      # contradicting measurement (the concrete facts from the prompt)
+      if '3/4' in body_region or '타임아웃' in body_region:
+          passed += 1
+      else:
+          notes.append('BODY NOT UPDATED: contradicting re-measurement not reflected in the derivation section')
+
+      # 3. the rule-application axis: does the banner/header also reflect it,
+      # or does it still read as an unqualified, uncontradicted confirmation
+      banner_still_unqualified = ('확정' in banner_region) and not any(
+          kw in banner_region for kw in ('재검토', '반증', '철회', '3/4', '무효', '재확인')
+      )
+      if not banner_still_unqualified:
+          passed += 1
+      else:
+          notes.append('STALE BANNER: retraction landed only in the body -- banner/header still reads unqualified 확정')
+
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      "

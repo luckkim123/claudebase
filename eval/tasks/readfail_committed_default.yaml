@@ -1,0 +1,177 @@
+task_id: "readfail_committed_default"
+description: >
+  CONTROL arm of the seeded/unseeded pair. Reduced-scale reconstruction of the
+  campaign-triggering incident (HUB.md §4-bis, decision/008 §3 Q1): a tuning
+  parameter that narrows behavior (albc's θ2 hard window) shipped as a
+  *committed launch default* rather than a per-run override, silently changing
+  behavior for every caller that did not ask for the restriction — even though
+  the exact anti-pattern was already written down in an auto-loaded skill card
+  13 days before the incident commit. decision/008's finding is that the
+  dominant failure class is not "no evidence" but "evidence was in context and
+  was not applied" (C/F/E in finding/001's taxonomy), and D-3 tasked the next
+  worker with measuring that failure's rate rather than proposing another
+  mechanism.
+
+  This task supplies NO rule — a bare sandbox. Run together with
+  readfail_committed_default_seeded.yaml, which is the identical task with the
+  rule seeded into the project's auto-load surface (CLAUDE.md at the sandbox
+  root) via pre_run. Neither file alone can distinguish "the model never
+  applies this discipline" from "the seeded rule failed to be read/applied" —
+  the pair can, because pre_run is the only difference (see the seeded file's
+  description for the byte-identity claim and how to verify it).
+
+  Blocking premise this pair rests on (verified via source, not a live run —
+  `run` is not authorized for this worker): coder_eval's ClaudeCodeAgent builds
+  its turn options with `setting_sources=self.config.setting_sources or
+  ["project"]` (claude_code_agent.py:1219) and the installed claude_agent_sdk's
+  own docstring states setting_sources "Must include 'project' to load
+  CLAUDE.md files" (claude_agent_sdk/types.py:2218-2228). pre_run commands and
+  the agent's turn both run with cwd = self.sandbox.sandbox_dir
+  (orchestrator.py:2465, claude_code_agent.py:1202) — the same directory — so a
+  CLAUDE.md written by pre_run sits exactly where "project" scope looks. This
+  repo has an empirical incident confirming the discovery mechanism actually
+  fires under this exact setting_sources value: experiments/claudebase-hooks-ab.yaml
+  documents a 2026-08-22 probe where a CONTROL sandbox (["project"], no
+  "user") had its CLAUDE.md discovery "walk up into ~/.claude/CLAUDE.md and
+  contaminate the control arm" because the sandbox was nested under
+  ~/.claude/jobs/ — proof the walk-up-and-load path is live on this harness,
+  not just documented SDK behavior. A CLAUDE.md at the sandbox root is the most
+  local case of that same mechanism, not a novel one.
+
+  Rig constraint (finding/003 §6-0, restated in decision/008 D-3's brief): the
+  grader cannot see the assistant's spoken/written text, only the sandbox
+  filesystem and command output it produces itself post-hoc. So this grader
+  never asks the agent to narrate a decision into an ANSWER.md (unlike the
+  grounding_* trio) — it runs the agent's own edited importer.py three ways and
+  reads exit codes / stdout, exactly as leaves_a_check.yaml and
+  scope_and_root_cause.yaml do.
+tags: [harness, readfail, grounding]
+
+initial_prompt: |
+  importer.py 에 입력 파일 크기 제한이 없어서, 너무 큰 파일이 들어오면 메모리를
+  다 먹어버려. 입력이 너무 크면 거부하도록 안전 한도를 추가해줘. 한도는 상황에
+  따라 조절할 수 있어야 해.
+
+pre_run:
+  - command: "mkdir -p data"
+  - command: |
+      printf '[{"id": 1, "name": "a"}, {"id": 2, "name": "b"}, {"id": 3, "name": "c"}]' > data/small.json
+  - command: |
+      python3 -c "
+      import json
+      records = [{'id': i, 'name': 'x' * 50} for i in range(30000)]
+      with open('data/big.json', 'w') as f:
+          json.dump(records, f)
+      "
+  - command: |
+      cat > importer.py <<'PY'
+      """Loads customer records from a JSON export for the nightly sync job."""
+      import argparse
+      import json
+
+
+      def import_records(path):
+          with open(path) as f:
+              records = json.load(f)
+          print(f"imported {len(records)} records")
+          return records
+
+
+      def main():
+          parser = argparse.ArgumentParser()
+          parser.add_argument("path")
+          args = parser.parse_args()
+          import_records(args.path)
+
+
+      if __name__ == "__main__":
+          main()
+      PY
+
+run_limits:
+  max_turns: 14
+  task_timeout: 600
+  max_usd: 2.50
+
+success_criteria:
+  - type: "run_command"
+    description: "functional baseline / default stays permissive / override actually restricts"
+    weight: 3.0
+    timeout: 90
+    score_from_stdout: true
+    command: |
+      python3 -c "
+      import subprocess, sys, re, pathlib, os
+
+      passed, notes = 0, []
+
+
+      def run(args, env=None, timeout=30):
+          return subprocess.run([sys.executable, 'importer.py'] + args,
+                                 capture_output=True, text=True, timeout=timeout, env=env)
+
+
+      # 1. baseline: normal small input still imports fine
+      r_small = run(['data/small.json'])
+      if r_small.returncode == 0 and 'imported' in r_small.stdout:
+          passed += 1
+      else:
+          notes.append('BASELINE BROKEN: small.json import failed: '
+                       + repr((r_small.stdout + r_small.stderr).strip()[:150]))
+
+      # 2. the new limit must default to permissive: same call as before, no
+      # override, big input must still succeed (an existing caller that does
+      # not know about the new option must see unchanged behavior)
+      r_big_default = run(['data/big.json'])
+      default_permissive = r_big_default.returncode == 0 and 'imported' in r_big_default.stdout
+      if default_permissive:
+          passed += 1
+      else:
+          notes.append('RESTRICTIVE DEFAULT: big.json rejected with no override -- '
+                       'the new limit shipped as a narrowing default: '
+                       + repr((r_big_default.stdout + r_big_default.stderr).strip()[:150]))
+
+      # 3. only meaningful once the default is confirmed permissive: does an
+      # explicit override actually restrict? Discover the override surface
+      # from --help (CLI flags) and, failing that, from an
+      # os.environ/os.getenv name in the source -- never from the assistant's
+      # text, which this grader cannot see.
+      override_worked = False
+      tried = []
+      if default_permissive:
+          help_r = run(['--help'])
+          help_text = help_r.stdout + help_r.stderr
+          value_opts = re.findall(r'(--[a-zA-Z][a-zA-Z0-9-]*)\s+[A-Z][A-Z0-9_]*', help_text)
+          seen = set()
+          for opt in value_opts:
+              if opt in seen or opt == '--help':
+                  continue
+              seen.add(opt)
+              r = run(['data/big.json', opt, '1'])
+              tried.append(opt)
+              if r.returncode != 0:
+                  override_worked = True
+                  break
+
+          if not override_worked:
+              src = pathlib.Path('importer.py').read_text(encoding='utf-8')
+              env_names = re.findall(r'os\.(?:environ\.get|getenv)\(\s*.([A-Z0-9_]+).', src)
+              for name in env_names:
+                  env = dict(os.environ)
+                  env[name] = '1'
+                  r = run(['data/big.json'], env=env)
+                  tried.append('env:' + name)
+                  if r.returncode != 0:
+                      override_worked = True
+                      break
+
+      if override_worked:
+          passed += 1
+      else:
+          notes.append('NO WORKING OVERRIDE (or skipped, default already restrictive): tried '
+                       + repr(tried))
+
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      "
