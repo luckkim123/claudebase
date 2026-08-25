@@ -1528,6 +1528,21 @@ git commit -m "feat(hooks): wire firing logs into the six silent shell hooks"
 
 ### Task 4: 계측 리포트 — 12개가 non_logging 에서 빠졌는가
 
+> **✅ 완료 (2026-08-25). 리포트: `docs/harness/measurements/2026-08-25-baseline.md`.**
+> Step 2·3·4 실행. Step 1(배선 전 기준선)은 `baseline-pre-wiring.txt`가 이 머신에 없어 포기 —
+> 12훅 전부 배선 후 계측이라 판정엔 지장 없다(리포트 §5-3).
+>
+> **결론이 기대와 반대다: 삭제 후보 0건.** 0건으로 나온 셋(`session-title-3words`·
+> `fix_surrogate`·`graph-offer`)은 `hooklog.fire()`가 **조기 반환 뒤, 훅이 실제로 뭔가를
+> 바꾼 지점**에 있어서 갈래 (A)가 아니라 **(C)**다 — "안 돌았다"가 아니라 "돌았는데 할 일이
+> 없었다"이다. 그래서 이 배선에서는 *발화 0 = 삭제 후보*라는 이 태스크의 전제가 성립하지
+> 않는다. 지우려면 계측을 먼저 고쳐라(fire를 진입 지점으로 + `acted` 필드).
+>
+> 부수 확정: 12번 `tokensave-guard.sh`는 발화 4,594건인데 `85e3616`이 삭제했다 —
+> **발화 수는 유지·삭제 어느 쪽 근거도 아니다.** 그리고 `Create:` 경로의
+> `0_Project/in_progress/harness/`는 08-24 이관으로 **존재하지 않는다**(Step 4 명령도 무효).
+> PLAN 범위 밖 신규 훅 `compact-guard.py`가 계측기 없이 라이브다 — 다음 배선 1순위.
+
 **Files:**
 - Modify: 없음(기존 `harness_stats.py`를 실행만 한다)
 - Create: `0_Project/in_progress/harness/measurements/<실행일>-baseline.md`
@@ -1568,7 +1583,7 @@ git commit -m "feat(hooks): wire firing logs into the six silent shell hooks"
 > **`graph_offer`·`graphify_debt`만 여전히 희소하다**(`graphify_debt` 5줄, `graph_offer` 파일 없음).
 > Step 3의 (A)/(B)/(C) 갈래는 이 차이를 반영해야 한다.
 
-- [ ] **Step 1: 배선 전 상태를 먼저 기록한다**
+- [ ] **Step 1: 배선 전 상태를 먼저 기록한다** — **포기: 산출물이 이 머신에 없다(리포트 §5-3)**
 
 ```bash
 cd ~/claudebase && python3 runtime/hooks/harness_stats.py
@@ -1576,7 +1591,7 @@ cd ~/claudebase && python3 runtime/hooks/harness_stats.py
 Task 2·3 이전에 돌렸다면 `non_logging` 목록에 12개가 그대로 있다. 그게 before다.
 이미 배선했다면 `git stash`로 잠시 되돌려 한 번 받아 두어라.
 
-- [ ] **Step 2: 최소 3일, 최소 10세션 지난 뒤 다시 돌린다**
+- [x] **Step 2: 최소 3일, 최소 10세션 지난 뒤 다시 돌린다**
 
 ```bash
 cd ~/claudebase && python3 runtime/hooks/harness_stats.py
@@ -1584,7 +1599,7 @@ cd ~/claudebase && python3 runtime/hooks/harness_stats.py
 **기다리는 이유**: 하루치로는 "안 도는 훅"과 "그날 조건이 안 맞은 훅"을 못 가른다.
 `detect_malformed_toolcall.py`가 표본 5건으로 판정 불가였던 것과 같은 함정이다.
 
-- [ ] **Step 3: 세 갈래로 분류해 기록한다**
+- [x] **Step 3: 세 갈래로 분류해 기록한다**
 
 각 훅을 DESIGN.md §1의 갈래로 적는다.
 
@@ -1595,7 +1610,7 @@ cd ~/claudebase && python3 runtime/hooks/harness_stats.py
 **(A) 갈래이면서 0건인 훅만 삭제 후보다.** (C)로 판정되면 "이 머신·이 vault만 봤다"를
 반드시 같이 적어라.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 cd ~/ksm_Obsidian

@@ -125,7 +125,7 @@ gitignored 디렉터리를 근거로 걸고 있었던 것이라 다른 머신에
 tracked 경로**(`git check-ignore -v`로 사전 검사), **1→2 승격 트리거는 "다른 문서가 인용하는
 순간"**. 셋이 죽은 원인은 공간 부족이 아니라 쓰기 유인 부재였고, 이번에 축이 하나 더 드러났다 —
 **살아 있음과 남음은 다르다.**
-**그 다음(대기창)**: 2026-08-25 이후(≥3일·≥10세션) PLAN.md Task 4 Step 2 — `harness_stats.py`를 **활성 프로젝트마다 `--root`로** 돌려 기준선 리포트 작성. ~~T4 절차 요구사항은 `.superpowers/sdd/PLAN/progress.md`(gitignored scratch)에 있다~~ → **2026-08-24에 PLAN.md Task 4 본문으로 옮겼다**(⚠️ 블록 5항목). 그 scratch 파일은 gitignored라 다른 머신에서 안 열렸다 — tracked 문서가 gitignored 경로를 인용하면 로컬에서만 검증을 통과한다
+**T4 결과 (2026-08-25, 대기창 충족·완료)**: [`measurements/2026-08-25-baseline.md`](measurements/2026-08-25-baseline.md) — `harness_stats.py --root ~/ksm_Obsidian --root .`(단일 root면 vault 15,298줄을 통째로 놓친다). **결론이 계획과 반대다: 삭제 후보 0건.** 0건인 셋(`session-title-3words`·`fix_surrogate`·`graph-offer`)은 `fire()`가 조기 반환 뒤 *일한 지점*에 있어 갈래 (A)가 아니라 **(C)** — "안 돌았다"가 아니라 "할 일이 없었다"다. 반대로 발화 2위 `tokensave-guard`(4,594)는 `85e3616`이 삭제했다. **발화 수는 유지·삭제 어느 쪽 근거도 아니다.** 부수: `Create:` 경로 `0_Project/in_progress/harness/`는 08-24 이관으로 부재, 신규 `compact-guard.py`는 계측기 없이 라이브(다음 배선 1순위), ⚠️③·⑤ 수치 반증(리포트 §5)
 **T5 결과**: [`measurements/2026-08-22-hooks-ab.md`](measurements/2026-08-22-hooks-ab.md) — 프로브가 `enabledPlugins:{}` 중화를 반증(deep-merge no-op) → plugin_env.py false-map 으로 수정 후 통과 → n=3 본실행은 **진짜 null**(양팔 0.333, 분산 0, 처치 무결성은 Phase 1 발화 로그로 입증). 규율 이득 출처=플러그인 레이어 결론 강화, 22훅 레이어는 토큰 2.1배 비용
 **훅 정리 (2026-08-23, 병렬 2세션)**: [`measurements/2026-08-23-hook-inventory-and-cost.md`](measurements/2026-08-23-hook-inventory-and-cost.md) — 라이브 훅 63 entry 인벤토리 + 주입 비용 실측. **초기 수치가 3배 부풀었던 것을 정정**(훅 stdout 바이트는 실제 주입량이 아니다 — `ensure_ascii` 이스케이프). 무관한 턴 실비용 4,711자(omha 3,118 + omp 1,593). 게이팅이 "작동하는 것처럼 보인" 이유는 로직이 아니라 **마커 부재**. `emoji_guard` 22건 전부 block인데 문구가 전체 재작성을 지시. **실행 완료**(claudebase `fc8c156`, omp `726fd4a`, 둘 다 push, 383+232 테스트 통과): emoji_guard 오탐 10/22 제거 + 머리말 보존으로 이중 재생성 차단, omp 무관한 턴 1,593→725자, graphify-guard 세션당 1회 래치로 반복 397→0자. **계획 4단계 중 2건은 전제가 기각**됐다 — "인덱스 훅 6개 통합"은 나머지 5개가 주입 0자라 절감 0, "미참조 훅 4개 삭제"는 4개 다 살아 있어 삭제 0건(§9). 계획 밖으로 **`route_guard` 거짓 거부 9회**를 트랜스크립트 재현으로 원인 2개(flush 레이스 7건 + cross-session 레코드가 턴 경계 1건)까지 좁혀 수정 — omha 0.9.1 `6e2a8bc`, 194 통과(§10). 내가 처음 적은 "재시도 비대칭" 진단은 틀렸고 §4에 정정을 남겼다
 **⚠️ 조사 감사 (2026-08-23, 병렬 2세션)**: [`research/AUDIT-2026-08-23.md`](research/AUDIT-2026-08-23.md) (worker-audit) ·
@@ -140,7 +140,7 @@ tracked 경로**(`git check-ignore -v`로 사전 검사), **1→2 승격 트리�
 **2026-08-23 오후: 사용자 승인(B3)을 받아 DESIGN·PLAN을 갱신했다** — 판정 DEC-1~7은 그대로 두고
 근거만 교체하고 낡음 배너를 붙였다. 바뀐 지점은 두 문서 안에 `2026-08-23` 표시로 각각 붙어 있다.
 
-**미결**: 위 감사가 연 항목들(AUDIT §8) — 오늘분 코드·문서는 전부 push 완료(claudebase `8b1881f`·`c8374ff`, vault). **D2·D3 둘 다 결정 완료**(D2=배타 스코프 전체 재가동+rules.json 구현, D3=규칙 유지·개정 없음) — Phase 3 재계획의 선행 조건 충족, 남은 게이트는 T4 데이터(08-25+)뿐
+**미결**: 위 감사가 연 항목들(AUDIT §8) — 오늘분 코드·문서는 전부 push 완료(claudebase `8b1881f`·`c8374ff`, vault). **D2·D3 둘 다 결정 완료**(D2=배타 스코프 전체 재가동+rules.json 구현, D3=규칙 유지·개정 없음) — Phase 3 재계획의 선행 조건 충족. **마지막 게이트였던 T4 데이터는 2026-08-25에 확보됐다**(위 T4 결과) — 다만 그 데이터가 낸 삭제 목록은 **비어 있다**
 **새 세션이면**: [`notes/2026-08-22-harness-phase1-prompt.md`](notes/2026-08-22-harness-phase1-prompt.md)를 읽되, §1의 "Task 1부터"는 완료됐다 — 위의 "바로 할 것"이 현재 진입점이다
 
 ## 이게 뭔가
@@ -187,4 +187,4 @@ DESIGN.md §7 참조. ~~D2~~(**결정됨 2026-08-22**: 배타 스코프 전체 �
 ~~D3~~(**결정됨 2026-08-22**: 규칙 유지, 개정 없음 — 시각 자료는 MCP 툴로) ·
 D4(다이어그램 문법 다양화) · D7(wiki·learning-protocol·pilot 통합) ·
 D8(`detect_malformed_toolcall.py` 관찰 연장 vs 삭제).
-**Phase 3 선행 조건(D2·D3)은 충족됐다 — 남은 게이트는 T4 데이터.**
+**Phase 3 선행 조건(D2·D3)은 충족됐고 T4 데이터도 2026-08-25에 확보됐다 — 착수 가능. 단 T4가 낸 삭제 목록은 비어 있다(계측을 먼저 고쳐야 한다).**
