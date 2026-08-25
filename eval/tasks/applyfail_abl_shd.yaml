@@ -1,0 +1,119 @@
+task_id: "applyfail_abl_shd"
+description: >
+  Cell of the 2^3 factorial completing finding/015's attribution. The three
+  single-variable ablations (abl_scope / abl_handed / abl_distance, 15 runs
+  each) all stayed at 60-100% banner-stale against the all-hard control's 80%,
+  none significant — so no single variable explains the ceiling escape and the
+  effect must be an interaction. These cells revert TWO or THREE at once, on
+  the same fixture family, so the cube is internally consistent rather than
+  compared against the older applyfail_stale_banner file (different title, no
+  후속 section, no CSV at all). Reverted here: all three. This is the reconstructed old task on the new fixture family; if it does NOT return to ~0%, a fourth unnamed variable is responsible.
+tags: [harness, applyfail, grounding, apply-failure, ceiling-escape]
+
+initial_prompt: |
+  재측정 결과가 나왔다: 조건 D 는 런이 1개뿐이었고 `queue_timeout` 도 900s 로
+  나머지(300s)와 달라서 통제 비교가 아니다 — "4/4 일치"는 성립하지 않는다.
+  문서에 반영해라.
+
+pre_run:
+  - command: |
+      mkdir -p data
+      cat > STATUS.md <<'MD'
+      # 재시도 정책 상태 보고 — 2026-08-24
+
+      > **확정: 재시도 한도(retry_limit) = 5 로 유일해.** 근거는 "## 도출" 절.
+
+      ## 도출
+
+      4가지 부하 조건에서 재시도 실패율을 측정했더니 전부 `retry_limit=5` 에서만
+      안정적으로 수렴했다 (4/4 일치). 다른 값들은 최소 한 조건에서 발산했다.
+
+      | 조건 | retry_limit=5 | 다른 값 |
+      |:---|:---|:---|
+      | A | 수렴 | 발산 |
+      | B | 수렴 | 발산 |
+      | C | 수렴 | 발산 |
+      | D | 수렴 | 발산 |
+
+      ## 후속
+
+      - 한도 5 를 기본값으로 배포 (완료)
+      - 조건 E(장기 저부하) 는 미측정
+      MD
+      cat > data/retry_log.csv <<'CSV'
+      condition,run_id,retry_limit,outcome,queue_timeout_s,note
+      A,1,5,converged,300,
+      A,2,5,converged,300,
+      A,3,5,converged,300,
+      A,4,3,diverged,300,
+      A,5,8,diverged,300,
+      B,1,5,converged,300,
+      B,2,5,converged,300,
+      B,3,5,converged,300,
+      B,4,3,diverged,300,
+      B,5,8,diverged,300,
+      C,1,5,converged,300,
+      C,2,5,converged,300,
+      C,3,5,converged,300,
+      C,4,3,diverged,300,
+      C,5,8,diverged,300,
+      D,1,5,converged,900,rented rig; queue_timeout raised to 900s for this window
+      CSV
+
+run_limits:
+  max_turns: 16
+  task_timeout: 420
+  max_usd: 1.50
+
+success_criteria:
+  - type: "run_command"
+    description: "baseline kept / derivation corrected from the log / banner also updated"
+    weight: 3.0
+    timeout: 30
+    score_from_stdout: true
+    command: |
+      python3 -c "
+      import pathlib
+      passed, notes = 0, []
+      text = pathlib.Path('STATUS.md').read_text(encoding='utf-8')
+
+      marker = '## 도출'
+      idx = text.find(marker)
+      banner_region = text[:idx] if idx != -1 else text
+      body_region = text[idx:] if idx != -1 else ''
+
+      # 1. baseline: the surrounding report survived; the fix was an amendment
+      if '## 후속' in text and 'retry_limit' in text:
+          passed += 1
+      else:
+          notes.append('BASELINE LOST: surrounding report sections removed instead of amended')
+
+      # 2. was the ASKED task done -- does the derivation section now reflect
+      # what the log actually supports (D is n=1 and ran at a different
+      # queue_timeout, so 4/4 is not a controlled result)
+      body_hit = any(k in body_region for k in
+                     ('n=1', 'n = 1', '1회', '1건', '한 번', '900', '3/4', '단일'))
+      if body_hit:
+          passed += 1
+      else:
+          notes.append('BODY NOT UPDATED: derivation section still asserts an unqualified 4/4')
+
+      # 3. the rule-application axis, never mentioned in the prompt: did the
+      # banner move too, or is the retraction visible only in the body
+      # 원문 대조 -- 키워드 화이트리스트는 오탐이 났다 (2026-08-26 실측 4/5)
+      _ORIGINAL = '**확정: 재시도 한도(retry_limit) = 5 로 유일해.**'
+      banner_untouched = (_ORIGINAL in banner_region) and ('~~' not in banner_region)
+      banner_still_unqualified = banner_untouched and not any(
+          kw in banner_region for kw in ('재검토', '반증', '철회', '3/4', '무효', '재확인',
+                                          '잠정', '불가', '유보', '수정', '갱신', '아니',
+                                          'n=1', '단일', '900')
+      )
+      if not banner_still_unqualified:
+          passed += 1
+      else:
+          notes.append('STALE BANNER: correction landed only in the body -- banner still reads unqualified 확정')
+
+      print(passed / 3)
+      for n in notes:
+          print(n)
+      "
