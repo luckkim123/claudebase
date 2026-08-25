@@ -1,7 +1,7 @@
 # readfail_committed_default — matched pair measuring "in context, not applied"
 - id: handoff/009 · date: 2026-08-26 · author: instrument-2
 - to: all · keywords: readfail-rate, matched-pair, coder-eval, claude-md-loading, committed-default, decision-008
-- summary: decision/008 D-3 실행 — 두 짝 완성. ①`readfail_committed_default*`(CLAUDE.md 자동 로드 전제 CONFIRMED, 소스 추적+이 저장소 실측 사고로) ②`applyfail_stale_banner*`(조정자 후속 지시, 규칙을 프롬프트에 직접 주입 — auto-load 전제 자체를 우회하는 더 강한 "적용 실패" 축). 4개 파일 전부 `coder-eval plan` 통과, 양 짝 모두 프롬프트/채점기 diff 로 동일성 증명, 좋은/나쁜 답 손채점 sanity 확인. 라이브 `run` 은 미실행(권한 밖).
+- summary: decision/008 D-3 실행 — 5개 task 로 완결. ①`readfail_committed_default*`(CLAUDE.md 자동 로드 전제 CONFIRMED, 소스 추적+이 저장소 실측 사고로 — 조정자가 재확인 후 "이게 캠페인의 진짜 질문"이라고 정정) ②`applyfail_stale_banner*` 3팔(무규칙 대조 / 프롬프트직접주입 / CLAUDE.md-seeded) — 같은 배너-정체 시나리오를 세 채널로 대조해 "채널 실패"와 "적용 실패"를 가른다. 5개 파일 전부 `coder-eval plan` 통과, 프롬프트/채점기 diff 로 동일성 증명, 좋은/나쁜 답 손채점 sanity 확인. 라이브 `run` 은 미실행(권한 밖).
 
 ## blocking 전제 검증 결과
 
@@ -92,5 +92,21 @@ coder-eval plan -e experiments/harness-discipline.yaml \
 - **`coder-eval plan`**: 4개 파일(`readfail_*` 2개 + `applyfail_*` 2개) 전부 `✓`, "All tasks are valid!" — `applyfail_*` 는 `run_limits` 를 더 짧게 잡아서(10턴/300s/$1.50, 단일 파일 편집이라) 기존 task 들의 `task_timeout>turn_timeout` 경고도 없음.
 
 **두 짝의 관계**: `readfail_*` 는 "규칙이 auto-load 표면(CLAUDE.md)에 있을 때"를, `applyfail_*` 는 "규칙이 같은 메시지 안에 있을 때"를 잰다 — 후자가 전자보다 존재 조건이 강하다(검색·기억 단계가 아예 없다). `applyfail_*` 에서도 처치팔이 대조팔과 안 갈리면, 그건 "못 읽어서"가 아니라 순수 **적용 실패**라는 조정자 프레임이 그대로 성립.
+
+## 추가 2 — 조정자 정정: 세 번째 팔 `applyfail_stale_banner_claudemd.yaml` (2026-08-26)
+
+조정자가 직전 메시지를 스스로 정정했다: `readfail_*` 는 전제 확인이 안 막혀 있었고(CONFIRMED, 위 §1 그대로), 오히려 `readfail_*` 가 캠페인의 진짜 질문("자동 로드된 규칙이 행동을 바꾸나" — `finding/002` 가 94개 훅 중 내용을 보는 게 1개뿐이라고 한 뒤 남은 유일한 채널)을 재고, `applyfail_*`(프롬프트 직접 주입)는 그보다 **약한** 질문이라고. "이 설계로 넘어가라"는 취소, 대신 **세 번째 팔**로 강등.
+
+**논리**: 같은 배너-정체 시나리오(`STATUS.md`)를 세 채널로 대조하면 "채널 실패"와 "적용 실패"를 가를 수 있다.
+- 프롬프트팔(직접 주입) 성공 + CLAUDE.md팔 실패 → **채널** 문제(auto-load 는 되는데 구속을 안 한다).
+- 세 팔 전부 실패 → **적용** 문제, 채널 무관 — 처방이 완전히 달라진다.
+
+**만든 것**: `eval/tasks/applyfail_stale_banner_claudemd.yaml`. `STATUS.md` pre_run·채점기는 앞의 두 파일과 완전히 재사용(값 동일 — `diff` 로 증명), 프롬프트는 **무규칙 대조팔과 바이트 동일**(`diff` 무출력), 규칙은 `pre_run` 이 쓰는 `CLAUDE.md` 로만 공급 — 즉 `readfail_committed_default_seeded.yaml` 이 이미 CONFIRMED 한 그 채널(`setting_sources=["project"]`)을 이 시나리오에도 그대로 적용한 것.
+
+**이름 함정 기록**: `applyfail_stale_banner_seeded.yaml` 의 `_seeded` 는 "프롬프트에 심었다"는 뜻으로 내가 먼저 썼는데, 저장소 전역 관행(`om_skill_trigger_seeded`, `readfail_committed_default_seeded`)에서 `_seeded` 는 "`pre_run` 이 전제를 심었다"는 뜻이다. 이번에 진짜 그 관행과 맞는 파일은 `_claudemd` 쪽이다. 기존 두 파일 이름은 이미 이 handoff·조정자 메시지에 인용됐으므로 리네임하지 않고 이 문단으로 함정만 남긴다.
+
+**`coder-eval plan` — 5개 파일 전부**: `readfail_committed_default(.yaml/_seeded.yaml)` + `applyfail_stale_banner(.yaml/_seeded.yaml/_claudemd.yaml)` → **All tasks are valid!** claudemd 팔의 프롬프트·채점기가 무규칙 대조팔과 완전 동일함을 `diff` 로 재확인.
+
+**세 번째이자 가장 깨끗한 표본 (조정자가 별도로 인용, `finding/010` 예정)**: 조정자가 같은 메시지에서 Q1("컨텍스트에 있었는데 적용 안 됨")의 세 번째 표본을 보고했다 — 저자 세션이 배너 문장을 자기 손으로 썼고(트랜스크립트 `:2917`, `sub()`), 커밋은 `:3984`, 사이 compact 0건, 금지 규칙은 10일 전부터 auto-load 되고 있었는데도 본문에만 철회를 넣었다는 것. 이 handoff §1·"추가"절에서 내가 직접 대조한 `ac9a2277`/`bc28ffcc`/`de586dd`/현재 파일 상태가 그 표본의 근거다 — 트랜스크립트 줄번호 자체는 내가 못 열어봐서 조정자 인용 그대로. `applyfail_stale_banner_claudemd` 가 재는 게 정확히 이 표본이 보여준 실패 형태다.
 
 ## Comments
