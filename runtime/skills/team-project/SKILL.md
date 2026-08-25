@@ -164,10 +164,19 @@ Add these four — each one paid for by a real incident:
 - A path without a branch means "whatever happens to be checked out".
 
 ## Reporting IS termination    ← 3 workers went idle silently, double-nagged twice
-- When done: first append distilled lessons to .community/agents/<role>.md
-  (traps / settled facts / failed approaches — not an activity log), then
-  SendMessage: conclusion + artifact paths + what you did NOT verify. Then stop.
+- **Two steps, and doing only the second is not done.** (1) Append distilled
+  lessons to `.community/agents/<role>.md` — traps / settled facts / failed
+  approaches, not an activity log; **create the file if the role has none**.
+  (2) Then SendMessage: conclusion + artifact paths + what you did NOT verify.
+  Then stop.
 - Going quiet is not completion. If you got nagged, you broke this line.
+- **The coordinator checks step 1 on receipt** (`ls .community/agents/`), and
+  the Close sweep catches what slipped: a worker with no role file is an
+  unfinished worker, not a finished one. Measured 2026-08-26 — a campaign held
+  15 role files and the one worker whose brief had dropped step 1 left none,
+  which nobody noticed until the next worker walked into the same trap. Step 1
+  is what a coordinator drops first when compressing this item into a brief,
+  so copy both numbered steps rather than paraphrasing them.
 
 ## The coordinator is fallible ← a wrong instruction (0.28→0.27) was faithfully applied
 - Any number or path in my instructions: verify against the source before applying.
@@ -222,11 +231,12 @@ coordinator-class consumer — start as a role:
 |:---|:---|
 | Launch | post rules, any categories added beyond the five, owning session in HUB.md |
 | Phase / milestone boundary | banner stale posts, adjudicate contradictions, refresh board |
-| Close | promote posts → owning stores, sweep agents/, close out sessions/, record actual vs expected cost |
+| Close | promote posts → owning stores, sweep agents/ (including roles that left **no** file), close out sessions/, record actual vs expected cost |
 
 Close-out promotion, concretely: sweep posts for domain facts not yet in the
 omx wiki (`omx wiki add`; mark the post `(promoted → wiki <slug>)`) and sweep
-agents/ (banner stale lessons) so role lessons outlive the campaign. A
+agents/ — banner stale lessons, and flag every worker that reported without
+leaving a role file — so role lessons outlive the campaign. A
 coordinator that cannot run omx leaves the promotion list as a posts/handoff/
 entry for a session that can.
 
@@ -241,9 +251,20 @@ separate agents (the fallibility rule applies to managers too).
 
 ## Termination and scale
 
-- Worker count comes from the axis count, never from "more is better" —
-  13-vs-3 has never been measured here; the literature's saturation point
-  (~4) is not this rig's measurement.
+- **The axis is the role, not the task.** Worker count comes from the *role*
+  count, never from "more is better" — 13-vs-3 has never been measured here;
+  the literature's saturation point (~4) is not this rig's measurement.
+- **Check for an idle worker before spawning one** (`ListAgents`). A new
+  *role* earns a new worker; the same role with a different input — next run,
+  next file, next repo — goes to the worker that already holds it, live or
+  finished, via SendMessage (a finished agent resumes from its transcript).
+  If that worker is gone, re-summon it under the **same role name** and paste
+  its `agents/<role>.md` into the brief. Name a worker for its role
+  (`run-forensics`), never for the task instance (`run2-forensics`): the role
+  file is keyed by that name, so a numbered name forks the role's knowledge
+  into a file the next holder will never open. Measured 2026-08-26 — a second
+  forensics worker re-read the first one's finding, re-passed the entry gate,
+  and rebuilt the same parsing tools, buying the same expertise twice.
 - Session-to-session exchanges end with a `[FINAL]`-titled message; `[FINAL]`
   is never answered. Cap: one cross-review round after completion.
 - Fan-out workers end by reporting (see brief line 3); the coordinator ends
