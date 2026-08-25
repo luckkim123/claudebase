@@ -172,3 +172,15 @@ Then the handoff compressed six reasoned dispositions into six prohibitions ("`s
 **Why a hallucinated absence is worse than a hallucinated presence.** A wrong positive claim ("file X has function Y") is falsifiable the moment someone looks. A wrong absence claim closes the investigation before it starts — the reader has no reason to go looking for something they were just told isn't there. `sync-claudebase`'s own Pre-flight section says "abort if any fails," which presumes the checks actually ran; jumping straight to the abort branch with no evidence produces a confident, well-formatted, entirely fabricated report.
 
 **What forces the check.** Any turn that concludes "X doesn't exist," "no matches," or "not found" must be immediately preceded, in that same turn, by the tool call whose output is being summarized — not a memory of a similar past check, not an inference from a related fact, not a documented procedure narrated as if it ran. If the claim can't point at a tool result from this turn, it isn't verified yet.
+
+---
+
+## subagent-standing-permission
+
+**Rule (see `config/CLAUDE.md`):** The Agent tool is authorized by default. Do not pause to ask whether delegation is allowed, and do not run a fan-out serially because permission felt unclear.
+
+**Why the permission has to live in this file specifically.** Opus 5 sessions receive a prompt bundle that appends `Do not call the AgentTool unless the user requested it`. That line is harness-side: it is not read from `settings.json`, not gated by an environment variable, and not removable by any local configuration. The only clause that satisfies it is an actual request from the user — and the only user text guaranteed to be present in *every* session on this machine is the user-scope `CLAUDE.md`. So a standing permission written here is not a preference expressed in a convenient place; it is the sole mechanism that turns delegation on at all.
+
+**What it does not license.** It authorizes *reaching for* subagents, not spending freely on them. `<model_routing>` still governs which tier each stage runs on, and its central warning is unchanged: an `agent()` call with no explicit `model` inherits the *session* model, so a fan-out launched from an Opus session runs the whole fleet on Opus. Check every stage of a named or pre-built workflow before firing it. The separation-of-passes rule also survives intact — a subagent that authored something is still not allowed to approve it.
+
+**Measured (2026-08-25, harness Area setup).** The seven-task handoff ran entirely solo — a 115-file ownership audit, an 87-file relocation across six repos, an eight-repo external survey, and an oms release — because the permission line was absent and the session never asked for it. Serial execution was survivable there; the one item it could not finish was not. Calibrating the new claim↔own-evidence axis needs independent graders scoring planted over-claims, which is a fan-out by construction, so the axis shipped labelled `NOT_CALIBRATED` rather than measured. The cost of the missing line was not slowness — it was an unmeasurable gate.

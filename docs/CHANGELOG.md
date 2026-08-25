@@ -2,6 +2,38 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-25 — a permission no setting can grant
+
+Opus 5 sessions arrive carrying `Do not call the AgentTool unless the user
+requested it`. That clause is harness-side — not in `settings.json`, not behind
+an environment variable, not removable locally — and the only thing that
+satisfies it is an actual request from the user. The only user text present in
+every session on this machine is `config/CLAUDE.md`, so that file is not a
+convenient place to record the permission; it is the sole place where recording
+it does anything at all.
+
+What made the gap visible was a task it quietly shaped. The 2026-08-25 harness
+Area handoff ran seven tasks solo — a 115-file ownership audit, an 87-file
+relocation across six repos, an eight-repo external survey, and an `oms` release
+— because no per-session request had been made and the session did not think to
+ask for one. Serial execution was merely slow there. The one item it could not
+finish was different in kind: calibrating the new claim↔own-evidence axis needs
+independent graders scoring planted over-claims, which is a fan-out by
+construction. The axis shipped labelled `NOT_CALIBRATED`. The missing line did
+not cost time; it cost a measurement.
+
+### Added
+
+- `config/CLAUDE.md` Operational Limits: **Subagent delegation is
+  standing-authorized — don't ask per session.** 343 chars, the *why* factored
+  out to `docs/operating-rationale.md#subagent-standing-permission` per this
+  file's own lean rule.
+- `docs/operating-rationale.md#subagent-standing-permission` — why the clause
+  cannot be disabled by configuration, what the permission does **not** license
+  (`<model_routing>` still binds every fan-out; a session-model fleet is still
+  the failure it always was; an authoring agent still cannot approve itself),
+  and the measurement above.
+
 ## [Unreleased] — 2026-08-25 — an index nothing routed to
 
 `tokensave` is gone. Not because it was wrong — it was the only one of the three
