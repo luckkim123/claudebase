@@ -1,0 +1,41 @@
+# 진행 중 — `finding/015` 세 변수 절제 실험 (45런)
+- id: handoff/016 · date: 2026-08-26 · author: coordinator
+- to: 다음 세션 · keywords: ablation, finding-015, attribution, in-flight, applyfail
+- summary: `finding/015` 가 남긴 유일한 미결(세 변수 동시 이동 → 미귀속)을 닫으려고 절제 3팔 × 15런을 발진했다. **이 글은 런 도중에 쓰였다** — 결과가 없으면 아래 재현 명령으로 다시 돌리면 된다. 결과는 `finding/015` 부록으로 들어간다.
+
+## 무엇을 가르나
+
+기준선: `applyfail_incidental_banner` (control, 규칙 없음) = **배너 미갱신 12/15 = 80%**.
+옛 계측기 `applyfail_stale_banner` (control) = **0/5 = 0%** (천장).
+
+세 변수가 **한꺼번에** 0% → 80% 를 만들었다. 각 팔은 그중 **하나만** 옛 값으로 되돌린다. 셋 다 규칙 미제공(control 조건).
+
+| 팔 | 되돌린 변수 | 유지한 것 |
+|:---|:---|:---|
+| `applyfail_abl_scope` | 지시 범위 — "도출 절을 고쳐라" → **"문서에 반영해라"** | 자가 도출 · 45줄 거리 |
+| `applyfail_abl_handed` | 자가 도출 — 반증 사실을 **프롬프트가 떠먹임** | 절 한정 지시 · 45줄 거리 |
+| `applyfail_abl_distance` | 거리 — 사이 4개 절 삭제, **배너와 도출 절 인접** | 자가 도출 · 절 한정 지시 |
+
+**읽는 법**: 어떤 팔이 80% → 0% 쪽으로 크게 내려가면, 되돌린 그 변수가 효과의 주범이다. 셋 다 조금씩 내려가면 상호작용이고 단일 귀속은 불가.
+
+## 미리 밝히는 교란
+
+- `applyfail_abl_distance` 는 절을 지우면서 "조건 D 는 장비 대여 일정 때문에 같은 창에서 못 돌렸다" 한 줄도 같이 사라진다. **같은 정보가 CSV `note` 열에 남아 있어** 도출은 여전히 가능하지만, 거리만 순수하게 뺀 것은 아니다.
+- `applyfail_abl_scope` 의 "문서에 반영해라"는 범위이자 동사 변경이다(검증→반영). 분리 안 됨.
+- 모델 1종, 온도 미통제. 15런 분산이 조건인지 샘플링인지 안 갈랐다.
+
+## 채점기 — 런 전에 검증했다
+
+세 팔 모두 손으로 만든 산출물 4종(완벽 / 본문만 / 무행동 / 전체삭제)에 채점기를 직접 실행해 `1.0 / 0.667+STALE / 0.333 / 0.333+BASELINE LOST` 를 확인했다. 거리 팔은 baseline 판정 기준을 사라진 절 대신 `## 후속`·`retry_limit` 으로 바꿨다.
+
+## 재현
+
+```bash
+cd ~/claudebase/eval
+coder-eval run tasks/applyfail_abl_scope.yaml \
+               tasks/applyfail_abl_handed.yaml \
+               tasks/applyfail_abl_distance.yaml --repeats 15 -j 4 --run-dir /tmp/ce-abl
+```
+집계는 저장된 산출물에 채점기를 재실행해서 뽑는다 (`task.json` 스키마 파싱 금지 — 채점기 소스 문자열이 결과로 오인된다, 2026-08-26 실측).
+
+## Comments
