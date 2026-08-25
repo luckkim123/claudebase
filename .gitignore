@@ -47,3 +47,8 @@ graphify-out/
 # coder-eval run artifacts: per-machine sandboxes and logs carrying tempdir
 # absolute paths. The durable numbers live in eval/README.md.
 eval/runs/
+
+# omp governance: the rules ship (they describe this repo's layout for every
+# clone), the runtime state does not (scans, work/, secretary/ are per-machine).
+.omp/*
+!.omp/rules.json

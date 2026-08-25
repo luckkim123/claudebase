@@ -2,6 +2,63 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-25 — the layout rules were only ever prose
+
+This repo has said where files belong for as long as it has existed, in three
+places, and nothing has ever checked. CI runs ruff, shellcheck, pytest and an
+`install.sh` idempotency smoke; none of them looks at structure, placement or
+naming. `installer/githooks/pre-commit` guards `config/settings.critical.json`
+keys and nothing else. The result is visible in `runtime/hooks/`: 24 scripts
+split kebab 14 / snake 9 / plain 1, and `askuserquestion-guard.py` sits beside
+`askuserquestion_retry.py` with no document anywhere noticing.
+
+So `.omp/rules.json` lands — and **only** `rules.json`. `omp-init` normally
+writes eight artifacts including `STRUCTURE.md` and `NAMING.md`, and those two
+would be a fourth prose copy of what `README.md` L67, `docs/ARCHITECTURE.md`
+L57 and `CLAUDE.md` already say. That is not a hypothetical cost: `CLAUDE.md`
+item 4 was a copy of the README rule and it had gone stale, still naming
+`claude/` and `skills/` after they became `config/` and `runtime/skills/`. The
+copy that drifts is the one the next reader hits first.
+
+`omp`'s hooks turned out to be built for exactly this split — `content_audit`
+and `doc_garden` both skip a missing `STRUCTURE.md` rather than requiring it,
+so the machine layer stands on its own. Every `role` sentence in `rules.json`
+points at the existing document instead of restating it.
+
+### Added
+
+- `.omp/rules.json` — 16 directories, 7 naming patterns, 2 content conventions,
+  measured against the tree rather than copied from a preset. **Current
+  violations: 0**, checked across all 219 tracked files; a guard that calls
+  today's practice a violation gets switched off.
+  - `enforced: true` on exactly two: the repo root (only README, LICENSE,
+    CLAUDE.md and .gitignore are tracked there, and root litter ships to every
+    clone) and `runtime/skills/` (a loose file at its top level is not a skill).
+    Verified against the live hook on eight paths — `ruff.toml` and
+    `runtime/skills/loose.md` nudge; `README.md`, `docs/new-topic.md`,
+    `runtime/hooks/new-guard.py`, `runtime/skills/my-skill/SKILL.md` and
+    `tests/hooks/test_x.py` stay silent.
+  - `runtime/hooks/` basenames are left deliberately unregulated. The split is
+    real but a rename is not a local edit: hooks are invoked by absolute path
+    from the rendered `~/.claude/settings.json`, so renaming one silently breaks
+    every machine that has not re-run the installer.
+- `.gitignore`: `.omp/*` with `!.omp/rules.json`. The rules describe this repo's
+  layout and belong in every clone; scans, `work/` and `secretary/` are
+  per-machine. Verified with `git add -n` and `git status --ignored`, not with
+  `git check-ignore`, which exits 0 on a negation match and reads backwards.
+
+### Changed
+
+- `CLAUDE.md` "Editing rules" item 4 no longer restates the installer/README
+  rule; it points at the README table as SSOT and says why the copy was dropped.
+
+### Notes
+
+- Requires `omp` **0.12.2**. Earlier versions accept `path: "."` in the schema
+  and never match it, so the root entry would read as enforced while doing
+  nothing. That bug was found while checking this file's `enforced` flags
+  against the hook source, and fixed there.
+
 ## [Unreleased] — 2026-08-25 — a permission no setting can grant
 
 Opus 5 sessions arrive carrying `Do not call the AgentTool unless the user
