@@ -26,8 +26,14 @@ raw measurements live in the doc named under Provenance.
 | Structure design | automatic | workers, scopes, ownership, categories, brief drafts |
 | **Launch** | **human — one approval** | the only gate |
 
-The launch proposal is **four lines**: workers / each one's scope / expected
-cost / termination condition. A proposal missing termination is not a proposal.
+The launch proposal is **six lines**: workers / each one's scope / **the model
+each one runs on** / **whether it writes to the repo** / expected cost in
+tokens / termination condition. A proposal missing termination is not a
+proposal — and one missing the model line hides the knob behind this rig's
+largest cost incident: a fan-out with no explicit `model` silently inherits the
+*session* model, so a team launched from an Opus session runs entirely on Opus.
+The repo-write line is what tells the approver whether workers need separate
+worktrees; without it, collision risk is invisible at the one gate.
 
 ## Community scaffold — flat by default
 
@@ -119,6 +125,12 @@ experience-distillation literature (arXiv:2604.15877, arXiv:2604.08224).
   NEXT holder of this role must know — traps, settled facts, failed
   approaches. Never an activity log. Stale lessons get a `(stale)` banner,
   never deleted. When re-summoning a role, paste its file into the brief.
+  **Cap it at 40 lines**; past that, distill — merge overlapping lessons and
+  fold banner-stale ones into one line of history. Append-only is about not
+  *losing* a lesson, not about unbounded growth: this file is pasted into every
+  brief for the role, so an uncapped one makes the brief more expensive exactly
+  as the campaign succeeds — the same trajectory as the 76KB discussion file
+  nobody read.
 
 Facts go to their owning store **at write time** — "distill later" was
 measured at zero follow-through:
@@ -210,13 +222,18 @@ coordinator-class consumer — start as a role:
 |:---|:---|
 | Launch | post rules, any categories added beyond the five, owning session in HUB.md |
 | Phase / milestone boundary | banner stale posts, adjudicate contradictions, refresh board |
-| Close | promote posts → owning stores, sweep agents/, close out sessions/ |
+| Close | promote posts → owning stores, sweep agents/, close out sessions/, record actual vs expected cost |
 
 Close-out promotion, concretely: sweep posts for domain facts not yet in the
 omx wiki (`omx wiki add`; mark the post `(promoted → wiki <slug>)`) and sweep
 agents/ (banner stale lessons) so role lessons outlive the campaign. A
 coordinator that cannot run omx leaves the promotion list as a posts/handoff/
 entry for a session that can.
+
+Then **record the actual token cost against the launch estimate in HUB.md, in
+the same units**. An estimate that is never scored stays exactly as wrong on
+the next campaign — this one line is what turns the cost proposal from a guess
+into a measurement.
 
 Split the manager out only when board upkeep measurably crowds the
 coordinator's context — and even then the manager and the verifier stay
@@ -231,7 +248,7 @@ separate agents (the fallibility rule applies to managers too).
   is never answered. Cap: one cross-review round after completion.
 - Fan-out workers end by reporting (see brief line 3); the coordinator ends
   the campaign by closing HUB.md and running the manager's close duties.
-- Adding a worker mid-campaign needs the same four-line proposal as launch.
+- Adding a worker mid-campaign needs the same six-line proposal as launch.
 
 ## Transport — pick per pair, the board is transport-agnostic
 
@@ -240,6 +257,18 @@ separate agents (the fallibility rule applies to managers too).
 | Coordinator ↔ subagent (same session) | Agent tool + SendMessage |
 | Session ↔ session (same machine) | SendMessage (carried a full campaign exchange with zero defects) |
 | Cross-machine | orca orchestration — read the pitfalls memory first (legacy queue has no ack; re-output cost grows linearly) |
+
+**Executor choice is a cost decision, not a style one**, and the two options sit
+at opposite ends. A Claude Code subagent takes Anthropic models only (the Agent
+tool's `model` accepts `sonnet|opus|haiku|fable`) and fills a fresh context
+window, so brief, tool definitions, and system prompt are paid again per
+worker, at cache-miss prices. An external CLI worker (`omc team
+1:gemini:executor`, a tmux pane) costs **zero Claude tokens** but is one-shot:
+it cannot use SendMessage or the task list, so the coordinator writes its
+prompt file, spawns it, and reads its output file. Routing an external model
+*through* the session instead — an MCP proxy, `omc ask` — is the one form that
+saves nothing: the Claude worker stays alive and takes the other model's output
+back into its own context, so both are billed.
 
 ## Coordinator context — compact discipline
 
