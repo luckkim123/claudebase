@@ -567,7 +567,10 @@ w2 75행은 "새 신호 없는 중계는 문헌상 해롭다"며 문헌 근거�
 
 **근거 원문**: [`examples/2026-08-23-worker-graph-brief.md`](examples/2026-08-23-worker-graph-brief.md) ·
 [`examples/2026-08-23-worker-audit-brief.md`](examples/2026-08-23-worker-audit-brief.md)
-**실측 출처**: [`../research/ext-graph-engineering-v2.md`](../research/ext-graph-engineering-v2.md) §1·§7 ·
-[`../research/AUDIT-2026-08-23.md`](../research/AUDIT-2026-08-23.md) §6·§7 ·
-[`../research/ext-agent-collaboration-v2.md`](../research/ext-agent-collaboration-v2.md) §1·§3
-**실행 단위**: [`../PLAN.md`](../PLAN.md) Phase 0 / T17
+**실측 출처**: `ext-graph-engineering-v2.md` §1·§7 · `AUDIT-2026-08-23.md` §6·§7 ·
+`ext-agent-collaboration-v2.md` §1·§3 · 실행 단위는 그 프로그램의 `PLAN.md` Phase 0 / T17.
+
+> ⚠️ **이 네 문서는 2026-08-25 에 이 저장소 밖으로 나갔다.** 배포물이 아니라 유지관리자의
+> 관리 기록이라서다(소유 경계는 "배포되는가" 하나). 그래서 여기서는 링크가 아니라 이름으로만
+> 적는다 — 이 저장소를 클론한 머신에는 그 파일들이 없고, 없는 경로를 가리키는 링크는 에러
+> 없이 죽는다. 위 규칙들은 그 문서 없이도 그대로 성립하도록 본문에 근거를 요약해 뒀다.

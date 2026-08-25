@@ -257,8 +257,12 @@ lost work, because HUB.md held the state.
 
 ## Provenance
 
-Derived from the harness project records in this repo —
-`docs/harness/protocol/multisession-brief-template.md` and the 2026-08-23/24
-measurements around it (migrated from the vault 2026-08-24). That doc is the
-rationale record; **this skill is the operational SSOT** — when they disagree,
-fix both in the same change.
+Derived from `docs/harness/protocol/multisession-brief-template.md` and the
+2026-08-23/24 measurements beside it in `docs/harness/measurements/`. Those two
+directories are what this repo keeps of the harness program: the rationale
+record for this skill, and the hook-firing numbers that justify the hooks
+shipped here. The program's plan, design, and ecosystem research left this repo
+on 2026-08-25 — they are maintenance records, not part of the distribution.
+
+That template is the rationale record; **this skill is the operational SSOT** —
+when they disagree, fix both in the same change.
