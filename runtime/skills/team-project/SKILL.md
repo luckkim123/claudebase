@@ -279,17 +279,14 @@ separate agents (the fallibility rule applies to managers too).
 | Session ↔ session (same machine) | SendMessage (carried a full campaign exchange with zero defects) |
 | Cross-machine | orca orchestration — read the pitfalls memory first (legacy queue has no ack; re-output cost grows linearly) |
 
-**Executor choice is a cost decision, not a style one**, and the two options sit
-at opposite ends. A Claude Code subagent takes Anthropic models only (the Agent
-tool's `model` accepts `sonnet|opus|haiku|fable`) and fills a fresh context
-window, so brief, tool definitions, and system prompt are paid again per
-worker, at cache-miss prices. An external CLI worker (`omc team
-1:gemini:executor`, a tmux pane) costs **zero Claude tokens** but is one-shot:
-it cannot use SendMessage or the task list, so the coordinator writes its
-prompt file, spawns it, and reads its output file. Routing an external model
-*through* the session instead — an MCP proxy, `omc ask` — is the one form that
-saves nothing: the Claude worker stays alive and takes the other model's output
-back into its own context, so both are billed.
+**Worker count is the cost, because each one refills a context window.** A
+subagent starts cold — brief, tool definitions, and system prompt are paid
+again per worker, at cache-miss prices, while the coordinator's own context
+re-reads at cache-hit rates. So an extra worker is never free even when its
+task is small, and the model line in the launch proposal is what decides how
+expensive that refill is. (Non-Anthropic executors — an external CLI worker in
+its own process, an MCP proxy — were evaluated 2026-08-26 and ruled out by
+operator decision: this rig runs Claude only.)
 
 ## Coordinator context — compact discipline
 
