@@ -141,6 +141,10 @@ def main():
             tp = None
         tp = tp or os.environ.get("CLAUDE_TRANSCRIPT_PATH") or os.environ.get("TRANSCRIPT_PATH")
         if not tp or not os.path.exists(tp):
+            # 이 경로도 기록한다 — 검사할 트랜스크립트가 없었다는 것이지 훅이
+            # 안 돌았다는 뜻이 아니다. 안 남기면 로그 0 건이 미발화로 읽힌다(T4).
+            hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
+                         acted=False, reason="no-transcript")
             return 0  # hook context without a transcript: no-op, never block
         files.append(tp)
 
@@ -162,9 +166,10 @@ def main():
     # One firing per invocation, not per file — a `--fix a b c` CLI call touching
     # several files must still log as a single event (same "1 firing = 1 line"
     # contract as graph-refresh.sh's dedup fix).
-    if found_any:
-        hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
-                     repaired=total_repaired, found=total_found)
+    # acted=False 도 기록한다 — 서로게이트가 없었다는 것은 이 훅이 놀았다는 뜻이
+    # 아니라 정상이라는 뜻이고, 0 건을 미발화로 읽으면 수리기를 지우게 된다(T4).
+    hooklog.fire("fix_surrogate.jsonl", hook_cwd, hook_session_id,
+                 acted=found_any, repaired=total_repaired, found=total_found)
     # check mode: nonzero exit signals detection; fix mode: always 0 (never block the session)
     if (args.check or args.check_current) and found_any:
         return 1

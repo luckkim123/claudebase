@@ -75,16 +75,16 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0
 
+    # 매 발화를 기록한다 — acted 로 "돌았는데 할 일 없었다"와 "안 돌았다"를 가른다.
+    # 2026-08-25 T4: fire 가 이 블록 *뒤*에 있어서 0 건이 미발화로 오독됐다.
+    cwd, sid = payload.get("cwd"), payload.get("session_id")
     title = (payload.get("session_title") or "").strip()
-    if not title:
-        return 0
-
-    new = reshape(title)
+    new = reshape(title) if title else None
     if not new or new == title:
+        hooklog.fire("session_title_3words.jsonl", cwd, sid, acted=False)
         return 0
 
-    hooklog.fire("session_title_3words.jsonl", payload.get("cwd"), payload.get("session_id"),
-                 titled=True)
+    hooklog.fire("session_title_3words.jsonl", cwd, sid, acted=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",

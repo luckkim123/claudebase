@@ -25,6 +25,16 @@ import glob
 import json
 import os
 import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def fire(*_a, **_k):
+            pass
 
 MAX_CHARS = 1200  # hook injection is capped in CHARACTERS, not bytes
 
@@ -48,16 +58,16 @@ def find_hubs(cwd):
     return sorted(glob.glob(os.path.join(cwd, ".omc", "*", "HUB.md")))
 
 
-def prompt_submit(cwd):
+def prompt_submit(cwd) -> bool:
     sd = state_dir(cwd)
     if not sd:
-        return
+        return False
     trigger = os.path.join(sd, "compact-requested.json")
     try:
         with open(trigger) as f:
             data = json.load(f)
     except (OSError, ValueError):
-        return
+        return False
 
     try:
         os.remove(trigger)
@@ -83,12 +93,13 @@ def prompt_submit(cwd):
         ]
     lines.append("</compact-guard>")
     sys.stdout.write("\n".join(lines)[:MAX_CHARS])
+    return True
 
 
-def pre_compact(cwd):
+def pre_compact(cwd) -> bool:
     hubs = find_hubs(cwd)
     if not hubs:
-        return  # not a hub session; OMC's own wiki-pre-compact still runs
+        return False  # not a hub session; OMC's own wiki-pre-compact still runs
     rel = [os.path.relpath(h, cwd) for h in hubs]
     lines = [
         "<compact-guard: 협업 허브 복구 지점>",
@@ -101,15 +112,20 @@ def pre_compact(cwd):
         "</compact-guard>",
     ]
     sys.stdout.write("\n".join(lines)[:MAX_CHARS])
+    return True
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    acted = False
     if mode == "prompt-submit":
-        prompt_submit(cwd)
+        acted = prompt_submit(cwd)
     elif mode == "pre-compact":
-        pre_compact(cwd)
+        acted = pre_compact(cwd)
+    # 2026-08-25 T4: 이 훅은 PLAN 의 12개 뒤에 생겨 계측기 없이 라이브였다.
+    hooklog.fire("compact_guard.jsonl", cwd, os.environ.get("CLAUDE_SESSION_ID"),
+                 mode=mode, acted=acted)
 
 
 if __name__ == "__main__":

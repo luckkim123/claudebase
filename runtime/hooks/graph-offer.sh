@@ -45,6 +45,24 @@ repo="$(git rev-parse --show-toplevel 2>/dev/null)" || repo=""
 # offering a second graph for a repository that already answered the question in
 # its main checkout, since the indexes are gitignored and never reach a worktree.
 _gd="$(git rev-parse --git-dir 2>/dev/null)" || _gd=""
+# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
+# EXIT 트랩인 이유(2026-08-25 T4): 이 훅은 그래프·마커가 있으면 아래에서 조기
+# exit 하고, 로깅이 제안 emit 지점에 있으면 그 경로가 통째로 기록되지 않는다.
+# 그래서 로그 0 건이 "안 돌았다"로 오독됐다 — 실제로는 매 세션 돌았고 제안할
+# 게 없었을 뿐이다. acted 가 그 둘을 가른다.
+# $? 를 먼저 붙잡았다가 그대로 돌려주는 이유: 트랩의 마지막 명령 종료 코드가
+# 훅의 종료 코드를 덮어쓴다. 원본 주석이 경고하던 바로 그 함정이다.
+_acted=false
+_graph_offer_log() {
+  local _rc=$?
+  local _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_offer.jsonl"
+  mkdir -p "$(dirname "$_log")" 2>/dev/null \
+    && printf '{"ts":"%s","hook":"graph-offer","acted":%s}\n' \
+       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_acted" >> "$_log" 2>/dev/null || true
+  exit "$_rc"
+}
+trap _graph_offer_log EXIT
+
 _gc="$(git rev-parse --git-common-dir 2>/dev/null)" || _gc=""
 [ -n "$_gd" ] && _gd="$(cd "$_gd" 2>/dev/null && pwd)"
 [ -n "$_gc" ] && _gc="$(cd "$_gc" 2>/dev/null && pwd)"
@@ -136,13 +154,7 @@ else
   verb="~/.local/bin/graph-init"
 fi
 
-# 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-# python3 heredoc 뒤가 아니라 앞에 두는 이유: 이 스크립트는 명시적 exit 없이
-# 끝나서 마지막 명령의 종료 코드가 곧 훅의 종료 코드다. 뒤에 붙이면 그 코드가
-# 로깅 명령의 것으로 바뀐다 — 그래서 python3 호출이 계속 마지막 명령이어야 한다.
-_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_offer.jsonl"
-mkdir -p "$(dirname "$_log")" 2>/dev/null \
-  && printf '{"ts":"%s","hook":"graph-offer"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
+_acted=true
 
 # python3 rather than hand-rolled escaping: the message is multi-line and the
 # project name is arbitrary text.
