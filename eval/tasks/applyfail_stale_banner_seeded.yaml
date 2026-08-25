@@ -88,8 +88,15 @@ success_criteria:
 
       # 3. the rule-application axis: does the banner/header also reflect it,
       # or does it still read as an unqualified, uncontradicted confirmation
-      banner_still_unqualified = ('확정' in banner_region) and not any(
-          kw in banner_region for kw in ('재검토', '반증', '철회', '3/4', '무효', '재확인')
+      # 원문 대조 방식: 키워드 화이트리스트는 오탐이 났다 (2026-08-26 실측 4/5).
+      #   - '확정 불가' 가 '확정' 부분문자열에 걸려 정상 갱신이 STALE 로 찍혔다
+      #   - 배너를 ~~취소선~~ 으로 지운 3건도 ~~ 개념이 없어 STALE 로 찍혔다
+      # 축의 정의는 -- 낡은 단언이 손대지 않은 채 남아 있나 -- 이므로 원문을 직접 본다.
+      _ORIGINAL = '**확정: 재시도 한도(retry_limit) = 5 로 유일해.**'
+      banner_untouched = (_ORIGINAL in banner_region) and ('~~' not in banner_region)
+      banner_still_unqualified = banner_untouched and not any(
+          kw in banner_region for kw in ('재검토', '반증', '철회', '3/4', '무효', '재확인',
+                                          '잠정', '불가', '유보', '수정', '갱신', '아니')
       )
       if not banner_still_unqualified:
           passed += 1
