@@ -97,6 +97,13 @@ maybe_install_viewer
 source "$REPO_DIR/installer/lib/claude_mouse.sh"
 maybe_enable_claude_mouse
 
+# Vendor-CLI probe for oh-my-orchestrator → lib/orchestrator_vendors.sh. Its
+# role→backend table is tracked and shared, so it cannot know what any one
+# machine has; the answer belongs in a machine-local file. Opt-in, marker-guarded.
+# shellcheck source=lib/orchestrator_vendors.sh
+source "$REPO_DIR/installer/lib/orchestrator_vendors.sh"
+maybe_record_orchestrator_vendors
+
 # Idempotent editable (re)install of the omx-core CLI → lib/omx.sh. Re-pins the
 # editable install to the current oh-my-experiments checkout so a moved repo
 # (e.g. /workspace -> /root) self-heals here instead of leaving `omx` broken

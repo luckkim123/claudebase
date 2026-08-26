@@ -303,6 +303,43 @@ if ($Enabled -match 'oh-my-claudecode@omc') {
     }
 }
 
+# 7b. vendor-CLI probe for oh-my-orchestrator (mirror of install.sh
+#     lib/orchestrator_vendors.sh). Its role->backend table is tracked and shared
+#     across machines, so it cannot know what any one machine has -- the answer
+#     belongs in a machine-local file. Opt-in, and the file's existence is the
+#     marker that makes a re-run a pure no-op.
+function Record-OrchestratorVendors {
+    $file = Join-Path $ClaudeHome 'orchestrator-vendors.local.json'
+    if (Test-Path -LiteralPath $file) {
+        Debug "orchestrator-vendors: already recorded at $file (skip)"
+        return
+    }
+    if ($env:INSTALL_ORCHESTRATOR_VENDORS -ne '1') {
+        Debug "orchestrator-vendors: opt-in not set (skip)"
+        return
+    }
+    # agy is probed for the record only: codeagent-wrapper has no agy backend and
+    # each backend's Command() is hardcoded, so nothing can route to it.
+    $wired = [ordered]@{}
+    foreach ($n in @('codex', 'claude', 'gemini', 'opencode')) {
+        $wired[$n] = [bool](Get-Command $n -ErrorAction SilentlyContinue)
+    }
+    $probeOnly = [ordered]@{}
+    foreach ($n in @('agy')) {
+        $probeOnly[$n] = [bool](Get-Command $n -ErrorAction SilentlyContinue)
+    }
+    $payload = [ordered]@{
+        '_comment'  = 'Machine-local. Written once by install.ps1. Delete this file and re-run the installer to re-probe. Presence on PATH is not authentication -- verify with one cheap call before routing a role to a vendor.'
+        'probed_at' = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        'wired'     = $wired
+        'probe_only' = $probeOnly
+    }
+    New-Item -ItemType Directory -Force -Path $ClaudeHome | Out-Null
+    $payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $file -Encoding UTF8
+    Log "orchestrator-vendors: recorded to $file"
+}
+Record-OrchestratorVendors
+
 # 8. settings.json drift check (mirror of install.sh step 9) — warn-only.
 #    Claude Code CLI writes straight back into the symlinked repo file when
 #    it auto-formats or persists new settings.
