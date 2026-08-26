@@ -1,5 +1,12 @@
 # 멀티세션 브리프 템플릿
 
+> **2026-08-26 — `team-project` 스킬은 은퇴했다 (D3).** 운영 SSOT 는 이제
+> `oh-my-orchestrator` 의 `skills/harness/references/campaign-protocol.md` 이고,
+> 보드는 `<project>/.orchestration/`(board.json + HUB.md) 이다. **이 문서는 그 근거
+> 기록으로 남는다** — 아래의 `.community/` 경로와 스킬 이름은 당시 상태 기술이므로
+> 고치지 않는다. 규칙이 갈리면 이관본이 이긴다.
+
+
 > **운영 정본은 이 문서가 아니다** — 캠페인을 실제로 돌리는 규약은
 > `runtime/skills/team-project/SKILL.md` 다 (2026-08-24 승격). 이 문서는 그 규약이
 > 나온 측정·근거 기록이다. 둘이 어긋나면 같은 변경에서 둘 다 고친다.
