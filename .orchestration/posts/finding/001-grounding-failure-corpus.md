@@ -185,7 +185,7 @@ sha 는 이 스캔에서 특정 못 했다(§ 아래 참조). `366ea244`·`f5cbd
 
 ## 부록 B — "몇 초" (arm2 파단 원인) 및 심각도 열
 
-조정자가 찾은 사례. 원문 검증: `~/ksm_Obsidian/0_Project/in_progress/albc/.community/posts/finding/047-e2-run1-arm2-fracture.md`
+조정자가 찾은 사례. 원문 검증: `~/ksm_Obsidian/0_Project/in_progress/albc/.orchestration/posts/finding/047-e2-run1-arm2-fracture.md`
 §2-1 을 Read 로 직접 열어 인용문·표를 대조했다 — 조정자 인용과 원문이 **정확히 일치**(따로 온 것 없음).
 
 ### 사례

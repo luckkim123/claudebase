@@ -155,7 +155,7 @@ eval 4축 0개 판정은 **유지**(W4 의 신설 task 가 축1·2를 부분적�
 
 #### 🔴 등급 1 사례 — 코퍼스에서 유일하게 물리 파손으로 이어졌다
 
-`~/ksm_Obsidian/0_Project/in_progress/albc/.community/posts/finding/047-e2-run1-arm2-fracture.md` §2-1 (조정자가 원문 대조):
+`~/ksm_Obsidian/0_Project/in_progress/albc/.orchestration/posts/finding/047-e2-run1-arm2-fracture.md` §2-1 (조정자가 원문 대조):
 
 > 세션은 이 구간을 **"몇 초간 팔 토크가 빠집니다"** 라고 안내했다.
 
