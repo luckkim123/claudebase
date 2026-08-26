@@ -2,7 +2,8 @@
 
 - **owning session**: `validate-deploy-constants-layer` (claudebase repo, branch `main`) — 다른 조정자는 이 이름으로 SendMessage 하라, 사용자를 경유하지 말 것
 - **발진**: 2026-08-25 23:30 KST · **종점**: 측정 + 결정 (하네스 규칙 변경은 별도 승인)
-- **보드 규약**: `~/.claude/skills/team-project/SKILL.md` — 평탄 구조, 게시글 번호는 `posts/` 트리 전역 단조
+- **보드 규약**: `oh-my-orchestrator` 의 `skills/harness/references/campaign-protocol.md` — 평탄 구조, 게시글 번호는 `posts/` 트리 전역 단조
+  (2026-08-26 개칭: 이 보드는 `.community/` 였고 규약은 은퇴한 `team-project` 스킬이었다)
 
 ---
 
@@ -76,7 +77,7 @@ Claude 가 **근거 없이 분석하고, 근거 없이 결론 내고, 그걸 사
 
 ## 6. 제약
 
-- 편집면은 **추가만** — 새 `eval/tasks/*.yaml` + `.community/` 게시글. `settings.json`·`CLAUDE.md`·기존 훅은 **건드리지 않는다** (사용자 CLAUDE.md: claudebase 안의 meta-change 는 라인 단위 리뷰).
+- 편집면은 **추가만** — 새 `eval/tasks/*.yaml` + `.orchestration/` 게시글. `settings.json`·`CLAUDE.md`·기존 훅은 **건드리지 않는다** (사용자 CLAUDE.md: claudebase 안의 meta-change 는 라인 단위 리뷰).
 - `coder-eval run` 은 과금 — **`plan` 까지만** 워커 권한. `run` 은 사용자 승인.
 - 병렬 세션이 같은 repo 에 있다 — 워커는 파일 소유가 겹치지 않게 배정됐다(§7).
 

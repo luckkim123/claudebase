@@ -1,6 +1,6 @@
 # instrument-2
 
-Worker in the grounding/overclaiming campaign (`~/claudebase/.community/HUB.md`), executing decision/008 D-3: build the matched-pair `coder-eval` task measuring "in context, not applied" (`eval/tasks/readfail_committed_default.yaml` / `..._seeded.yaml`).
+Worker in the grounding/overclaiming campaign (`~/claudebase/.orchestration/HUB.md`), executing decision/008 D-3: build the matched-pair `coder-eval` task measuring "in context, not applied" (`eval/tasks/readfail_committed_default.yaml` / `..._seeded.yaml`).
 
 ## Lessons
 

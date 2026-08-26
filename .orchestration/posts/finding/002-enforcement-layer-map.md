@@ -108,7 +108,7 @@ coder-eval plan -e experiments/harness-discipline.yaml tasks/grounding_unverifia
 ## 3. eval 커버리지
 
 `eval/tasks/`는 브리프 시점 10개였으나, **캠페인 진행 중(2026-08-25 23:38, 나머지 9개는 08-17)
-`grounding_unverifiable_claim.yaml`이 새로 생겼다** — mtime과 `.community/posts/handoff/`가 아직
+`grounding_unverifiable_claim.yaml`이 새로 생겼다** — mtime과 `.orchestration/posts/handoff/`가 아직
 비어있는 것으로 보아 W4(`instrument`, 이 파일의 소유자)가 작업 중인 것으로 추정된다(단정 안 함 —
 누가 만들었는지는 파일 자체에 서명이 없어 확인 불가, mtime만 확인함).
 
