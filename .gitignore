@@ -52,3 +52,14 @@ eval/runs/
 # clone), the runtime state does not (scans, work/, secretary/ are per-machine).
 .omp/*
 !.omp/rules.json
+
+# hq CLI store lock (P1, pre-.hq/.anchor rollout) — the advisory fcntl lock
+# file store.py creates under community_dir(). .orchestration/ itself stays
+# tracked.
+**/.orchestration/.hq-lock
+
+# .hq unified store: work/ is regenerable output, runtime/ is session state,
+# locks, logs, and anything sensitive. community/ and config/ stay tracked
+# (store-spec §3, §5). The `**/` prefix is required because anchors nest.
+**/.hq/work/
+**/.hq/runtime/
