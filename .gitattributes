@@ -1,0 +1,10 @@
+# This directory is a `.hq` anchor root (`.hq/.anchor` -> id: claudebase).
+# The rule lives beside the anchor rather than in some parent so that it
+# travels with the anchor and no parent file needs editing when another
+# anchor is seeded.
+
+# migrated.jsonl is an append-only migration ledger. Every machine and linked
+# worktree appends its own lines, so a 3-way merge conflicts on essentially
+# every sync. union keeps both sides — entries may interleave, which is
+# harmless because the file is read per-entry.
+.hq/config/migrated.jsonl merge=union
