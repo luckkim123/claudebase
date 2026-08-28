@@ -77,7 +77,7 @@ sha() {
 }
 
 # --------------------------------------------------------------------------
-# The mapping table (store-spec §9.3, plus the four rows the spec's list did
+# The mapping table (store-spec §9.3, plus the five rows the spec's list did
 # not carry — see the deviation notes below the table).
 #
 # Row format: mode|legacy|new
@@ -120,6 +120,7 @@ EOF
   oms) cat <<'EOF'
 file|learned.md|config/scholar/learned.md
 file|state/verified-citations.json|config/scholar/verified-citations.json
+file|section3_audit_workflow.js|config/scholar/section3_audit_workflow.js
 glob|state/pilot-*.json|runtime/scholar
 glob|state/revise-*.json|runtime/scholar
 dir|venues|config/scholar/venues
@@ -177,6 +178,15 @@ EOF
 #     `posts/` would destroy.
 #   * `omd` `wiki/` — absent from the spec's omd row; workspace's store has
 #     `wiki/{convention,pattern,technique}/`. Same layer as omp's and oms's.
+#   * `oms` `section3_audit_workflow.js` — a Workflow script (`export const
+#     meta`) sitting at the store root instead of inside `workflows/`, found in
+#     `12_Masters_Thesis/.oms` (**added P6**). Same class as `workflows/*.js`
+#     — hand-authored, executed by a verb — so (3) `config/scholar/`. It keeps
+#     its root position rather than being tidied into `workflows/`: this table
+#     assigns layers, and normalising placement here would make `reverse` put
+#     the file somewhere it has never been. A general `glob|*.js` row is not
+#     available — shell `*` spans `/`, so it would also swallow a work slug's
+#     own `.js` before the `slug` row ever ran.
 
 # Paths never moved, at any depth, for every kind. `.omc/` is third-party
 # (`OMC_STATE_DIR`, store-spec §12); `.DS_Store` is not ours; `.hq-lock` is a

@@ -38,6 +38,7 @@
 # `.vscode/` survived with 4 nodes. Name the directories; do not rely on the
 # glob alone.
 .*/
+.hq/
 .omx/
 .omp/
 .omd/

@@ -2,6 +2,44 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-28 (P6) — the tool meets the anchors it was written for
+
+P5 built `migrate-om-store.sh` and ran it against nothing. P6 ran it against
+all eleven remaining stores, and the first thing it did was refuse one.
+
+### Changed
+- `runtime/bin/migrate-om-store.sh` — a fifth deviation row: an `oms` store-root
+  Workflow `.js` (`section3_audit_workflow.js`, found in workspace's
+  `12_Masters_Thesis/.oms`). Same class as `workflows/*.js` — hand-authored, run
+  by a verb — so ③ `config/scholar/`. It keeps its root position rather than
+  being tidied into `workflows/`, because this table assigns layers and
+  normalising placement would make `reverse` land the file where it never was.
+  A general `glob|*.js` row is not available: shell `*` spans `/`, so it would
+  also swallow a work slug's own `.js` before the `slug` row ran. selftest 45→46.
+- `.gitignore` — `**/.hq/community/.hq-lock` beside the existing
+  `**/.orchestration/.hq-lock`. The lock follows the community root and the
+  cutover moved that root; the legacy path can still take a lock until the
+  fallback window closes, so both lines stay.
+- `templates/project-code-review-graphignore` — `.hq/` added. CRG walks
+  `git ls-files` and `community/`+`config/` are tracked, so without this the
+  store indexes itself.
+- Docs that asserted a *current* location under a legacy store now name the
+  `.hq/` layer: `config/CLAUDE.md` (where project knowledge is written),
+  `docs/operating-rationale.md`, `docs/third-party-skills.md`,
+  `runtime/agents/mle-reviewer.md`, `runtime/skills/gen-image/SKILL.md`
+  (the output-dir contract), `runtime/skills/gateguard/SKILL.md` (the exempt
+  glob list, which `config/settings.json` already led with `.hq/**`).
+
+### Notes
+- **History and the dual-read mechanism were deliberately left alone.** The
+  legacy stores are still on disk and still read until each harness ships its
+  fallback-removal release, so a doc describing that resolution — or narrating
+  what an earlier phase did — is current and correct. Only present-tense
+  location claims were rewritten.
+- `runtime/skills/skill-comply/tests/` fails collection under a repo-root
+  `pytest` (`No module named 'scripts'`) — pre-existing, unrelated to this
+  entry. `pytest tests` is the suite: 436 pass.
+
 ## [Unreleased] — 2026-08-28 — a migration that cannot quietly skip anything
 
 The om* harnesses are consolidating five per-harness state stores into one

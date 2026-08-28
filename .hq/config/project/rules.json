@@ -160,6 +160,13 @@
       }
     ]
   },
+  "layers": {
+    "root": ".hq",
+    "tracked": ["community", "config"],
+    "ignored": ["work", "runtime"],
+    "severity": "error",
+    "origin": "preset"
+  },
   "content_conventions": [
     {
       "applies_to": "runtime/skills/*/SKILL.md",

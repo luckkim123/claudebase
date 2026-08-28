@@ -100,7 +100,7 @@ stdout on every call — a gate that looks wired and never fires. `hooks/run.js`
 the ~20-line adapter, written here, that turns `run()`'s return into a real hook
 response without importing ECC's `run-with-flags.js` profile machinery. Confirmed
 live: the first Edit of a source file denies and the retry passes, a destructive
-`Bash` denies, `.omp/**` is exempt, `OMC_SKIP_HOOKS=gateguard` bypasses, and the
+`Bash` denies, `.hq/**` and `.omp/**` are exempt, `OMC_SKIP_HOOKS=gateguard` bypasses, and the
 fourth denial of a session arrives condensed to one line exactly as the skill
 documents.
 
@@ -155,7 +155,7 @@ satisfied by vendoring 751 and 348 lines of reference card:
 - `mle-reviewer.md` → `mle-workflow`. Now routes to the lanes that own those
   stages harder than a workflow card could — `oh-my-experiments` for run identity,
   promotion gates, and the ledger; `oh-my-project` for checksums, split leakage,
-  and lineage in `.omp/manifest.json`.
+  and lineage in `.hq/config/project/manifest.json`.
 
 The four other names that read like dangling references in `mle-reviewer.md`
 (`database-reviewer`, `performance-optimizer`, `silent-failure-hunter`,

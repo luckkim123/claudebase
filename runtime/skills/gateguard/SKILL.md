@@ -116,7 +116,7 @@ turns `run()`'s return value into a real hook response without importing ECC's
 `run-with-flags.js` profile machinery.
 
 `GATEGUARD_EXEMPT_GLOBS` is set in `config/settings.json` to skip harness state and
-vendored trees (`.omp/**`, `.omx/**`, `.oms/**`, `.omd/**`, `.omha/**`, `.sp/**`,
+vendored trees (`.hq/**`, `.omp/**`, `.omx/**`, `.oms/**`, `.omd/**`, `.omha/**`, `.sp/**`,
 `.graphify/**`, `.code-review-graph/**`, `node_modules/**`,
 `.git/**`). A wiki page has no importers to list, so gating one costs a denial and
 buys nothing; a source file is the opposite.

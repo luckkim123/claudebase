@@ -112,7 +112,7 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 
 | | Follows the worktree? | Failure |
 |:---|:---|:---|
-| `.omp/`, a tracked `.graphify/` | yes, as branch content | append-only state (e.g. `.omp/secretary/ledger.jsonl`) forks per branch and collides at merge |
+| `.omp/`, a tracked `.graphify/` | yes, as branch content | append-only state (e.g. `.hq/config/project/secretary/ledger.jsonl`) forks per branch and collides at merge |
 | `.code-review-graph/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
 
 The second half is the dangerous one: an absent index is indistinguishable from a healthy one that found nothing — the same silent-success class `templates/project-code-review-graph.md` documents at length. Worse, an MCP query that omits `repo_root` *creates* an empty `graph.db` at its cwd and answers `status: "ok"`, so the worktree ends up holding a plausible-looking 0-node index.

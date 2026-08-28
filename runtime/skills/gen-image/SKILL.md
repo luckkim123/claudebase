@@ -1,7 +1,7 @@
 ---
 name: gen-image
 description: |
-  Generate ONE image with Google's Nano Banana models (Gemini 3 image family) and save it to a required, explicitly-resolved output directory. Lets the caller pick the model tier (banana2 = fast, pro = high quality) and resolution (1K/2K/4K); defaults to pro·2K. Crafts the user's intent into Google's 5-component scene prompt, calls the verified /v1beta/interactions REST endpoint directly, and confirms the file on disk (never trusts stdout alone). text-to-image only. Output dir is a hard contract by caller: oms→.oms/assets/, omd→.omd/assets/, human→$GEN_IMAGE_OUTDIR or project inbox, else ask.
+  Generate ONE image with Google's Nano Banana models (Gemini 3 image family) and save it to a required, explicitly-resolved output directory. Lets the caller pick the model tier (banana2 = fast, pro = high quality) and resolution (1K/2K/4K); defaults to pro·2K. Crafts the user's intent into Google's 5-component scene prompt, calls the verified /v1beta/interactions REST endpoint directly, and confirms the file on disk (never trusts stdout alone). text-to-image only. Output dir is a hard contract by caller: oms→.hq/work/scholar/assets/, omd→.hq/work/docs/assets/, human→$GEN_IMAGE_OUTDIR or project inbox, else ask.
   Triggers: 그려줘, 이미지 만들어, 아이콘 생성, 그림, 포스터, 썸네일, nano banana, banana2, draw, create image, generate image, make a thumbnail
 argument-hint: "<output-dir> <prompt> [--model pro|banana2] [--size 1K|2K|4K] [--aspect 16:9|1:1|9:16|...] [--diagnose]"
 level: 2
@@ -61,8 +61,8 @@ The skill's #1 historical failure was scattering images wherever felt right that
 | Caller | Output directory |
 |:---|:---|
 | Passed an explicit path (`--out`, `output_dir=`, "save to X") | that path |
-| **oms / scholar harness** (a `.oms/` work-root in cwd, or called from an oms skill) | `.oms/assets/` |
-| **omd / docs harness** (an `.omd/` work-root in cwd, or called from an omd skill) | `.omd/assets/` (or `<target-doc-folder>/assets/` if the build targets one concrete folder) |
+| **oms / scholar harness** (a scholar work-root in cwd, or called from an oms skill) | `.hq/work/scholar/assets/` |
+| **omd / docs harness** (a docs work-root in cwd, or called from an omd skill) | `.hq/work/docs/assets/` (or `<target-doc-folder>/assets/` if the build targets one concrete folder) |
 | Human, with `$GEN_IMAGE_OUTDIR` set | `$GEN_IMAGE_OUTDIR` |
 | Human, with a known project inbox (`_inbox/`, `assets/`, a Johnny-Decimal `91_Inbox/`) | that inbox |
 | Human, none of the above | **STOP and ask where to save** |

@@ -56,7 +56,7 @@ cover the two checklist sections most likely to fire here:
 
 - **Data Contract and Leakage** — `oh-my-project` owns dataset identity. Its audit
   stage already checks checksum drift and split leakage against
-  `.omp/manifest.json`, so raise findings there instead of re-deriving lineage by
+  `.hq/config/project/manifest.json`, so raise findings there instead of re-deriving lineage by
   hand (`/oh-my-project:omp-audit`, or the `auditor` agent).
 - **Evaluation and Promotion** — `oh-my-experiments` owns run identity, gates, and
   the campaign ledger. Promotion-gate and baseline-comparison findings belong in
@@ -188,5 +188,5 @@ The checklist above is self-contained. Upstream pointed here at ECC's
 of this file already own those stages and own them harder — `oh-my-experiments`
 holds run identity, promotion gates, the campaign ledger, and the
 never-auto-launch rule, while `oh-my-project` holds dataset checksums, split
-leakage, and lineage in `.omp/manifest.json`. Route a finding to the lane that
+leakage, and lineage in `.hq/config/project/manifest.json`. Route a finding to the lane that
 owns it instead of to a generic workflow card.

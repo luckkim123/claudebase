@@ -53,10 +53,12 @@ eval/runs/
 .omp/*
 !.omp/rules.json
 
-# hq CLI store lock (P1, pre-.hq/.anchor rollout) — the advisory fcntl lock
-# file store.py creates under community_dir(). .orchestration/ itself stays
-# tracked.
+# hq CLI store lock — the advisory fcntl lock file store.py creates under
+# community_dir(). Two lines because the lock follows the community root and
+# the P6 cutover moved that root; the legacy path can still take a lock until
+# the fallback window closes (store-spec §7 purge), so it stays.
 **/.orchestration/.hq-lock
+**/.hq/community/.hq-lock
 
 # .hq unified store: work/ is regenerable output, runtime/ is session state,
 # locks, logs, and anything sensitive. community/ and config/ stay tracked
