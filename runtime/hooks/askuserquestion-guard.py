@@ -96,6 +96,15 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def state_root(cwd):
+            return cwd or "."
+
 REASON = (
     "Empty AskUserQuestion call rejected. Your tool_input was {} (or had no "
     "'questions' array). The harness would have rejected this with "
@@ -214,7 +223,7 @@ def _log_deny(cwd, session_id) -> None:
     surrogate shapes — together with its own missing-`questions` rejections into
     one per-session failure count ([3] cross-shape counting). Never raises."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         path = os.path.join(log_dir, "askuserquestion_guard.jsonl")
         with open(path, "a", encoding="utf-8") as f:

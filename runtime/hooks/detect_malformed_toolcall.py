@@ -47,6 +47,15 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def state_root(cwd):
+            return cwd or "."
+
 _MISSING = object()
 
 # Build the markup tokens by concatenation so THIS file never contains a
@@ -112,7 +121,7 @@ def _looks_like_leak(text: str) -> str | None:
 def _log(cwd: str, record: dict) -> None:
     """Best-effort telemetry. Never raises."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         path = os.path.join(log_dir, "malformed_toolcall.jsonl")
         with open(path, "a", encoding="utf-8") as f:

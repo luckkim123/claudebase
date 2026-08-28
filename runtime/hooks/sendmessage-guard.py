@@ -66,6 +66,15 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def state_root(cwd):
+            return cwd or "."
+
 BYPASS_ENV = "SENDMESSAGE_GUARD"
 BYPASS_TOKEN = "XSESSION_OK:"
 
@@ -198,7 +207,7 @@ def _log_deny(cwd, session_id) -> None:
     """Best-effort telemetry, same shape and location as the sibling guards so
     one tool can fold their counts together. Never raises."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         with open(os.path.join(log_dir, "sendmessage_guard.jsonl"),
                   "a", encoding="utf-8") as f:

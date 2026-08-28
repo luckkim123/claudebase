@@ -2,6 +2,45 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-28 — a telemetry path that followed the `cd`
+
+One vault had **18 stray `.omc/` directories**. None was a session root: 17 held
+nothing but `logs/`, and the 18th was a two-week-old state root from a session
+launched inside a nested repo. The tell was in the records themselves — a single
+`session_id` appeared under three different directories, which no session-root
+story explains.
+
+### Fixed
+- `runtime/hooks/hooklog.py` — `fire()` resolved its log directory as
+  `os.path.join(cwd or ".", ".omc", "logs")` and `makedirs`'d it. The hook
+  payload's `cwd` follows the **Bash tool's `cd`**, so every directory any
+  session ever visited got a fresh `.omc/logs/`. New `state_root()` ascends to
+  the nearest ancestor that already owns a `.omc/`, falling back to the nearest
+  `.git` root, and **never ascends into `$HOME`** — a `~/.omc` exists on this
+  machine and would have pooled every project's telemetry there.
+  This is the same resolution `graphify-guard.sh` already does for its graph and
+  `session-gate.py:_find_config` already does for its config; the same file's
+  logging call was the one place that still trusted `cwd` raw.
+- Eight inlined copies of that expression, in six hooks, now call
+  `hooklog.state_root()` — `agent-routing-guard.py`, `askuserquestion_retry.py`
+  (×3), `detect_malformed_toolcall.py`, `askuserquestion-guard.py`,
+  `emoji_guard.py`, `sendmessage-guard.py`. They had each re-implemented the
+  helper rather than importing it, so fixing the helper alone would have left
+  six litterers.
+
+### Verification
+- `tests/hooks/test_hooklog.py` — 3 new tests, each checked for discrimination
+  by planting the failure it guards: reverting `state_root` fails the ascent and
+  git-root tests; removing the `$HOME` guard fails the third. 8/8 pass on the
+  patched file.
+- `pytest tests/` **441 passed**. The 3 collection errors under
+  `runtime/skills/skill-comply/tests/` reproduce at HEAD with these changes
+  stashed — pre-existing, unrelated.
+- Live fire: `hooklog.fire()` with `cwd` five levels deep inside a *nested git
+  repo* wrote to the vault root's `.omc/logs/` and created no new directory.
+- The 18 strays' 403 log lines were merged into the vault root's `.omc/logs/`
+  before the directories went to trash, so no telemetry was dropped.
+
 ## [Unreleased] — 2026-08-28 (P7) — the last migration round, and the mode the table needed
 
 P7 moved the two live-campaign stores the gate had held back since 2026-08-25.

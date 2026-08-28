@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""훅 발화 1건을 <cwd>/.omc/logs/<stem> 에 append 한다.
+"""훅 발화 1건을 <프로젝트 루트>/.omc/logs/<stem> 에 append 한다.
+
+루트는 state_root() 가 cwd 에서 상승해 찾는다 — cwd 를 그대로 쓰면
+`cd` 한 디렉터리마다 `.omc/` 가 새로 생긴다(아래 state_root 참조).
 
 왜 있는가:
   2026-08-22 실측 — settings.json 에 배선된 훅 중 12 개는 로그를 남기도록
@@ -24,10 +27,37 @@ import os
 from datetime import datetime, timezone
 
 
+def state_root(cwd) -> str:
+    """cwd 를 믿지 말고 `.omc/` 를 이미 가진 가장 가까운 조상을 찾는다.
+
+    왜: 훅 페이로드의 `cwd` 는 Bash 툴의 `cd` 를 따라간다. 그걸 그대로 쓰면
+    세션이 한 번이라도 들른 모든 디렉터리에 `.omc/logs/` 가 새로 생긴다 —
+    2026-08-28 실측, vault 한 곳에 18 개. 한 session_id 가 서로 다른 3 개
+    디렉터리에 로그를 남긴 것이 그 증거다. graphify-guard.sh 가 이미 쓰는
+    상승 패턴과 같다.
+
+    `$HOME` 안으로는 올라가지 않는다 — 이 머신엔 `~/.omc` 가 실재하고,
+    거기까지 올라가면 모든 프로젝트의 계측이 홈 디렉터리로 고인다.
+    `.omc/` 를 가진 조상이 없으면 `.git` 을 가진 가장 가까운 조상으로
+    떨어진다(신규 프로젝트의 첫 발화가 하위 디렉터리에서 나도 루트에 남게).
+    """
+    start = os.path.abspath(cwd or os.getcwd())
+    home = os.path.abspath(os.path.expanduser("~"))
+    git_root = None
+    d = start
+    while d != home and os.path.dirname(d) != d:
+        if os.path.isdir(os.path.join(d, ".omc")):
+            return d
+        if git_root is None and os.path.exists(os.path.join(d, ".git")):
+            git_root = d
+        d = os.path.dirname(d)
+    return git_root or start
+
+
 def fire(stem, cwd, session_id=None, **fields) -> None:
     """발화 1 건 기록. 실패해도 예외를 내지 않는다."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         row = {
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -53,3 +53,41 @@ def test_never_raises_on_none_cwd(tmp_path, monkeypatch):
 def test_non_serializable_field_does_not_raise(tmp_path):
     hooklog = _load()
     hooklog.fire("demo.jsonl", str(tmp_path), obj=object())
+
+
+# --- state_root: cwd 를 믿지 않는다 (2026-08-28, vault 에 .omc 18 개가 생긴 뒤) ---
+
+def test_ascends_to_ancestor_owning_omc(tmp_path):
+    """`cd` 로 내려간 하위 디렉터리에서 발화해도 로그는 프로젝트 루트로 간다."""
+    hooklog = _load()
+    (tmp_path / ".omc").mkdir()
+    deep = tmp_path / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    hooklog.fire("demo.jsonl", str(deep))
+    assert (tmp_path / ".omc" / "logs" / "demo.jsonl").is_file()
+    assert not (deep / ".omc").exists()          # 하위에 새로 만들지 않는다
+    assert not (tmp_path / "a" / ".omc").exists()
+
+
+def test_falls_back_to_git_root_when_no_omc_exists(tmp_path):
+    """`.omc` 를 가진 조상이 없으면 `.git` 루트로 — 신규 프로젝트의 첫 발화."""
+    hooklog = _load()
+    (tmp_path / ".git").mkdir()
+    deep = tmp_path / "src" / "pkg"
+    deep.mkdir(parents=True)
+    hooklog.fire("demo.jsonl", str(deep))
+    assert (tmp_path / ".omc" / "logs" / "demo.jsonl").is_file()
+    assert not (deep / ".omc").exists()
+
+
+def test_never_ascends_into_home(tmp_path, monkeypatch):
+    """`~/.omc` 가 실재하는 머신에서 모든 프로젝트 계측이 홈으로 고이면 안 된다."""
+    hooklog = _load()
+    fake_home = tmp_path
+    (fake_home / ".omc").mkdir()                  # 홈의 .omc — 잡히면 안 된다
+    monkeypatch.setenv("HOME", str(fake_home))
+    proj = fake_home / "proj"
+    proj.mkdir()
+    hooklog.fire("demo.jsonl", str(proj))
+    assert (proj / ".omc" / "logs" / "demo.jsonl").is_file()
+    assert not (fake_home / ".omc" / "logs").exists()

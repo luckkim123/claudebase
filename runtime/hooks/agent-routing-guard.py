@@ -64,6 +64,15 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def state_root(cwd):
+            return cwd or "."
+
 # --- research-intent detection -------------------------------------------------
 # Two categories. A task is "research" only when BOTH fire. Requiring both is the
 # false-positive guard: a single stray keyword (e.g. "compare these two configs"
@@ -135,7 +144,7 @@ def _log_deny(cwd, session_id) -> None:
     """Best-effort telemetry: one line per deny, mirroring askuserquestion-guard's
     log so the same tooling can fold these counts in. Never raises."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         path = os.path.join(log_dir, "agent_routing_guard.jsonl")
         with open(path, "a", encoding="utf-8") as f:

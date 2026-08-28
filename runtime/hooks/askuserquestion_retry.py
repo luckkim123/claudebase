@@ -69,6 +69,15 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hooklog  # noqa: E402
+except Exception:  # fail-open — 계측 헬퍼가 훅을 죽여선 안 된다
+    class hooklog:  # type: ignore  # noqa: N801
+        @staticmethod
+        def state_root(cwd):
+            return cwd or "."
+
 # The exact harness error text for a fully empty AskUserQuestion call. Both
 # tokens must be present so we never trip on an unrelated validation error.
 _ERR_TOOL = "AskUserQuestion"
@@ -312,7 +321,7 @@ def _session_failure_count(cwd: str, session_id) -> int:
     None -> 0 (cannot attribute, so do not escalate)."""
     if not session_id:
         return 0
-    log_dir = os.path.join(cwd or ".", ".omc", "logs")
+    log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
     return (_count_log_records(os.path.join(log_dir, _GUARD_LOG), session_id)
             + _count_log_records(os.path.join(log_dir, _RETRY_LOG), session_id))
 
@@ -332,7 +341,7 @@ def _last_blocked_streak(cwd: str, session_id) -> int | None:
     Best-effort: any read problem -> None (treated as 'no prior block')."""
     if not session_id:
         return None
-    path = os.path.join(cwd or ".", ".omc", "logs", _RETRY_LOG)
+    path = os.path.join(hooklog.state_root(cwd), ".omc", "logs", _RETRY_LOG)
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
@@ -354,7 +363,7 @@ def _last_blocked_streak(cwd: str, session_id) -> int | None:
 def _log(cwd: str, record: dict) -> None:
     """Best-effort telemetry. Never raises."""
     try:
-        log_dir = os.path.join(cwd or ".", ".omc", "logs")
+        log_dir = os.path.join(hooklog.state_root(cwd), ".omc", "logs")
         os.makedirs(log_dir, exist_ok=True)
         path = os.path.join(log_dir, "askuserquestion_retry.jsonl")
         with open(path, "a", encoding="utf-8") as f:
