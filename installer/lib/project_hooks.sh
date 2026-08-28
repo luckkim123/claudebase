@@ -12,9 +12,14 @@
 # and replaces the existing entry, so re-runs are zero-action.
 #
 # M4 origin: PROJECT_TARGETS read from ~/.claude/settings.local.json (gitignored)
-# so machine-specific paths are not baked into the shared repo. Falls back to
-# the historical hardcoded list when settings.local.json is missing — keeps
-# fresh installs working before the user creates their override file.
+# so machine-specific paths are not baked into this repo.
+#
+# There is deliberately NO fallback list. This repo is public, and this function
+# creates `<target>/.claude/` and writes settings.json into it — so any default
+# would make a stranger's install write into an unrelated directory that merely
+# happens to share the name. (The removed default was `~/workspace` and
+# `~/ksm_Obsidian`; `~/workspace` in particular is a common directory name.)
+# With no projectTargets configured, this stage is a no-op.
 
 deploy_project_hooks() {
   local HOOK_FRAGMENT="$REPO_DIR/runtime/hooks/omc-reference-loader.json"
@@ -29,9 +34,10 @@ deploy_project_hooks() {
       [ -d "$expanded" ] && PROJECT_TARGETS+=("$expanded")
     done < <(python3 -c "import json,sys; d=json.load(open('$CLAUDE_HOME/settings.local.json')); print('\n'.join(d.get('projectTargets',[])))" 2>/dev/null || true)
   fi
-  # Fallback to previous defaults if settings.local.json missing or has no projectTargets.
+  # No fallback by design — see the header note. Nothing configured, nothing to do.
   if [ ${#PROJECT_TARGETS[@]} -eq 0 ]; then
-    PROJECT_TARGETS=("$HOME/Desktop/workspace" "$HOME/ksm_Obsidian")
+    debug "skip project hook deployment: no projectTargets in $CLAUDE_HOME/settings.local.json"
+    return 0
   fi
 
   if [[ ! -f "$HOOK_FRAGMENT" || ! -f "$HOOK_MERGER" ]]; then

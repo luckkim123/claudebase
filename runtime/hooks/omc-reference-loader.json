@@ -1,5 +1,5 @@
 {
-  "_comment": "OMC reference catalog auto-loader. Deployed to project-scope .claude/settings.json files (currently: ~/Desktop/workspace, ~/ksm_Obsidian) by install.sh. The marker string 'OMC_REFERENCE_AUTO_LOAD' in the command lets install.sh detect existing installations for idempotent updates.",
+  "_comment": "OMC reference catalog auto-loader. Deployed by install.sh into the project-scope .claude/settings.json of each directory listed under projectTargets in ~/.claude/settings.local.json (no default list; see installer/lib/project_hooks.sh). The marker string 'OMC_REFERENCE_AUTO_LOAD' in the command lets install.sh detect existing installations for idempotent updates.",
   "SessionStart": [
     {
       "matcher": "startup|resume|clear|compact",
