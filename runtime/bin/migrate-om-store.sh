@@ -77,17 +77,24 @@ sha() {
 }
 
 # --------------------------------------------------------------------------
-# The mapping table (store-spec §9.3, plus the five rows the spec's list did
-# not carry — see the deviation notes below the table).
+# The mapping table (store-spec §9.3, plus the rows the spec's list did not
+# carry — see the deviation notes below the table).
 #
 # Row format: mode|legacy|new
 #   file  exact legacy relative path            <-> exact new relative path
 #   glob  legacy path pattern                   <-> new DIRECTORY, basename kept
+#   path  legacy path pattern                   <-> new prefix + the whole path
 #   dir   legacy directory prefix               <-> new directory prefix
 #   slug  any unclaimed TOP-LEVEL DIRECTORY     <-> new prefix + <dir>/...
 #
+# `path` is `glob` for a pattern whose *directory part varies* — it keeps the
+# matched path whole instead of reducing it to a basename, which is what lets a
+# per-file row reach inside `programs/<id>/` where the id is not known in
+# advance (`glob` would collapse every program's `program.json` onto one
+# destination). It is placed before the `dir` row it carves out of.
+#
 # Order matters: the first matching row wins, so exact `file` rows precede the
-# `dir`/`glob` rows that would otherwise swallow them, and `slug` is always
+# `dir`/`glob`/`path` rows that would otherwise swallow them, and `slug` is always
 # last. A top-level *file* that no row claims is unmapped and fails; a
 # top-level *directory* that no row claims is a slug where the store has slugs
 # (`oms`, `omd`) and a failure where it does not. That asymmetry is the
@@ -147,6 +154,10 @@ EOF
   omo) cat <<'EOF'
 file|HUB.md|community/HUB.md
 file|INDEX.md|community/INDEX.md
+file|README.md|community/README.md
+file|HUB-night-archive.md|community/HUB-night-archive.md
+file|PHASE1-SYNTHESIS.md|community/PHASE1-SYNTHESIS.md
+file|discussion-legacy.md|community/discussion-legacy.md
 file|board.json|runtime/board.json
 file|harness-progress.txt|runtime/harness-progress.txt
 dir|posts|community/posts
@@ -154,6 +165,22 @@ dir|agents|community/agents
 dir|sessions|community/sessions
 dir|rules|community/rules
 dir|knowledge|community/knowledge
+EOF
+  ;;
+  omx) cat <<'EOF'
+file|state.json|runtime/experiments/state.json
+file|state/produced-reports.jsonl|config/experiments/produced-reports.jsonl
+file|registry/index.md|community/wiki/index.md
+file|registry/log.md|runtime/experiments/registry/log.md
+dir|registry/findings|community/wiki
+dir|.omx|runtime/experiments/nested-omx
+dir|profile|config/experiments/profile
+dir|recipes|community/recipes
+path|programs/*/program.json|config/experiments
+dir|programs|community/programs
+dir|runs|work/experiments/runs
+dir|campaigns|work/experiments/campaigns
+dir|scratch|runtime/experiments/scratch
 EOF
   ;;
   *) return 1 ;;
@@ -187,6 +214,51 @@ EOF
 #     the file somewhere it has never been. A general `glob|*.js` row is not
 #     available — shell `*` spans `/`, so it would also swallow a work slug's
 #     own `.js` before the `slug` row ever ran.
+#   * `omo` four root-level `.md` files — `README.md`, `HUB-night-archive.md`,
+#     `PHASE1-SYNTHESIS.md`, `discussion-legacy.md`. None is in the spec's omo
+#     row, which names only `HUB.md`/`INDEX.md`; albc's board carries all four
+#     (**added P7**). All (2) prose beside `HUB.md`, so `community/`. Written as
+#     explicit `file` rows rather than a trailing `glob|*.md|community`, because
+#     shell `*` spans `/` — that glob would also swallow any future top-level
+#     directory's `.md` and turn the FAIL contract into a silent catch-all.
+#   * `omx` is added whole here (**P7**); the spec's §9.3 said only "deferred to
+#     P7". Layer calls worth naming:
+#       - `registry/findings/*.md` -> `community/wiki/`, matching omp's, oms's
+#         and omd's `wiki/`. `omx wiki` lints these pages, but so does
+#         `omp_content_audit.py:152` (`lint_wiki`) for omp's, and the spec put
+#         that one in `community/`. (3) is for content a program consumes as
+#         input, not for content a linter audits.
+#       - `registry/index.md` -> `community/wiki/index.md`: derived but tracked,
+#         the same call the spec makes for `community/INDEX.md` and oms's
+#         `wiki/INDEX.md`. On a case-insensitive filesystem this collides with
+#         an oms `wiki/INDEX.md` in the *same* anchor; no censused anchor holds
+#         both, and the rename is deferred rather than guessed.
+#       - `registry/log.md` -> `runtime/`: (5). It chronicles wiki *operations*
+#         (`add`, `query`), not the knowledge; the pages are the record, so
+#         losing it is harmless. This **detracks a tracked file** (albc's is in
+#         vault git) — an approval item, same class as `garden-state.json`.
+#       - `programs/` is **split**, which is why the `path` mode exists:
+#         `program.json` is parsed (`campaign.py:305,346`) so (3) `config/`,
+#         while `PLAN.md`/`HANDOFF.md` are seeded from templates and thereafter
+#         hand-written — `campaign.py:360` only tests `.is_file()`, nothing
+#         reads their bodies — so (2) `community/`. Sending the directory whole
+#         to `work/experiments/programs/` (store-spec §3's tree sketch) would
+#         have put albc's campaign PLAN.md, the plan of record, behind
+#         `**/.hq/work/` in `.gitignore` and untracked it. §3's tree is amended
+#         to match.
+#       - `runs/` and `campaigns/` stay whole (`work/experiments/`), as §3's
+#         tree says. No censused store has either directory, so a per-file split
+#         inside them would be invented rather than measured — deferred the same
+#         way omp's `env/` and omd's `wiki/` were, until a store carrying them
+#         is censused.
+#       - `.omx/` (the nested self-directory, store-spec §9.1 row 5) is mapped,
+#         not skipped and not made its own anchor. It holds one real file, a
+#         wiki log written by a misrooted `--root .../.omx` invocation. Skipping
+#         means never carrying it across and losing it at `--purge`, which is
+#         what skipping is for (third-party, locks) and not what this is; a
+#         separate anchor would need a unique `.hq/.anchor` inside another
+#         store, which §2's granularity rule does not describe. One `dir` row
+#         preserves the bytes and keeps `reverse` unambiguous.
 
 # Paths never moved, at any depth, for every kind. `.omc/` is third-party
 # (`OMC_STATE_DIR`, store-spec §12); `.DS_Store` is not ours; `.hq-lock` is a
@@ -196,6 +268,11 @@ is_skipped() {
     .DS_Store|*/.DS_Store) return 0 ;;
     .hq-lock|*/.hq-lock)   return 0 ;;
     .omc|.omc/*|*/.omc/*)  return 0 ;;
+    # omx's three mutex files, same call as `.hq-lock`: `.wiki-lock` (fcntl,
+    # `omx_paths.wiki_lock`), `.loop-lock` (per-run O_EXCL lease), `.state-lock`
+    # (state.json critical section). All recreated on demand; a copied lease
+    # would be worse than an absent one.
+    .wiki-lock|*/.wiki-lock|.loop-lock|*/.loop-lock|.state-lock|*/.state-lock) return 0 ;;
   esac
   return 1
 }
@@ -218,6 +295,7 @@ map_forward() {
     case "$mode" in
       file) [ "$rel" = "$lg" ] && { printf '%s\n' "$nw"; return 0; } ;;
       glob) case "$rel" in $lg) printf '%s/%s\n' "$nw" "${rel##*/}"; return 0 ;; esac ;;
+      path) case "$rel" in $lg) printf '%s/%s\n' "$nw" "$rel"; return 0 ;; esac ;;
       dir)  case "$rel" in "$lg"/*) printf '%s/%s\n' "$nw" "${rel#"$lg"/}"; return 0 ;; esac ;;
       slug) top="${rel%%/*}"
             if [ "$top" != "$rel" ]; then printf '%s/%s\n' "$nw" "$rel"; return 3; fi ;;
@@ -243,6 +321,10 @@ map_reverse() {
       glob) base="${new##*/}"; ldir="${lg%/*}"
             case "$new" in "$nw"/*)
               case "$base" in ${lg##*/}) printf '%s/%s\n' "$ldir" "$base"; return 0 ;; esac ;;
+            esac ;;
+      path) case "$new" in "$nw"/*)
+              base="${new#"$nw"/}"
+              case "$base" in $lg) printf '%s\n' "$base"; return 0 ;; esac ;;
             esac ;;
       dir)  case "$new" in "$nw"/*) printf '%s/%s\n' "$lg" "${new#"$nw"/}"; return 0 ;; esac ;;
       slug) case "$new" in "$nw"/*) printf '%s\n' "${new#"$nw"/}"; return 0 ;; esac ;;
@@ -276,10 +358,17 @@ legacy_stores_of() {
   return 1
 }
 
-# store-spec §9.1 rows 4-6 and HUB decision D2: the albc campaign holds `.omx`
-# and its `.orchestration`, and a `session-gate` hook blocks the path. Refuse
+# store-spec §9.1 rows 4-6 and HUB decision D2: the albc campaign held `.omx`
+# and its `.orchestration`, and a `session-gate` hook blocked the path. Refuse
 # by path so a gated anchor is *named* rather than looking absent.
+#
+# D2 was released 2026-08-28 (HUB decision D20, P7). The gate is **kept, not
+# deleted**, and bound to that release instead: another machine syncing
+# `claudebase` has not necessarily seen the release, and a gate that silently
+# disappears is indistinguishable from one that never fired. Opening it takes
+# one explicit acknowledgement, `HQ_D2_RELEASED=1`.
 is_gated() {
+  [ "${HQ_D2_RELEASED:-}" = "1" ] && return 1
   case "$1" in
     */albc|*/albc/*) return 0 ;;
   esac
@@ -642,7 +731,7 @@ PY
 # --------------------------------------------------------------------------
 run_selftest() {
   local kind mode lg nw probe fwd back rc key fails=0 checked=0 seen
-  for kind in omp oms omd omha omo; do
+  for kind in omp oms omd omha omo omx; do
     seen=""
     while IFS='|' read -r mode lg nw; do
       [ -n "${mode:-}" ] || continue
@@ -652,6 +741,7 @@ run_selftest() {
       # destination alone, where a reused prefix genuinely is ambiguous.
       case "$mode" in
         glob) key="$nw::${lg##*/}" ;;
+        path) key="$nw::$lg" ;;
         *)    key="$nw" ;;
       esac
       case " $seen " in
@@ -662,6 +752,7 @@ run_selftest() {
       case "$mode" in
         file) probe="$lg" ;;
         glob) probe="${lg%/*}/$(printf '%s' "${lg##*/}" | sed 's/\*/X/g')" ;;
+        path) probe="$(printf '%s' "$lg" | sed 's/\*/X/g')" ;;
         dir)  probe="$lg/probe/leaf.md" ;;
         slug) probe="a-slug/probe/leaf.md" ;;
         *)    err "selftest: $kind has unknown mode '$mode'"; fails=$((fails + 1)); continue ;;
@@ -681,7 +772,7 @@ run_selftest() {
 $(rules_for "$kind")
 EOF
   done
-  for kind in omp oms omd omha omo; do
+  for kind in omp oms omd omha omo omx; do
     if map_forward "$kind" "an-unclaimed-file.md" >/dev/null 2>&1; then
       err "selftest: $kind mapped an unclaimed top-level file — the detector is inert"
       fails=$((fails + 1))

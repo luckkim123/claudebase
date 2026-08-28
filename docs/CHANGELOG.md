@@ -2,6 +2,50 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-28 (P7) — the last migration round, and the mode the table needed
+
+P7 moved the two live-campaign stores the gate had held back since 2026-08-25.
+The mapping work turned up something the earlier rounds could not see: on an
+anchor whose `.gitignore` carries `**/.hq/work/`, **the layer assignment is the
+tracking decision**, and store-spec §3's tree sketch would have untracked a
+plan of record.
+
+### Added
+- `runtime/bin/migrate-om-store.sh` — an `omx` case in `rules_for()`. The spec
+  had no per-file rows for it; §9.3 now carries the table this implements.
+- A **`path` mode**. `glob` reduces a match to its basename and `dir` moves a
+  fixed prefix whole, so neither can carve one file out of `programs/<id>/`
+  where the id varies. `path` matches like `glob` but appends the whole matched
+  path, which is what lets `program.json` (③, parsed by `campaign.py:305`) land
+  in `config/` while `PLAN.md`/`HANDOFF.md` (② — nothing reads their bodies)
+  land in `community/`. Sending the bundle whole to `work/experiments/programs/`
+  would have put albc's plan of record behind `**/.hq/work/` and untracked it.
+- Four `omo` root-level `.md` rows — `README.md`, `HUB-night-archive.md`,
+  `PHASE1-SYNTHESIS.md`, `discussion-legacy.md`. The spec's omo row names only
+  `HUB.md`/`INDEX.md`; albc's board carries all four. Written as explicit `file`
+  rows, not a trailing `glob|*.md|community`: shell `*` spans `/`, so that glob
+  would turn the FAIL contract into a silent catch-all. Same shape of sample
+  bias as `finding/015`.
+- `is_skipped()` — omx's three mutex files (`.wiki-lock`, `.loop-lock`,
+  `.state-lock`), same call as `.hq-lock`.
+
+### Changed
+- `is_gated()` is **kept, not deleted**, and bound to `HQ_D2_RELEASED=1`. HUB
+  decision D2 was released 2026-08-28 (D20), but a machine syncing this repo has
+  not necessarily seen that, and a gate that silently disappears is
+  indistinguishable from one that never fired.
+- selftest 46 → **64 checks**, all pass; `omx` added to both selftest loops and
+  the `path` mode given its own probe and uniqueness key. pytest 20 passed.
+
+### Notes
+- The tool still does **not** write `migrated.jsonl`; the session does, at
+  cutover time. That is deliberate — the ledger row means "this harness's code
+  now writes to `.hq/`", which happens at the release, not at the copy.
+- Ledger union-merge is declared **per anchor root**, not once at the repo root:
+  a `.gitattributes` pattern containing a slash anchors to its own directory, so
+  the vault's root line does not reach a nested anchor. `git check-attr merge`
+  is the check; albc needed its own file.
+
 ## [Unreleased] — 2026-08-28 (P6) — the tool meets the anchors it was written for
 
 P5 built `migrate-om-store.sh` and ran it against nothing. P6 ran it against
