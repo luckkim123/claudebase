@@ -1,0 +1,218 @@
+{
+  "omp_version": "0.12.2",
+  "project": {
+    "name": "claudebase",
+    "preset_origin": "generic",
+    "initialized": "2026-08-25"
+  },
+  "specificity": 0.88,
+  "structure": {
+    "convention": "purpose-split",
+    "directories": [
+      {
+        "path": ".",
+        "role": "Repo entry point. Only README.md, LICENSE, CLAUDE.md and .gitignore are tracked here; everything else belongs in a first-class subdirectory. Layout SSOT: docs/ARCHITECTURE.md 'Directory layout'.",
+        "origin": "preset",
+        "enforced": true
+      },
+      {
+        "path": "config/",
+        "role": "What Claude reads: user-scope CLAUDE.md, settings.json plus its settings.critical.json manifest, and mcp.template.json. How each one reaches ~/.claude/ is the README.md 'What lives where' table (SSOT).",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "runtime/",
+        "role": "What Claude executes: skills, hooks, agents, output styles, HUD and OMC patches. The config/runtime/installer split is by purpose, not by tool - SSOT: docs/ARCHITECTURE.md.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "runtime/skills/",
+        "role": "One kebab-cased directory per repo-owned skill, each containing SKILL.md; the installer symlinks each into ~/.claude/skills/. Adding one also means a README.md table row (README.md 'What lives where').",
+        "origin": "inductive",
+        "enforced": true
+      },
+      {
+        "path": "runtime/hooks/",
+        "role": "Hook scripts (.py/.sh) invoked by absolute path from the rendered ~/.claude/settings.json. Basenames are deliberately left unregulated (kebab 14 / snake 9 / plain 1): renaming one silently breaks every machine that has not re-run installer/install.sh.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "runtime/agents/",
+        "role": "User-scope subagent definitions (.md carrying name/description frontmatter), vendored from Everything Claude Code rather than written here, so basenames follow upstream. Attribution SSOT: docs/third-party-agents.md.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "installer/",
+        "role": "What the user runs once per machine: install.sh / install.ps1 entrypoints, lib/ shell modules, scripts/ renderers, githooks/. The two entrypoints must stay behaviorally equivalent - SSOT: CLAUDE.md 'Editing rules' item 3.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "platform/",
+        "role": "Per-OS package lists and installers (macos/, linux/, windows/), each exposing one install entrypoint, selected by installer/install.sh.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "shell/",
+        "role": "Shell assets symlinked or sourced from $HOME (tmux.conf, claude-mouse.sh). Adding one means a link_or_copy line in both installers plus a README.md table row - SSOT: README.md 'What lives where'.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "secrets/",
+        "role": "secrets.env holds the real values and is gitignored; the committed secrets.example.env lists names only. Contract SSOT: CLAUDE.md 'Secrets'. Left unenforced because ignore[] cannot express the 'example yes, real no' exception that .gitignore already handles.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "templates/",
+        "role": "Boilerplate copied into other projects on demand; files destined for a project carry the project- prefix. Read and copied, never installed.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "tests/",
+        "role": "pytest suite mirroring runtime/ and installer/ (hooks/, installer/, bin/, eval/, smoke/) plus JSON fixtures under fixtures/. Run by .github/workflows/ci.yml.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "eval/",
+        "role": "coder_eval tasks/ and experiments/ - the instrument that asks whether the harness changes outcomes, one of three manual instruments described in docs/ARCHITECTURE.md. Durable numbers live in eval/README.md; per-run artifacts stay in the gitignored eval/runs/.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "docs/",
+        "role": "Human-facing documentation, read and never installed: ARCHITECTURE / CHANGELOG / CONTRIBUTING plus kebab-cased topic files, with dated measurement and protocol notes under docs/harness/.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": "docs/specs/",
+        "role": "One folder per non-trivial change, named <YYYY-MM-DD-topic>, holding design.md and - when an execution plan was needed - plan.md; the absence of plan.md is meaningful. SSOT: docs/ARCHITECTURE.md.",
+        "origin": "inductive",
+        "enforced": false
+      },
+      {
+        "path": ".github/",
+        "role": "GitHub Actions only. workflows/ci.yml runs ruff+shellcheck lint, pytest, and an install.sh idempotency smoke; it checks no structure, placement or naming rule.",
+        "origin": "inductive",
+        "enforced": false
+      }
+    ]
+  },
+  "naming": {
+    "patterns": [
+      {
+        "applies_to": "*",
+        "regex": "^[A-Za-z0-9._-]+$",
+        "description": "No spaces or shell-special characters in any basename (cross-OS and shell safety).",
+        "origin": "preset",
+        "severity": "warn"
+      },
+      {
+        "applies_to": "README*",
+        "regex": "^README(\\.[a-z]+)?$",
+        "description": "A directory's readme uses the standard name.",
+        "origin": "preset",
+        "severity": "info"
+      },
+      {
+        "applies_to": "runtime/skills/*/",
+        "regex": "^[a-z0-9][a-z0-9-]*$",
+        "description": "Skill directory names are kebab-case - the directory name is the skill's invocation name. 18/18 existing skills conform, 0 counter-examples.",
+        "origin": "inductive",
+        "severity": "warn"
+      },
+      {
+        "applies_to": "tests/**/*.py",
+        "regex": "^(test_[a-z0-9_]+|__init__|conftest)\\.py$",
+        "description": "pytest collects only test_*.py, so a misnamed test file is silently never run. 37/37 tracked .py files under tests/ conform, 0 counter-examples.",
+        "origin": "inductive",
+        "severity": "warn"
+      },
+      {
+        "applies_to": "eval/tasks/*.yaml",
+        "regex": "^[a-z0-9_]+\\.yaml$",
+        "description": "Task configs are snake_case. 10/10 conform.",
+        "origin": "inductive",
+        "severity": "info"
+      },
+      {
+        "applies_to": "eval/experiments/*.yaml",
+        "regex": "^[a-z0-9-]+\\.yaml$",
+        "description": "Experiment configs are kebab-case - the opposite case from eval/tasks/. Recorded per directory because that is the level at which each is uniform. 6/6 conform.",
+        "origin": "inductive",
+        "severity": "info"
+      },
+      {
+        "applies_to": "docs/specs/*/",
+        "regex": "^\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+$",
+        "description": "Spec folders are <YYYY-MM-DD-topic>. The rule comes from the written convention in docs/ARCHITECTURE.md, not from the count - only 1 spec folder exists so far.",
+        "origin": "inductive",
+        "severity": "warn"
+      }
+    ]
+  },
+  "content_conventions": [
+    {
+      "applies_to": "runtime/skills/*/SKILL.md",
+      "check": {
+        "pattern": "^name:",
+        "expect": "present",
+        "scope": "frontmatter"
+      },
+      "description": "A skill whose frontmatter has no name: never registers, and nothing reports the failure. 18/18 conform.",
+      "origin": "inductive",
+      "severity": "error"
+    },
+    {
+      "applies_to": "runtime/skills/*/SKILL.md",
+      "check": {
+        "pattern": "^description:",
+        "expect": "present",
+        "scope": "frontmatter"
+      },
+      "description": "Auto-invocation matches against description:; without it the skill loads but never triggers. 18/18 conform.",
+      "origin": "inductive",
+      "severity": "error"
+    }
+  ],
+  "ignore": [
+    ".git/**",
+    ".omp/**",
+    ".hq/**",
+    ".omc/**",
+    ".claude/**",
+    "node_modules/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/.venv/**",
+    ".pytest_cache/**",
+    ".ruff_cache/**",
+    ".superpowers/**",
+    ".code-review-graph/**",
+    ".graphify/**",
+    "graphify-out/**",
+    "eval/runs/**",
+    "secrets/secrets.env",
+    "**/mcp.json",
+    "**/*.local.json",
+    "**/*.bak",
+    "**/*.backup.*",
+    "**/.backup-*",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/desktop.ini",
+    ".vscode/**",
+    ".idea/**",
+    "**/*.swp",
+    "**/*.swo"
+  ]
+}
