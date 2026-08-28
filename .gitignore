@@ -50,14 +50,13 @@ eval/runs/
 
 # omp governance: the rules ship (they describe this repo's layout for every
 # clone), the runtime state does not (scans, work/, secretary/ are per-machine).
-.omp/*
-!.omp/rules.json
+# The `.omp/*` + `!.omp/rules.json` pair is gone — store-spec §7 stage 3 purged
+# the legacy store, and `.hq/config/` (tracked) now carries the rules while
+# `**/.hq/work|runtime/` cover the per-machine state.
 
 # hq CLI store lock — the advisory fcntl lock file store.py creates under
-# community_dir(). Two lines because the lock follows the community root and
-# the P6 cutover moved that root; the legacy path can still take a lock until
-# the fallback window closes (store-spec §7 purge), so it stays.
-**/.orchestration/.hq-lock
+# community_dir(). One line now: the legacy `**/.orchestration/.hq-lock` path
+# is purged, and a stage-2 anchored project only ever locks the new root.
 **/.hq/community/.hq-lock
 
 # .hq unified store: work/ is regenerable output, runtime/ is session state,
