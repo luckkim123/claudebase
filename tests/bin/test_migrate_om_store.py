@@ -335,6 +335,21 @@ def test_census_matches_the_fixed_find_in_both_directions(tmp_path):
     assert "excluded by pattern: 2" in r.stdout
 
 
+def test_census_does_not_list_a_store_nested_inside_another_store(tmp_path):
+    """albc's `.omx/.omx` (store-spec §9.1 row 5) is a path *within* its parent's
+    store, mapped as a row of that store's table — not an anchor. Listing it
+    separately shows a phantom `legacy` store that no migration can ever clear,
+    and the next round reads that as an un-migrated anchor. Added P7."""
+    write(tmp_path / "p" / ".omx" / "registry" / "log.md", "# log\n")
+    write(tmp_path / "p" / ".omx" / ".omx" / "registry" / "log.md", "# nested\n")
+
+    r = run("census", "--root", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    listed = [ln.split()[0] for ln in r.stdout.splitlines() if ln.startswith(str(tmp_path))]
+    assert listed == [str(tmp_path / "p")], listed
+    assert str(tmp_path / "p" / ".omx") not in listed
+
+
 def test_drift_uses_the_ledger_not_the_census_find(anchor):
     """The two instruments must not share a command. Drift's discovery is the
     ledger: with no row for this harness it reports 'never cut over' rather

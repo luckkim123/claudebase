@@ -630,6 +630,13 @@ census_excluded() {
     */.Trash/*|*/.Trash)                    return 0 ;;
     */.phase0-scratch/*)                    return 0 ;;
     */.hq/*)                                return 0 ;;
+    # A store directory nested INSIDE another legacy store is a path within that
+    # store, not an anchor of its own. albc's `.omx/.omx` (store-spec §9.1 row 5,
+    # a wiki log left by a misrooted `--root .../.omx` call) is mapped as a row of
+    # its parent's table, so census listing it separately would show a phantom
+    # `legacy` store that no migration can ever clear — and the next round would
+    # read that as an un-migrated anchor. Added P7.
+    */.omp/*|*/.oms/*|*/.omd/*|*/.omx/*|*/.omha/*|*/.orchestration/*) return 0 ;;
   esac
   return 1
 }

@@ -38,6 +38,15 @@ plan of record.
   the `path` mode given its own probe and uniqueness key. pytest 20 passed.
 
 ### Fixed
+- **`census` listed a store nested inside another store as its own anchor.**
+  albc's `.omx/.omx` (store-spec §9.1 row 5 — a wiki log left by a misrooted
+  `--root .../.omx` call) is mapped as a *row of its parent's table*, so census
+  showing it separately produced a phantom `legacy` anchor that no migration
+  could ever clear, and the next round would read it as un-migrated. Any path
+  containing a `/.omp/ /.oms/ /.omd/ /.omx/ /.omha/ /.orchestration/` segment is
+  now excluded. In-scope roster 21 → 20.
+
+### Fixed
 - **`drift` returned 0 for a store it never checked.** With no `migrated.jsonl`,
   or none with a row for this harness, it printed "never cut over" and exited
   **0** — the same code as "clean". The campaign's acceptance criteria are
