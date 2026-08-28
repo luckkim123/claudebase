@@ -2,6 +2,26 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-29 — siblings cannot see each other
+
+### Added
+- `config/CLAUDE.md` Operational Limit (303 chars) — **one agent-state store per
+  repository, at its root**; projects inside it are separated by a `project:`
+  field, never by a nested second store. Rationale in
+  `docs/operating-rationale.md#one-store-per-repo`.
+- The rule reverses the layout rule `oh-my-orchestrator`'s `store-spec.md` §2
+  carried until 2026-08-29 ("the project's folder, not the repo root", and
+  "nesting is legitimate, not a mistake to clean up"). The reversal's argument is
+  not aesthetic: **lookup only ascends**, so two sibling projects in one repo are
+  invisible to each other by construction, and the cross-store path that did
+  exist had been used **zero** times across 114 records in four sibling stores.
+  Same shape as the two capabilities this repo already retired for going
+  unrouted (`tokensave` 6/10,813 calls, `graphify` MCP 0 in 30 days).
+- Layer boundary held deliberately: the **spec** lives in `store-spec.md` (that
+  plugin owns the `.hq/` layout), and this repo carries only the machine-common
+  operating rule and its rationale. The vault's anchor names and counts are
+  project specifics and are not in this repo.
+
 ## [Unreleased] — 2026-08-28 — the ask audit did not audit itself
 
 ### Fixed

@@ -184,3 +184,61 @@ Then the handoff compressed six reasoned dispositions into six prohibitions ("`s
 **What it does not license.** It authorizes *reaching for* subagents, not spending freely on them. `<model_routing>` still governs which tier each stage runs on, and its central warning is unchanged: an `agent()` call with no explicit `model` inherits the *session* model, so a fan-out launched from an Opus session runs the whole fleet on Opus. Check every stage of a named or pre-built workflow before firing it. The separation-of-passes rule also survives intact — a subagent that authored something is still not allowed to approve it.
 
 **Measured (2026-08-25, harness Area setup).** The seven-task handoff ran entirely solo — a 115-file ownership audit, an 87-file relocation across six repos, an eight-repo external survey, and an oms release — because the permission line was absent and the session never asked for it. Serial execution was survivable there; the one item it could not finish was not. Calibrating the new claim↔own-evidence axis needs independent graders scoring planted over-claims, which is a fan-out by construction, so the axis shipped labelled `NOT_CALIBRATED` rather than measured. The cost of the missing line was not slowness — it was an unmeasurable gate.
+
+---
+
+## one-store-per-repo
+
+**Rule (see `config/CLAUDE.md`):** One agent-state store per git repository, at its root.
+Projects inside that repo are told apart by a field in the record, not by a second store
+nested deeper in the tree.
+
+**The rule this replaced, and why it looked right.** The earlier rule put the store at
+"the root of the project that owns the work — in a repo holding several independent
+projects, that is the project's folder, not the repo root," and it defended nesting
+explicitly: *"Nesting is legitimate, not a mistake to clean up."* The defence rested on a
+real mechanism — lookup ascends from the working directory to the nearest store and then
+continues outward, so an inner store shadows an outer one unambiguously, and per-store
+numbering lets two projects each hold a `finding/001` with no collision. Every step of
+that is true. It is also beside the point.
+
+**Ascent only walks up.** Two sibling projects in one repo are invisible to each other
+under any amount of ascent, because neither is an ancestor of the other. The value the
+store exists to produce — a fact learned in one place being findable from another — is
+structurally unreachable across siblings. Finishing the ascent implementation does not
+fix it; the topology is wrong, not the code.
+
+**And the cross-store path that did exist was never used.** Measured on one machine,
+2026-08-29: four sibling stores inside one repository, 114 records between them, and
+**zero** citations had ever crossed a store boundary. That is the shape this repo has
+recorded twice already — a search index called 6 times against 10,813 tool calls in 22
+days, an MCP server called 0 times in 30 — and the conclusion each time was that a
+capability nothing routes to is indistinguishable from one that does not exist. An
+option flag is not an answer to that; removing the boundary is.
+
+**What the merge costs, and the two traps in paying it.** Record ids are store-global and
+monotonic, so merging two stores renumbers one of them.
+
+- *Renumber the side with fewer inbound references*, and rewrite those references in the
+  same commit. On the machine above, preserving the largest board's numbering left 719
+  references untouched and moved 37 records instead of 114.
+- *A bare `<category>/<NNN>` means whichever board its **source file** belongs to.* A
+  repo-wide search-and-replace corrupts the board that kept its numbers, by rewriting
+  that board's own self-references to the other board's new ones. Scope the rewrite by
+  source path — and then read the exceptions, because a prose qualifier can re-point a
+  reference at a third store entirely ("claudebase `finding/011`", "vault `finding/001`").
+  Those survive the scoping rule and must be excluded by hand; 8 of them were found in
+  one repo. An id that two records once shared is worse still: it cannot be resolved by
+  rule at all, only by reading each occurrence.
+
+**What still justifies a nested store.** A git repository nested inside another repo's
+working tree keeps its own store, because its records have to travel with its own
+history. The boundary is the repository, not the directory.
+
+**The collateral this rule creates, and where to put it.** A per-project store often
+holds machine-parsed config at a *fixed relative path* (rules, manifests). One store per
+repo means one such file per repo, and a field cannot substitute for a path the tool
+hardcodes. So when merging, the sub-project's machine layer either moves into the tool
+(a code change) or is retired — decide that before starting, and move any human-readable
+content it held back into the project's own tree rather than deleting it with the store.
+
