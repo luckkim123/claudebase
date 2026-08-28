@@ -1205,6 +1205,15 @@ third option, and "I mentioned it in the summary" is not (b).
       that would otherwise ask stops dead at the first graph it finds, which
       is precisely why a repo can carry CRG for months while its owner has
       never heard of `/graphify`.
+- [ ] 4n (om\* store census / drift) — asked if `census` printed any row
+      whose GATE reads `legacy`, or if `drift` exited 5 on any anchor; or
+      N/A (`in scope: 0` / all anchored **and** drift clean on every anchor
+      probed). The Outputs table's `4n` row is *disclosure*, not the ask —
+      §4n's own rule is that a sync **reports** that this machine is behind
+      and never migrates on its own, which only holds if the user is
+      actually asked what to do about it. A machine can sit un-migrated
+      indefinitely while every run says "complete", because neither
+      instrument errors and the owner may not know the migration exists.
 - [ ] Step 9 template adoption — asked if `templates/` changed, or N/A
 
 If any box can't be checked yet, **ask now** — do not write the Outputs

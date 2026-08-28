@@ -2,6 +2,22 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-28 — the ask audit did not audit itself
+
+### Fixed
+- `sync-claudebase` §9.5 — the MANDATORY pre-completion ask audit listed eight
+  boxes (4e, 4f, 4g, 4j, 4k, install WARNINGs, 4l, step 9) and **not 4n**, the
+  om\* store census/drift step. That leaves the om\* migration guaranteed only
+  by §4n's own prose and one row in the Outputs table — which is exactly the
+  state §9.5 was written to declare insufficient ("A summary-table mention is
+  NOT a substitute for asking. Disclosure ≠ consent"). Same shape as the
+  2026-08-03 incident that created the section. Ninth box added.
+- The consequence this closes is specific: §4n's rule is that a sync *reports*
+  that a machine is behind and never migrates on its own. That rule only holds
+  if the user is actually asked. Neither `census` nor `drift` errors, so an
+  un-migrated machine can pass run after run marked "complete" while its owner
+  does not know the migration exists.
+
 ## [Unreleased] — 2026-08-28 — a telemetry path that followed the `cd`
 
 One vault had **18 stray `.omc/` directories**. None was a session root: 17 held
