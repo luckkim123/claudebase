@@ -350,6 +350,26 @@ def test_census_does_not_list_a_store_nested_inside_another_store(tmp_path):
     assert str(tmp_path / "p" / ".omx") not in listed
 
 
+def test_store_filter_does_not_narrow_reverse_sibling_awareness(tmp_path):
+    """`--store` narrows what is PROCESSED; it must not narrow what `reverse`
+    knows is present at the anchor.
+
+    ANCHOR_KINDS was derived from the filtered store list, so a single-store
+    `reverse` on an anchor that also holds another store labelled every file
+    the sibling owns as ORPHAN. Nothing was lost — orphans are left in place —
+    but a detector with 111 false positives (measured on albc, P7) cannot
+    surface the one genuine orphan it exists to find."""
+    write(tmp_path / ".omp" / "rules.json", "{}\n")
+    write(tmp_path / ".orchestration" / "HUB.md", "# hub\n")
+    write(tmp_path / ".orchestration" / "posts" / "finding" / "001-x.md", "# x\n")
+    assert run("apply", str(tmp_path)).returncode == 0
+
+    r = run("reverse", str(tmp_path), "--store", ".omp")
+    assert r.returncode == 0, r.stderr
+    assert "orphan=0" in r.stdout, r.stdout
+    assert "ORPHAN" not in r.stdout, r.stdout
+
+
 def test_drift_uses_the_ledger_not_the_census_find(anchor):
     """The two instruments must not share a command. Drift's discovery is the
     ledger: with no row for this harness it reports 'never cut over' rather

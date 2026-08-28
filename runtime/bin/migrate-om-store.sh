@@ -188,6 +188,7 @@ dir|programs|community/programs
 dir|runs|work/experiments/runs
 dir|campaigns|work/experiments/campaigns
 dir|scratch|runtime/experiments/scratch
+dir|.trash|runtime/experiments/trash
 EOF
   ;;
   *) return 1 ;;
@@ -258,6 +259,11 @@ EOF
 #         inside them would be invented rather than measured — deferred the same
 #         way omp's `env/` and omd's `wiki/` were, until a store carrying them
 #         is censused.
+#       - `.trash/` -> `runtime/experiments/trash/` (⑤). Absent from every
+#         censused store; found only because the prose audit noticed `clean.py`
+#         resolves it as `paths.omx_dir / ".trash"` unconditionally. It has to
+#         move: left at the legacy path, the first `omx clean` after a `--purge`
+#         recreates `.omx/` and undoes the purge.
 #       - `.omx/` (the nested self-directory, store-spec §9.1 row 5) is mapped,
 #         not skipped and not made its own anchor. It holds one real file, a
 #         wiki log written by a misrooted `--root .../.omx` invocation. Skipping
@@ -834,8 +840,18 @@ case "$verb" in
       stores=$(legacy_stores_of "$a") || { rc=1; continue; }
       # Kinds present at this anchor — `reverse` needs it to tell a sibling
       # harness's file apart from a genuine orphan.
+      #
+      # Built from the UNFILTERED store list, deliberately. `--store` narrows
+      # what gets processed; it must not narrow what `reverse` knows is here.
+      # It used to be derived from the filtered `$stores`, so
+      # `reverse --store .omx` on an anchor also holding `.orchestration`
+      # reported all 111 omo-owned files as ORPHAN — no data was lost ("left in
+      # place"), but a detector with 111 false positives cannot surface the one
+      # genuine orphan it exists to find. Measured on albc, P7.
       ANCHOR_KINDS=""
-      for s in $stores; do ANCHOR_KINDS="$ANCHOR_KINDS $(kind_of "$s")"; done
+      for s in $(ONLY_STORE= legacy_stores_of "$a" 2>/dev/null); do
+        ANCHOR_KINDS="$ANCHOR_KINDS $(kind_of "$s")"
+      done
       if [ "$verb" = purge ]; then
         set -- $stores
         [ $# -eq 1 ] || {

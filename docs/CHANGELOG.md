@@ -38,6 +38,20 @@ plan of record.
   the `path` mode given its own probe and uniqueness key. pytest 20 passed.
 
 ### Fixed
+- **`--store` narrowed `reverse`'s sibling awareness, producing false orphans.**
+  `ANCHOR_KINDS` was derived from the *filtered* store list, so
+  `reverse --store .omx` on an anchor that also holds `.orchestration` labelled
+  all 111 omo-owned files ORPHAN (measured on albc). Nothing was lost — orphans
+  are left in place — but a detector with 111 false positives cannot surface the
+  one genuine orphan it exists to find. `--store` narrows what is *processed*,
+  never what the tool knows is present. 111 → 0.
+- **`.trash/` had no mapping row.** `clean.py` resolves it as
+  `paths.omx_dir / ".trash"` unconditionally, so left at the legacy path the
+  first `omx clean` after a `--purge` recreates `.omx/` and undoes the purge.
+  Now `runtime/experiments/trash/` (⑤). Surfaced by the prose audit, not by any
+  censused store — no store on this machine has ever been swept.
+
+### Fixed
 - **`census` listed a store nested inside another store as its own anchor.**
   albc's `.omx/.omx` (store-spec §9.1 row 5 — a wiki log left by a misrooted
   `--root .../.omx` call) is mapped as a *row of its parent's table*, so census
