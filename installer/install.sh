@@ -61,19 +61,15 @@ run_platform_installer
 deploy_project_hooks
 sync_plugins
 
-# OMC freeze patch + statedir-ascent patch + HUD wrapper → lib/omc.sh (P3-T9).
+# OMC freeze patch + HUD wrapper → lib/omc.sh (P3-T9).
 # shellcheck source=lib/omc.sh
 source "$REPO_DIR/installer/lib/omc.sh"
 patch_omc_bash_freeze
-# Re-enabled 2026-06-01 as POINT D (design §9): the broken point C patched
-# resolveToWorktreeRoot and threw "[OMC] HUD error" (it fed a value above the
-# #576 trusted-root boundary into validateWorkingDirectory). Point D patches
-# ONLY getOmcRoot's argument — ascendToMarker(worktreeRoot) first — so .omc
-# converges to the marker root while resolveToWorktreeRoot stays stock and the
-# security boundary is untouched. Verified by reproducing the real HUD load
-# graph (not just isolated node -e) + 5 regression scenarios. See
-# docs/specs/2026-05-31-omc-statedir-marker-ascent/design.md §9.
-patch_omc_statedir
+# statedir-ascent patch retired 2026-08-29: OMC 5.0.1 implements .omc-workspace
+# marker ascent natively in getOmcRoot() (findWorkspaceRoot(), with a $HOME
+# guard; resolution order documented in worktree-paths.js as OMC_STATE_DIR >
+# workspace marker > git > cwd). The patch's anchor no longer exists, so it
+# WARNed and restored on every run. See docs/upstream-patches.md.
 
 # 7. local-overrides hint
 LOCAL_FILE="$CLAUDE_HOME/settings.local.json"

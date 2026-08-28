@@ -35,7 +35,25 @@ been upstream-accepted but not yet released stay listed with a note.
 
 - **First applied**: 2026-05-24 (claude-settings repo). Extracted from `install.sh` into its own script: 2026-05-29 (P1 G4.1).
 
-## OMC `.omc` scatter in non-git trees (getOmcRoot marker-ascent)
+## OMC `.omc` scatter in non-git trees (getOmcRoot marker-ascent) — RETIRED 2026-08-29
+
+> **Retired**: the removal condition below was met by OMC **5.0.1**. `getOmcRoot()` now
+> finds the non-git project boundary itself — `findWorkspaceRoot()` climbs for
+> `.omc-workspace` with a `$HOME` stop-guard, and `resolveNonGitStateAnchor()` handles
+> the marker-less case; the resolution order `OMC_STATE_DIR > workspace marker > git >
+> cwd` is documented at the top of `worktree-paths.js`. The patch's anchor line no
+> longer exists (upstream replaced it with a ternary and inserted a non-git branch
+> before the return), so it WARNed and `.bak`-restored on every install.
+>
+> Removed: `installer/scripts/patch_omc_statedir.sh`,
+> `runtime/omc-patches/_claudebase-omc-ascent.cjs`, `patch_omc_statedir()` in
+> `installer/lib/omc.sh`, and its call in `installer/install.sh`.
+>
+> One behavioural difference was accepted: this patch also honoured `.omcroot`,
+> `.git` and `CLAUDE.md` as markers and anchored at the project root, whereas
+> upstream honours only `.omc-workspace` and otherwise collapses to `$HOME`. Both
+> stop the scatter; upstream just converges somewhere else when no marker exists.
+> The record below is kept for that history.
 
 - **Target**: `~/.claude/plugins/cache/omc/oh-my-claudecode/<ver>/dist/lib/worktree-paths.js`, `getOmcRoot()` default fallback (around line 195) + a `createRequire` shim after the import block.
 - **Patch**: a 2-point edit that gives the git-less case a project-boundary fallback.

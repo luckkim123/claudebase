@@ -8,10 +8,6 @@
 #                             (which OMC reinstall re-applies on every claudebase
 #                             install). See docs/upstream-patches.md for the
 #                             upstream fix condition.
-#   patch_omc_statedir      — delegate to installer/scripts/patch_omc_statedir.sh
-#                             (marker-ascent so .omc converges in non-git trees).
-#                             Same reinstall-reapply lifecycle. See
-#                             docs/upstream-patches.md.
 #   install_omc_hud         — copy hud wrapper + config-dir.mjs from the highest
 #                             versioned plugin cache and re-apply local cyan
 #                             dir:/branch: customization via hud-customize.sh.
@@ -25,13 +21,6 @@
 patch_omc_bash_freeze() {
   local script="$REPO_DIR/installer/scripts/patch_omc_freeze.sh"
   [[ -f "$script" ]] || { debug "skip omc bash-freeze patch: script missing at $script"; return 0; }
-  # Forward DRY_RUN as an env var so the script's own check honors it.
-  DRY_RUN="$DRY_RUN" bash "$script" 2>&1 | while IFS= read -r line; do log "$line"; done
-}
-
-patch_omc_statedir() {
-  local script="$REPO_DIR/installer/scripts/patch_omc_statedir.sh"
-  [[ -f "$script" ]] || { debug "skip omc statedir-ascent patch: script missing at $script"; return 0; }
   # Forward DRY_RUN as an env var so the script's own check honors it.
   DRY_RUN="$DRY_RUN" bash "$script" 2>&1 | while IFS= read -r line; do log "$line"; done
 }
