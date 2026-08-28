@@ -1,5 +1,6 @@
 """hooklog.fire 의 계약: append 한다, 절대 안 죽는다."""
 import importlib.util
+import os
 import json
 from pathlib import Path
 
@@ -91,3 +92,43 @@ def test_never_ascends_into_home(tmp_path, monkeypatch):
     hooklog.fire("demo.jsonl", str(proj))
     assert (proj / ".omc" / "logs" / "demo.jsonl").is_file()
     assert not (fake_home / ".omc" / "logs").exists()
+
+
+# --- hooklog.sh: 셸 훅도 같은 루트로 (2026-08-28, 셸 계열 5종이 raw $PWD 였다) ---
+
+import subprocess
+
+SH = HOOK.with_suffix(".sh")
+
+
+def _sh_root(cwd, home=None):
+    env = dict(os.environ, HOME=str(home)) if home else None
+    r = subprocess.run(
+        ["sh", "-c", f'. "{SH}"; hooklog_state_root "{cwd}"'],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_sh_matches_python_resolver(tmp_path):
+    """셸판과 파이썬판이 갈리면 같은 세션이 두 곳에 로그를 남긴다."""
+    hooklog = _load()
+    (tmp_path / ".omc").mkdir()
+    deep = tmp_path / "a" / "b"
+    deep.mkdir(parents=True)
+    assert _sh_root(deep) == os.path.realpath(hooklog.state_root(str(deep)))
+
+
+def test_sh_falls_back_to_git_root(tmp_path):
+    (tmp_path / ".git").mkdir()
+    deep = tmp_path / "src"
+    deep.mkdir()
+    assert _sh_root(deep) == os.path.realpath(str(tmp_path))
+
+
+def test_sh_never_ascends_into_home(tmp_path):
+    (tmp_path / ".omc").mkdir()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    assert _sh_root(proj, home=tmp_path) == os.path.realpath(str(proj))

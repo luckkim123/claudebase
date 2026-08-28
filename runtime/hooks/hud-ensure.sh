@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# .omc/logs 위치는 cwd 가 아니라 프로젝트 루트가 정한다 (hooklog.sh 참조).
+_hl="$(dirname "$0")/hooklog.sh"
+[ -r "$_hl" ] && . "$_hl"
+command -v hooklog_state_root >/dev/null 2>&1 || hooklog_state_root() {
+    printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}"   # fail-open: 훅은 세션을 막지 않는다
+}
 # hud-ensure.sh — SessionStart guard that keeps the OMC HUD wrapper synced.
 #
 # Problem: OMC's `/oh-my-claudecode:hud setup` (and plugin updates that ship a
@@ -74,7 +80,7 @@ if [[ -f "$WRAPPER" ]] \
    && [[ -f "$DEST_CFG" ]] \
    && cmp -s "$CFGDIR" "$DEST_CFG"; then
   # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/hud_ensure.jsonl"
+  _log="$(hooklog_state_root)/.omc/logs/hud_ensure.jsonl"
   mkdir -p "$(dirname "$_log")" 2>/dev/null \
     && printf '{"ts":"%s","hook":"hud-ensure"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
   exit 0
@@ -94,7 +100,7 @@ if [[ -f "$REPO_DIR/installer/lib/omc.sh" ]]; then
 fi
 
 # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/hud_ensure.jsonl"
+_log="$(hooklog_state_root)/.omc/logs/hud_ensure.jsonl"
 mkdir -p "$(dirname "$_log")" 2>/dev/null \
   && printf '{"ts":"%s","hook":"hud-ensure"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
 

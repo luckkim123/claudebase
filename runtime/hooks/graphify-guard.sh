@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# .omc/logs 위치는 cwd 가 아니라 프로젝트 루트가 정한다 (hooklog.sh 참조).
+_hl="$(dirname "$0")/hooklog.sh"
+[ -r "$_hl" ] && . "$_hl"
+command -v hooklog_state_root >/dev/null 2>&1 || hooklog_state_root() {
+    printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}"   # fail-open: 훅은 세션을 막지 않는다
+}
 # graphify PreToolUse guard — routes the agent through the knowledge graph
 # before it searches or reads raw files.
 #
@@ -119,7 +125,7 @@ if [ -n "$_sid" ]; then
     # Still record the firing so harness_stats' rate stays honest — a suppressed
     # call IS a call, and counting only the emitted one would report a 20x drop
     # in guard activity that never happened.
-    _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
+    _log="$(hooklog_state_root)/.omc/logs/graphify_guard.jsonl"
     mkdir -p "$(dirname "$_log")" 2>/dev/null \
       && printf '{"ts":"%s","hook":"graphify-guard","suppressed":true,"mode":"%s","target":%s}\n' \
          "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$_tgt" >> "$_log" 2>/dev/null || true
@@ -163,7 +169,7 @@ if [ -n "${guard_out:-}" ] && [ "$out_name" != "graphify-out" ]; then
 fi
 
 # 발화 기록 — harness_stats 가 이 파일명 리터럴을 grep 한다. 실패해도 무시.
-_log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graphify_guard.jsonl"
+_log="$(hooklog_state_root)/.omc/logs/graphify_guard.jsonl"
 mkdir -p "$(dirname "$_log")" 2>/dev/null \
   && printf '{"ts":"%s","hook":"graphify-guard","mode":"%s","target":%s}\n' \
      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$_tgt" >> "$_log" 2>/dev/null || true

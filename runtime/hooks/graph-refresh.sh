@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# .omc/logs 위치는 cwd 가 아니라 프로젝트 루트가 정한다 (hooklog.sh 참조).
+_hl="$(dirname "$0")/hooklog.sh"
+[ -r "$_hl" ] && . "$_hl"
+command -v hooklog_state_root >/dev/null 2>&1 || hooklog_state_root() {
+    printf '%s\n' "${CLAUDE_PROJECT_DIR:-$PWD}"   # fail-open: 훅은 세션을 막지 않는다
+}
 # Stop hook — refresh the code graphs this repository already has.
 #
 # The problem this closes: the PreToolUse guards route every session (and every
@@ -194,7 +200,7 @@ if [ "$_touched" = 1 ]; then
   # 여기 한 곳에서만: 그래프가 실제로 있는 저장소에서만 기록해야
   # test_repo_without_a_graph_is_left_alone (새 디렉터리 0개 단언)이 깨지지 않고,
   # 한 번의 호출에서 그래프를 여럿 건드려도 줄 수는 항상 1개다.
-  _log="${CLAUDE_PROJECT_DIR:-$PWD}/.omc/logs/graph_refresh.jsonl"
+  _log="$(hooklog_state_root)/.omc/logs/graph_refresh.jsonl"
   mkdir -p "$(dirname "$_log")" 2>/dev/null \
     && printf '{"ts":"%s","hook":"graph-refresh"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_log" 2>/dev/null || true
 fi

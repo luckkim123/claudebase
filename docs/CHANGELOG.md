@@ -28,8 +28,24 @@ story explains.
   helper rather than importing it, so fixing the helper alone would have left
   six litterers.
 
+- **The shell family had the same bug, and five hooks carried it.**
+  `graph-refresh.sh`, `graphify-debt.sh`, `graph-offer.sh`, `hud-ensure.sh` (×2)
+  and `graphify-guard.sh` (×2) all built their log path from
+  `${CLAUDE_PROJECT_DIR:-$PWD}` — and `CLAUDE_PROJECT_DIR` is **not exported to
+  hooks**, which two of those files already say in their own comments, so the
+  expression is `$PWD` in practice. New `runtime/hooks/hooklog.sh` provides
+  `hooklog_state_root`, the same three-step rule as the Python side, and all six
+  call sites use it. Sourcing is fail-open: a missing helper falls back to the
+  old expression rather than killing the hook.
+  `graphify-debt.sh` is the sharpest case — it *already computed* an ascended
+  `repo` and then logged to `$PWD` anyway. `graphify-guard.sh` looked innocent
+  because it `cd`s to the graph root first, but that `cd` only happens when an
+  ancestor **has** a graph; in a repo with none it logged to raw `$PWD`. That is
+  why no stray directory contained `graphify_guard.jsonl` — the defect was
+  latent, not absent, and the vault could never have shown it.
+
 ### Verification
-- `tests/hooks/test_hooklog.py` — 3 new tests, each checked for discrimination
+- `tests/hooks/test_hooklog.py` — 6 new tests, each checked for discrimination
   by planting the failure it guards: reverting `state_root` fails the ascent and
   git-root tests; removing the `$HOME` guard fails the third. 8/8 pass on the
   patched file.
@@ -37,7 +53,10 @@ story explains.
   `runtime/skills/skill-comply/tests/` reproduce at HEAD with these changes
   stashed — pre-existing, unrelated.
 - Live fire: `hooklog.fire()` with `cwd` five levels deep inside a *nested git
-  repo* wrote to the vault root's `.omc/logs/` and created no new directory.
+  repo* wrote to the vault root's `.omc/logs/` and created no new directory. The
+  shell shim was probed the same way, as a real script resolving `hooklog.sh`
+  through its own `$0`, and agreed.
+- `pytest tests/` **444 passed** after the shell half.
 - The 18 strays' 403 log lines were merged into the vault root's `.omc/logs/`
   before the directories went to trash, so no telemetry was dropped.
 
