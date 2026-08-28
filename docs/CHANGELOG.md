@@ -2,6 +2,74 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-28 — a migration that cannot quietly skip anything
+
+The om* harnesses are consolidating five per-harness state stores into one
+`.hq/` root per anchor (spec: `oh-my-orchestrator`
+`skills/harness/references/store-spec.md`). Phases 3 and 4 moved four anchors by
+hand with a throwaway script each, and every defect those phases turned up had
+one shape: a check that returned "pass" while looking at the wrong thing. P4's
+`finding/013` is the sharpest — a whole anchor nobody had touched passed the
+test suite, the ledger and the four-state gate, because each of the three was
+looking at a different axis than the work list was.
+
+So the canonical tool is built around refusing to be quiet. A path its mapping
+table does not claim is a **failure that takes the anchor with it**, not a skip:
+a migration that steps over what it does not recognise is indistinguishable from
+one that finished. Building the table also surfaced four rows the spec's own
+per-file assignment did not carry — `omp env/`, `omd wiki/`, `omo INDEX.md` and
+`.hq-lock` — each found by censusing a real store rather than by reading the
+spec, which is `finding/013` happening again one layer down.
+
+### Added
+
+- `runtime/bin/migrate-om-store.sh` — dry-run by default; `apply` copies then
+  sha256-verifies and never deletes; `reverse` merges new-store writes back to
+  the legacy path (the reversible half of the rollback procedure, which nothing
+  implemented before); `purge` trashes the legacy store only after a
+  confirmation read from `/dev/tty`, so a piped or closed stdin refuses.
+  `census` and `drift` are deliberately **different instruments**: census is the
+  store-spec §9 fixed unbounded-depth `find` crossed with `git ls-files`, drift
+  compares legacy mtimes against `.hq/config/migrated.jsonl`. Sharing a command
+  between them would leave one detector with one blind spot; as written, each is
+  blind exactly where the other sees.
+  - Forward and reverse read **one** table. A second, inverse table would drift,
+    and the drift would be invisible until a rollback was actually needed. The
+    built-in `selftest` asserts every rule round-trips and that no destination
+    prefix is reused within a store kind.
+  - `.omx` and anything under `albc/` refuse by name rather than by absence —
+    they are Phase 7, behind the RA-L campaign gate.
+- `tests/bin/test_migrate_om_store.py` — 20 tests, all written as
+  discrimination checks: plant the defect, assert failure, remove it, assert
+  success. Five defects were also injected into the tool itself to confirm the
+  suite is not inert (unmapped-becomes-skip, dirty-check-always-passes,
+  conflict-overwrites, purge-reads-stdin, drift-always-clean); each turned the
+  suite red and each removal restored exit 0.
+
+### Changed
+
+- `runtime/skills/sync-claudebase/SKILL.md` — new step **4n**, reporting this
+  machine's anchor roster and split-brain state on every sync. The migration is
+  per machine: a repo can be fully cut over in git while a machine still writes
+  to the old path, and nothing errors. 4n reports; it never migrates, because
+  advancing an anchor is a per-anchor user gate (store-spec §7).
+
+### Notes
+
+- The exclusion list is **patterns, not counts**. The plugin cache holds one
+  `.omha` per installed version, so it grew 2 → 5 across the P2/P3/P4
+  deployments and the census total moved 29 → 32 without a single anchor
+  changing. Measured 2026-08-28 on ksm-mac: 32 hits, 12 excluded, 21 in scope,
+  and the in-scope set matches the raw find in both directions.
+- Dry-running the tool over the vault's `.omp` reproduces P3's hand migration
+  exactly — 66 identical, 1 conflict, 1 skipped `.DS_Store`, **0 unmapped** —
+  which is the strongest evidence available that the table matches what was
+  actually done by hand.
+- Three live CONFLICTs were found and left alone: `oh-my-scholar` and
+  `oh-my-docs` `learned.md` (P4 corrected a stale banner in the new copy only)
+  and `claudebase` `.omp/rules.json` (the new copy gained `.hq/**` in `ignore`).
+  All three are correct divergences; the tool refuses to overwrite either side.
+
 ## [Unreleased] — 2026-08-25 — the layout rules were only ever prose
 
 This repo has said where files belong for as long as it has existed, in three

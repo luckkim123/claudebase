@@ -992,6 +992,64 @@ Three traps, all measured:
 
 Report the `(4m)` lines in the Outputs table every run, same contract as 4l.
 
+**4n. om\* 스토어 census 와 drift (두 계측기 — 명령을 공유하지 않는다)**
+
+The om\* harnesses are consolidating their per-harness state stores (`.omp`,
+`.oms`, `.omd`, `.omha`, `.orchestration`) into one `.hq/` root per anchor.
+Spec: `oh-my-orchestrator` `skills/harness/references/store-spec.md`. The tool
+is `runtime/bin/migrate-om-store.sh` in this repo; it is dry-run by default and
+never deletes without a typed terminal confirmation, so both commands below are
+safe to run on any machine.
+
+This step exists because the migration is **per machine**. A repo can be fully
+cut over in git and still leave a machine sitting on an un-migrated legacy store
+— or worse, one that is still being written to while the deployed hooks read the
+new store. Neither condition produces an error anywhere.
+
+```bash
+CB="${CLAUDEBASE_DIR:-$HOME/claudebase}"
+bash "$CB/runtime/bin/migrate-om-store.sh" census                 # (4n-a) roster
+```
+
+`census` is the **roster** instrument: the store-spec §9 fixed `find` at
+unbounded depth (a `-maxdepth 6` variant missed three real anchors at depths
+7–8), crossed with `git ls-files` for the tracked count. Exclusions are
+*patterns*, not a count — the plugin cache grows one `.omha` per deployed
+version (2 when §9.2 was written, 5 by 2026-08-28), so any roster pinned to a
+number goes stale on the next release. Report the `in scope` / `excluded by
+pattern` line plus any row whose GATE column reads `legacy` (an anchor with no
+`.hq/.anchor` yet).
+
+```bash
+for a in "$HOME/ksm_Obsidian" "$HOME/claudebase" "$HOME/Desktop/workspace"; do
+  [ -d "$a" ] && bash "$CB/runtime/bin/migrate-om-store.sh" drift "$a"
+done                                                              # (4n-b) split-brain
+```
+
+`drift` is the **split-brain** instrument, and it deliberately shares no command
+with census. Its discovery is the ledger — `.hq/config/migrated.jsonl` — and its
+comparison is legacy-file mtime against that ledger's ISO timestamp. Exit 5
+means at least one legacy file was written *after* this anchor was migrated,
+i.e. something on this machine is still writing to the old path.
+
+Why two instruments rather than one: each is blind exactly where the other
+sees. Census walks directories, so it finds an anchor nobody has ever migrated
+but cannot tell a live legacy store from a dormant one. Drift reads the ledger,
+so it judges liveness but is silent on an anchor that has no ledger row at all.
+Sharing a command between them would collapse both into a single detector with
+one blind spot and no way to notice.
+
+**Stated limits — do not report a clean run as full coverage.** Drift cannot
+see an ignored layer (nothing dates the write) or a no-git anchor
+(`~/Desktop/workspace` and its five nested anchors are iCloud, store-spec §8);
+those are covered only by the `tar` hashes `migrate-om-store.sh apply` writes to
+`~/.claude/hq-snapshots/`. Census cannot see an anchor outside `$HOME`.
+
+On a `legacy` row or a drift exit 5, **ask** with `AskUserQuestion` — do not
+migrate as part of a sync. The move is a phase of an in-flight campaign with a
+per-anchor user gate (store-spec §7); a sync's job here is to *report* that this
+machine is behind, not to advance it.
+
 ### 5. Run installer
 
 ```bash
@@ -1218,6 +1276,7 @@ A short summary table:
 | Optional plugins (4k) | `<per plugin: enabled / offered, declined / already present — or "none offered">` |
 | Code graphs, this project (4l) | `CRG=<yes/no> graphify=<yes/no>` + `<"built" / "offered, declined" / "already asked (marker set)" / "nothing missing">` |
 | tokensave leftovers (4m) | the two `(4m)` lines + `<"removed" / "offered, declined" / "clean">` |
+| om\* store census / drift (4n) | `in scope: N, excluded: M` + `<"all anchored" / "K legacy rows: …">` + `<"drift clean" / "SPLIT-BRAIN in …">` — report both, never fold one into the other |
 | Actions taken | `<commits, file writes, install runs>` |
 | Local commits awaiting push | `<list, or "none">` — with explicit ask if non-empty |
 | Adoption questions | `<list, or "none">` |
