@@ -338,16 +338,21 @@ def test_census_matches_the_fixed_find_in_both_directions(tmp_path):
 def test_drift_uses_the_ledger_not_the_census_find(anchor):
     """The two instruments must not share a command. Drift's discovery is the
     ledger: with no row for this harness it reports 'never cut over' rather
-    than walking the tree, and census is what sees such an anchor."""
+    than walking the tree, and census is what sees such an anchor.
+
+    Both undefined cases exit **6, not 0** (P7). They were 0, and they said
+    'never cut over' in prose while doing it — but an acceptance check written
+    against `$?` reads 0 as 'verified clean', so a not-run check and a passed
+    check shared an exit code. Same shape as finding/013."""
     silent = run("drift", str(anchor))
-    assert silent.returncode == 0
+    assert silent.returncode == 6
     assert "no migrated.jsonl" in silent.stdout
 
     assert run("apply", str(anchor)).returncode == 0
     write(anchor / ".hq" / "config" / "migrated.jsonl",
           json.dumps({"harness": "oms", "at": "2026-08-28T00:00:00+09:00", "machine": "t"}) + "\n")
     wrong_row = run("drift", str(anchor))
-    assert wrong_row.returncode == 0
+    assert wrong_row.returncode == 6
     assert "no row for 'omp'" in wrong_row.stdout
 
 

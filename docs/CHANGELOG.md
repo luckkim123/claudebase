@@ -37,6 +37,15 @@ plan of record.
 - selftest 46 → **64 checks**, all pass; `omx` added to both selftest loops and
   the `path` mode given its own probe and uniqueness key. pytest 20 passed.
 
+### Fixed
+- **`drift` returned 0 for a store it never checked.** With no `migrated.jsonl`,
+  or none with a row for this harness, it printed "never cut over" and exited
+  **0** — the same code as "clean". The campaign's acceptance criteria are
+  written against `$?` read without a pipe, so a not-run check and a passed
+  check were indistinguishable there. New exit code **6 — undefined**. Found by
+  running `drift` on albc's `.omx` before its release had appended a ledger row;
+  the same shape as `finding/013`.
+
 ### Notes
 - The tool still does **not** write `migrated.jsonl`; the session does, at
   cutover time. That is deliberate — the ledger row means "this harness's code

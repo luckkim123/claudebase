@@ -56,7 +56,14 @@
 #   migrate-om-store plan  ~/Desktop/workspace
 #   migrate-om-store plan  ~/ksm_Obsidian --store .omp
 #
-# Exit codes: 0 ok · 1 usage · 2 unmapped path · 3 refused · 4 conflict · 5 drift.
+# Exit codes: 0 ok · 1 usage · 2 unmapped path · 3 refused · 4 conflict · 5 drift ·
+#             6 undefined (no ledger row for this store — it was never cut over).
+#
+# 6 exists because `drift` used to return 0 there. It said so in prose — "this
+# store was never cut over" — but an acceptance check written against `$?`, which
+# is how this campaign's rounds are checked, read that 0 as "verified clean". A
+# not-run check and a passed check must not share an exit code (P7; the same
+# shape as `finding/013`).
 
 set -u
 
@@ -683,7 +690,7 @@ print(f"== {anchor}  [{store}, kind={kind}]")
 if not os.path.exists(ledger):
     print("  no migrated.jsonl — nothing was migrated from here; drift is undefined")
     print("  (census is the instrument that sees this anchor)")
-    raise SystemExit(0)
+    raise SystemExit(6)
 rows = []
 for line in open(ledger, encoding="utf-8"):
     line = line.strip()
@@ -693,7 +700,7 @@ mine = [r for r in rows if r.get("harness") == kind]
 if not mine:
     print(f"  migrated.jsonl has no row for '{kind}' — this store was never cut over")
     print("  (rows present: " + ", ".join(sorted({r.get('harness', '?') for r in rows})) + ")")
-    raise SystemExit(0)
+    raise SystemExit(6)
 at = max(datetime.datetime.fromisoformat(r["at"]) for r in mine)
 cut = at.timestamp()
 print(f"  ledger says {kind} migrated at {at.isoformat()}")
