@@ -1085,11 +1085,23 @@ crg_hooks=$(grep -c code-review-graph "$HOME/.claude/settings.json" 2>/dev/null 
 crg_idx=$(find "$HOME" -maxdepth 4 -name .code-review-graph -type d 2>/dev/null | grep -v '/\.Trash/' | tr '\n' ' ')
 crg_ign=$(find "$HOME" -maxdepth 4 -name .code-review-graphignore 2>/dev/null | grep -v '/\.Trash/' | tr '\n' ' ')
 crg_rules=$(find "$HOME" -maxdepth 5 -path '*/.claude/rules/code-review-graph.md' 2>/dev/null | tr '\n' ' ')
+crg_githooks=$(find "$HOME" -maxdepth 4 -path '*/.git/hooks/pre-commit' 2>/dev/null \
+  | while read -r f; do grep -ql code-review-graph "$f" 2>/dev/null && printf '%s ' "$f"; done)
 
 echo "(4o) binary=${crg_bin:-none} mcp=$crg_mcp settings.local=$crg_local rendered-hits=$crg_hooks"
 echo "(4o) indexes: ${crg_idx:-none}"
 echo "(4o) ignore files: ${crg_ign:-none} | rules docs: ${crg_rules:-none}"
+echo "(4o) git hooks: ${crg_githooks:-none}"
 ```
+
+**The git hook is the one that undoes the cleanup, so check it before the index.**
+CRG's installer writes `<repo>/.git/hooks/pre-commit` calling `code-review-graph
+update`, and `.git/hooks/` is neither tracked nor reachable by any of the other
+probes above. Measured on the vault 2026-08-29, in this exact order: the index was
+trashed, the removal was committed, and **the commit's own pre-commit hook rebuilt
+the index from scratch** — 182 files, 30,969 nodes, schema migrated v1→v9, all of
+it printed as INFO on a commit that was removing the tool. Nothing errored. Delete
+the hook first, then the index; the reverse order silently reverses itself.
 
 Everything `none`/`no`/`0` → report the lines and move on; this machine is clean.
 Any hit → **ask with `AskUserQuestion`** (one question: remove the leftovers, or
@@ -1101,6 +1113,7 @@ hand.
 On a yes, in this order:
 
 ```bash
+trash <each path from crg_githooks>                   # FIRST — see above
 claude mcp remove code-review-graph --scope project   # per-project; --scope user if 4o said "user"
 uv tool uninstall code-review-graph
 trash <each path from crg_idx> <each path from crg_ign> <each path from crg_rules>

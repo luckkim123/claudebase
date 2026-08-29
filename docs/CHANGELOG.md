@@ -42,6 +42,15 @@ All user-visible changes to this repo. Format: [Keep a Changelog](https://keepac
 - **Symbol-level queries** — callers, importers, blast radius. graphify does not
   answer these; the fallback is `graphify query`'s neighbourhood walk, or `Grep`.
 
+### The leftover that undid the cleanup
+- **CRG's installer writes a `pre-commit` git hook, and nothing else finds it.**
+  `<repo>/.git/hooks/pre-commit` calls `code-review-graph update`; `.git/hooks/` is
+  untracked and invisible to every other probe. Measured on the vault the same day,
+  in this order: index trashed → removal committed → **the commit's own pre-commit
+  hook rebuilt the index**, 182 files / 30,969 nodes, schema migrated v1→v9, printed
+  as INFO on a commit whose purpose was removing the tool. Nothing errored. `4o` now
+  detects it and deletes it **first**; the reverse order silently reverses itself.
+
 ### Verification
 - `pytest tests/ -q` → **419 passed**, exit 0 (7 CRG-specific tests rewritten or
   removed; none left failing).
