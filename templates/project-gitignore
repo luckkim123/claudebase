@@ -14,4 +14,3 @@
 # are configuration and stay tracked.
 .graphify/
 graphify-out/
-.code-review-graph/

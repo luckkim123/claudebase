@@ -829,15 +829,16 @@ once per session start) — this sync cannot backfill data for the current one.
 
 **4l. Code graphs for THIS project? (detect-then-ask, once per project)**
 
-`install.sh` puts three graph CLIs on the machine but decides nothing about
-which *repo* gets a graph, and `runtime/hooks/graph-offer.sh` — the only
-automatic prompt — returns early on `[ -d "$repo/.code-review-graph" ]`. So the
-moment a project has any one graph the hook goes silent forever, including about
-the two it never built. Measured on the obsidian vault 2026-08-11:
-`.code-review-graph/graph.db` present since 08-03, no `graph.json` anywhere, the
-hook's own marker never written (it exits before that line), and `/graphify`
-never once surfaced. A sync is a deliberate invocation, so it is the right place
-to close that hole from the other side.
+`install.sh` puts the graph CLI on the machine but decides nothing about which
+*repo* gets a graph, and `runtime/hooks/graph-offer.sh` — the only automatic
+prompt — is shown once per project and then never again. A project whose graph
+is code-only stays silent about graphify's prose pass forever. Measured on the
+obsidian vault 2026-08-11, back when a second tool's index also short-circuited
+the hook: an index present since 08-03, no `graph.json` anywhere, the hook's own
+marker never written, and `/graphify` never once surfaced. That second tool is
+gone as of 2026-08-29 and the short-circuit with it, but the once-per-project
+contract remains — a sync is a deliberate invocation, so it is the right place
+to close the hole from the other side.
 
 **The project here is the session's working directory, not `~/claudebase`.**
 Every other step `cd`s into the repo being synced; this one must not.
@@ -845,8 +846,7 @@ Every other step `cd`s into the repo being synced; this one must not.
 ```bash
 PROJ="${CLAUDE_PROJECT_DIR:-$PWD}"          # where the user invoked the sync
 gout="${GRAPHIFY_OUT:-graphify-out}"
-crg=no; gfy=no; gjson=""
-[ -f "$PROJ/.code-review-graph/graph.db" ] && crg=yes
+gfy=no; gjson=""
 for d in "$gout" .graphify graphify-out; do
   [ -f "$PROJ/$d/graph.json" ] && { gjson="$PROJ/$d/graph.json"; gfy=yes; break; }
 done
@@ -868,7 +868,7 @@ g = json.load(open(sys.argv[1]))
 print(sum(1 for x in g.get('nodes', []) if (x.get('source_file') or '').endswith('.md')))
 " "$gjson" 2>/dev/null || echo 0)
 
-echo "(4l) $PROJ — CRG=$crg graphify=$gfy (md nodes: $gfy_md) | tracked: ${code} code, ${md} md"
+echo "(4l) $PROJ — graphify=$gfy (md nodes: $gfy_md) | tracked: ${code} code, ${md} md"
 ```
 
 Report that line in the Outputs table **every** run — state costs nothing, and a
@@ -890,7 +890,7 @@ Marker absent → ask with `AskUserQuestion`, as **two separate decisions**. The
 differ by three orders of magnitude in cost, and bundling them makes a user
 decline a five-second build to avoid a five-hour one:
 
-- **`crg=no` with `code` ≥ 20** → the free tree-sitter builds.
+- **`gfy=no` with `code` ≥ 20** → the free tree-sitter build.
   Offline, seconds, one command: `graph-init`. Nothing to weigh; just offer it.
 - **`gfy_md` = 0 with a substantial `md` count (≥50)** → graphify's prose
   semantic pass, the one nothing else ever names. Note the trigger is the
@@ -1049,6 +1049,80 @@ On a `legacy` row or a drift exit 5, **ask** with `AskUserQuestion` — do not
 migrate as part of a sync. The move is a phase of an in-flight campaign with a
 per-anchor user gate (store-spec §7); a sync's job here is to *report* that this
 machine is behind, not to advance it.
+
+**4o. code-review-graph 잔재? (detect-then-ask, once per machine)**
+
+`code-review-graph` was removed from this repo on **2026-08-29**, and the reason
+was not that it was tried and found wanting — **nothing bound to it.** The three
+integration layers differ enormously in how strongly they get consulted, and only
+the `PreToolUse` hook is binding; `graphify-guard.sh` named graphify's CLI and no
+hook ever named CRG's. Keeping CRG would have meant writing that guard from
+scratch; keeping graphify meant deleting CRG. Same shape as 4m, one tool along.
+
+It was wired as a per-project MCP server, a per-repo SQLite index, and a
+`.code-review-graphignore`, so a machine that installed it before that date still
+carries all of it: `install.sh` stops *installing* it but cannot uninstall what is
+already there. Same reason this is its own step rather than a line in 4j — a
+server the repo no longer ships is not an upgrade question, and 4j would keep
+proposing one forever.
+
+```bash
+crg_bin="$(command -v code-review-graph 2>/dev/null || true)"
+[ -n "$crg_bin" ] || { [ -x "$HOME/.local/bin/code-review-graph" ] && crg_bin="$HOME/.local/bin/code-review-graph"; }
+crg_mcp=$(python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude.json")
+try: d = json.load(open(p))
+except Exception: raise SystemExit(print("unreadable"))
+hits = ["user"] if "code-review-graph" in (d.get("mcpServers") or {}) else []
+hits += [k for k, v in (d.get("projects") or {}).items()
+         if "code-review-graph" in (v.get("mcpServers") or {})]
+print(",".join(hits) or "none")
+PY
+)
+crg_local=no; grep -q code-review-graph "$HOME/.claude/settings.local.json" 2>/dev/null && crg_local=yes
+crg_hooks=$(grep -c code-review-graph "$HOME/.claude/settings.json" 2>/dev/null || echo 0)
+crg_idx=$(find "$HOME" -maxdepth 4 -name .code-review-graph -type d 2>/dev/null | grep -v '/\.Trash/' | tr '\n' ' ')
+crg_ign=$(find "$HOME" -maxdepth 4 -name .code-review-graphignore 2>/dev/null | grep -v '/\.Trash/' | tr '\n' ' ')
+crg_rules=$(find "$HOME" -maxdepth 5 -path '*/.claude/rules/code-review-graph.md' 2>/dev/null | tr '\n' ' ')
+
+echo "(4o) binary=${crg_bin:-none} mcp=$crg_mcp settings.local=$crg_local rendered-hits=$crg_hooks"
+echo "(4o) indexes: ${crg_idx:-none}"
+echo "(4o) ignore files: ${crg_ign:-none} | rules docs: ${crg_rules:-none}"
+```
+
+Everything `none`/`no`/`0` → report the lines and move on; this machine is clean.
+Any hit → **ask with `AskUserQuestion`** (one question: remove the leftovers, or
+keep CRG as a machine-local tool). An unregistered binary costs nothing, so a
+"keep" answer is legitimate and needs no argument — but say what a keep means:
+nothing in this repo routes to it any more, so it is a tool the user drives by
+hand.
+
+On a yes, in this order:
+
+```bash
+claude mcp remove code-review-graph --scope project   # per-project; --scope user if 4o said "user"
+uv tool uninstall code-review-graph
+trash <each path from crg_idx> <each path from crg_ign> <each path from crg_rules>
+```
+
+Three things to carry over from 4m, because they are the same traps one tool along:
+
+- **A per-project MCP server lives in the project's `.mcp.json`, not just
+  `~/.claude.json`.** The detection above reads `~/.claude.json`; a repo carrying
+  its own `.mcp.json` needs `grep -l code-review-graph */.mcp.json` from wherever
+  the user keeps repos, and that file is usually **tracked**, so removing the
+  entry is a commit in that repo, not a machine-local edit.
+- **Clean `settings.local.json` and `settings.json` in the SAME pass, before the
+  next render.** `render_settings.plan` diffs against the still-dirty rendered
+  file and captures the difference as a fresh per-machine override, so cleaning
+  one file and re-rendering puts the string back. `GATEGUARD_EXEMPT_GLOBS` is the
+  one that carried `.code-review-graph/**`.
+- **Deleting the index goes through `trash`.** User rule "Deletion Safety". The
+  indexes are gitignored and regenerable in seconds *by a tool that is being
+  uninstalled* — which is exactly the case where a recoverable path matters.
+
+Report the `(4o)` lines in the Outputs table every run, same contract as 4m.
 
 ### 5. Run installer
 

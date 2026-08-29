@@ -1,7 +1,7 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "GATEGUARD_EXEMPT_GLOBS": ".hq/**,.omp/**,.omx/**,.oms/**,.omd/**,.omha/**,.sp/**,.graphify/**,.code-review-graph/**,node_modules/**,.git/**",
+    "GATEGUARD_EXEMPT_GLOBS": ".hq/**,.omp/**,.omx/**,.oms/**,.omd/**,.omha/**,.sp/**,.graphify/**,node_modules/**,.git/**",
     "GRAPHIFY_OUT": ".graphify",
     "OMD_ROUTE_GATE": "on",
     "OMP_ROUTE_GATE": "on",

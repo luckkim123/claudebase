@@ -77,11 +77,10 @@ for arg in "$@"; do
   esac
 done
 
-# Root: the git toplevel when there is one, else the directory itself. Both
-# builders handle a non-git tree — CRG falls back from `git ls-files` to an
-# rglob walk (incremental.py:761-767) and graphify never needed git at all
-# (measured: 12 .py files in a plain directory produced 24 nodes) — which is why
-# a container mount like /workspace is a legitimate target and not an error.
+# Root: the git toplevel when there is one, else the directory itself. graphify
+# handles a non-git tree — it never needed git at all (measured: 12 .py files in
+# a plain directory produced 24 nodes) — which is why a container mount like
+# /workspace is a legitimate target and not an error.
 if [ -n "$TARGET" ]; then
   [ -d "$TARGET" ] || die "not a directory: $TARGET"
   ROOT="$(cd "$TARGET" && pwd)"
@@ -137,21 +136,20 @@ resolve() {
   [ -x "$found" ] && printf '%s' "$found"
 }
 
-CRG="$(resolve code-review-graph)"
 GFY="$(resolve graphify)"
 
 if [ "$PURGE" -eq 1 ]; then
   removed=0
-  for d in "$ROOT/.code-review-graph" "${OUT_DIRS[@]/#/$ROOT/}"; do
+  for d in "${OUT_DIRS[@]/#/$ROOT/}"; do
     [ -e "$d" ] || continue
     rm -rf "$d" && say "삭제: ${d#"$ROOT"/}" && removed=1
   done
   [ "$removed" -eq 1 ] || say "지울 그래프가 없습니다 ($ROOT)"
-  say "제외 파일(.graphifyignore, .code-review-graphignore)은 남겨둡니다 — 손으로 고쳤을 수 있습니다."
+  say "제외 파일(.graphifyignore)은 남겨둡니다 — 손으로 고쳤을 수 있습니다."
   exit 0
 fi
 
-[ -n "$CRG" ] || [ -n "$GFY" ] || die "code-review-graph도 graphify도 없습니다 — installer/install.sh를 먼저 실행하세요"
+[ -n "$GFY" ] || die "graphify가 없습니다 — installer/install.sh를 먼저 실행하세요"
 
 say "대상: $ROOT"
 
@@ -167,18 +165,10 @@ seed() {
   fi
 }
 [ -n "$GFY" ] && seed .graphifyignore project-graphifyignore
-[ -n "$CRG" ] && seed .code-review-graphignore project-code-review-graphignore
 
 # --- 2. build ---------------------------------------------------------------
-# Failures are reported and do not abort: one graph is worth having even when
-# the other tool is broken, and the verification below judges what exists.
-if [ -n "$CRG" ]; then
-  if ( cd "$ROOT" && "$CRG" build >/dev/null 2>&1 ); then
-    say "code-review-graph build 완료"
-  else
-    say "경고: code-review-graph build 실패"
-  fi
-fi
+# A failure is reported and does not abort: the verification below judges what
+# exists rather than trusting the builder's exit code.
 if [ -n "$GFY" ]; then
   if ( cd "$ROOT" && "$GFY" . --code-only >/dev/null 2>&1 ); then
     say "graphify . --code-only 완료"
@@ -195,7 +185,6 @@ python3 - "$ROOT" "${OUT_DIRS[@]}" <<'PY'
 import collections
 import json
 import os
-import sqlite3
 import sys
 
 root, out_dirs = sys.argv[1], sys.argv[2:]
@@ -239,22 +228,6 @@ def top_dir(path):
 
 ok = True
 seen = False
-
-db = os.path.join(root, ".code-review-graph", "graph.db")
-if os.path.exists(db):
-    seen = True
-    counter = collections.Counter()
-    try:
-        with sqlite3.connect(db) as conn:
-            for path, n in conn.execute(
-                "select file_path, count(*) from nodes group by 1"
-            ):
-                counter[top_dir(path)] += n
-    except sqlite3.Error as exc:
-        print(f"[graph-init] code-review-graph: 그래프를 읽을 수 없습니다 ({exc})")
-        ok = False
-    else:
-        ok = report("code-review-graph", counter) and ok
 
 # The first candidate that exists wins; the list is ordered so this process's
 # own GRAPHIFY_OUT is checked before the two defaults.

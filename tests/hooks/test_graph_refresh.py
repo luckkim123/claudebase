@@ -4,13 +4,12 @@ The hook keeps existing code graphs current so the PreToolUse guards never route
 a session through a stale index. Everything worth pinning down is a decision
 about *when not to run*: the hook must stay out of repositories that never asked
 for a graph, must not re-run once a minute has not passed, and must not race a
-multi-hour semantic extraction. Stub binaries stand in for graphify and
-code-review-graph so the assertions are about the hook's logic, not theirs.
+multi-hour semantic extraction. A stub binary stands in for graphify so the
+assertions are about the hook's logic, not the builder's.
 """
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -27,16 +26,15 @@ SETTLE_TIMEOUT = 5.0
 
 @pytest.fixture
 def sandbox(tmp_path: Path):
-    """A git repo plus stub graphify / code-review-graph that log their argv."""
+    """A git repo plus a stub graphify that logs its argv."""
     bin_dir, repo = tmp_path / "bin", tmp_path / "repo"
     bin_dir.mkdir()
     repo.mkdir()
     log = tmp_path / "calls.log"
 
-    for name in ("graphify", "code-review-graph"):
-        stub = bin_dir / name
-        stub.write_text(f'#!/bin/sh\necho "$(basename "$0") $*" >> "{log}"\n')
-        stub.chmod(0o755)
+    stub = bin_dir / "graphify"
+    stub.write_text(f'#!/bin/sh\necho "$(basename "$0") $*" >> "{log}"\n')
+    stub.chmod(0o755)
 
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     return repo, bin_dir, log
@@ -52,22 +50,6 @@ def run_hook(repo: Path, bin_dir: Path, out_dir: str = ".graphify"):
         ["bash", str(HOOK)], cwd=repo, env=env, input="", capture_output=True, text=True
     )
 
-
-def make_crg_graph(repo: Path, nodes: int = 1) -> Path:
-    """Create a `.code-review-graph/` the hook will accept as a real graph.
-
-    A bare directory is not enough: any MCP query that omits `repo_root` leaves
-    an empty `graph.db` behind, so the hook gates on the node count rather than
-    on existence. Pass `nodes=0` to build one of those empty artifacts.
-    """
-    gdir = repo / ".code-review-graph"
-    gdir.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(gdir / "graph.db")
-    db.execute("CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY)")
-    db.executemany("INSERT INTO nodes (id) VALUES (?)", [(i,) for i in range(nodes)])
-    db.commit()
-    db.close()
-    return gdir
 
 
 def firing_log_lines(repo: Path) -> list[str]:
@@ -108,34 +90,33 @@ class TestOptInByExistence:
 
 
 class TestRefresh:
-    def test_both_graphs_are_updated_when_both_exist(self, sandbox):
+    def test_the_graph_is_updated_when_it_exists(self, sandbox):
         repo, bin_dir, log = sandbox
         (repo / ".graphify").mkdir()
         (repo / ".graphify" / "graph.json").write_text("{}")
-        make_crg_graph(repo)
 
         run_hook(repo, bin_dir)
 
-        assert calls(log, 2) == ["graphify update .", "code-review-graph update --brief"]
+        assert calls(log, 1) == ["graphify update ."]
         assert len(firing_log_lines(repo)) == 1
 
     def test_a_second_run_within_the_minute_is_debounced(self, sandbox):
         # A chatty session fires Stop after every turn; re-parsing each time buys
         # nothing and would eventually overlap with itself.
         repo, bin_dir, log = sandbox
-        make_crg_graph(repo)
+        (repo / ".graphify").mkdir()
+        (repo / ".graphify" / "graph.json").write_text("{}")
 
         run_hook(repo, bin_dir)
-        assert calls(log, 1) == ["code-review-graph update --brief"]
+        assert calls(log, 1) == ["graphify update ."]
 
         run_hook(repo, bin_dir)
-        assert calls(log, 2) == ["code-review-graph update --brief"]
+        assert calls(log, 2) == ["graphify update ."]
 
     def test_graphify_defers_to_a_running_extraction(self, sandbox):
         # A semantic extract streams into cache/ for hours. Recent write
-        # activity there means "in flight" — and the check is per-repo, so a
-        # long run in one repository must not stop code-review-graph from
-        # updating in this one.
+        # activity there means "in flight". The check is per-repo, so a long run
+        # in one repository must not freeze the refresh everywhere else.
         #
         # The chunk lands in a nested per-corpus directory on purpose: that is
         # where graphify actually writes, and a check on cache/'s own mtime
@@ -145,11 +126,10 @@ class TestRefresh:
         chunk_dir.mkdir(parents=True)
         (chunk_dir / "abc123.json").write_text("{}")
         (repo / ".graphify" / "graph.json").write_text("{}")
-        make_crg_graph(repo)
 
         run_hook(repo, bin_dir)
 
-        assert calls(log, 1) == ["code-review-graph update --brief"]
+        assert calls(log, 1) == []
 
     def test_a_finished_extraction_stops_blocking_the_refresh(self, sandbox):
         # The mirror image: a cache left behind by a run that ended must not
@@ -166,47 +146,6 @@ class TestRefresh:
         run_hook(repo, bin_dir)
 
         assert calls(log, 1) == ["graphify update ."]
-
-    def test_a_graph_below_the_git_root_is_refreshed(self, sandbox):
-        # A meta-repo that gitignores its source tree holds the real graphs in
-        # nested independent repos (stonefish_ws: src/stonefish_sim,
-        # src/stonefish_slam). Keying only on `$repo/.code-review-graph` left
-        # both of them stale forever, which is worse than having no graph — the
-        # PreToolUse guards still route every query through them.
-        repo, bin_dir, log = sandbox
-        make_crg_graph(repo / "src" / "pkg_a")
-        make_crg_graph(repo / "src" / "pkg_b")
-
-        run_hook(repo, bin_dir)
-
-        assert calls(log, 2) == ["code-review-graph update --brief"] * 2
-        assert len(firing_log_lines(repo)) == 1
-
-    def test_the_update_runs_in_the_graphs_own_directory(self, sandbox):
-        # `code-review-graph update` resolves the repo from its cwd, so a nested
-        # graph refreshed from the meta-repo root would re-parse the wrong tree.
-        repo, bin_dir, log = sandbox
-        nested = repo / "src" / "pkg_a"
-        make_crg_graph(nested)
-        # Re-stub so the log records where the process actually ran.
-        stub = bin_dir / "code-review-graph"
-        stub.write_text(f'#!/bin/sh\necho "cwd=$(pwd)" >> "{log}"\n')
-        stub.chmod(0o755)
-
-        run_hook(repo, bin_dir)
-
-        assert calls(log, 1) == [f"cwd={nested}"]
-
-    def test_an_empty_graph_is_not_refreshed(self, sandbox):
-        # Any MCP query that omits `repo_root` creates a 0-node graph.db at the
-        # server's cwd. Treating that as opt-in made the hook refresh an empty
-        # database every turn while the real graphs went stale.
-        repo, bin_dir, log = sandbox
-        make_crg_graph(repo, nodes=0)
-
-        run_hook(repo, bin_dir)
-
-        assert calls(log, 1) == []
 
     def test_the_no_auto_refresh_marker_keeps_graphify_out(self, sandbox):
         # `graphify update .` re-scans; a graph assembled from an explicit file

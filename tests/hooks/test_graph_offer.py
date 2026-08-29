@@ -79,7 +79,7 @@ class TestOffer:
         # that now lives in graph-init, so the hook names it and stops.
         ctx = context(run_hook(repo))
         assert "graph-init" in ctx
-        assert "code-review-graph build" not in ctx
+        assert "graphify build" not in ctx
         assert "cp ~/claudebase/templates" not in ctx
 
     def test_the_offer_names_the_way_out(self, repo):
@@ -140,7 +140,7 @@ class TestSilence:
         else:
             assert not (home / ".claude" / "graph-offered").exists()
 
-    @pytest.mark.parametrize("existing", [".code-review-graph/x", ".graphify/graph.json"])
+    @pytest.mark.parametrize("existing", [".graphify/graph.json"])
     def test_a_repo_that_already_has_a_graph(self, tmp_path, existing):
         # That project has already answered; asking again is noise.
         r = make_repo(tmp_path / f"r{hash(existing) & 0xFF}", code_files=25)

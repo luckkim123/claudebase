@@ -33,8 +33,8 @@ def which(name: str) -> str | None:
 
 
 needs_cli = pytest.mark.skipif(
-    not which("code-review-graph") and not which("graphify"),
-    reason="neither code-review-graph nor graphify is installed",
+    not which("graphify"),
+    reason="graphify is not installed",
 )
 
 
@@ -63,14 +63,13 @@ def project(tmp_path):
 @needs_cli
 class TestBuild:
     def test_a_plain_directory_gets_graphs_and_exclusions(self, project):
-        # No git anywhere here: CRG falls back to an rglob walk and graphify
+        # No git anywhere here: graphify never needed git, and
         # never needed git, so a container mount is a legitimate target.
         result = run(project)
 
         assert result.returncode == 0, result.stdout + result.stderr
         assert (project / ".graphifyignore").exists()
-        assert (project / ".code-review-graphignore").exists()
-        built = [p for p in (".code-review-graph", ".graphify") if (project / p).exists()]
+        built = [p for p in (".graphify",) if (project / p).exists()]
         assert built, result.stdout
 
     def test_exclusions_are_written_before_the_builds(self, project):
@@ -111,7 +110,6 @@ class TestPurge:
         result = run(project, "--purge")
 
         assert result.returncode == 0
-        assert not (project / ".code-review-graph").exists()
         assert not (project / ".graphify").exists()
         # Those files may have been hand-edited; deleting them is not our call.
         assert (project / ".graphifyignore").exists()
@@ -138,7 +136,6 @@ class TestPurge:
 
         assert not (project / ".graphify").exists()
         assert not stale.exists()
-        assert not (project / ".code-review-graph").exists()
 
 
 class TestSkillStaysInSync:
@@ -150,7 +147,7 @@ class TestSkillStaysInSync:
         assert "graph-init" in body
         # The failure being guarded: a skill that spells the procedure out again
         # is the 1,152-character hook message reborn.
-        assert "code-review-graph build" not in body.split("## Boundaries")[0]
+        assert "graphify build" not in body.split("## Boundaries")[0]
 
     def test_documented_exit_codes_are_the_ones_the_script_returns(self):
         body = SKILL.read_text(encoding="utf-8")
@@ -174,4 +171,3 @@ class TestRefusal:
 
         assert result.returncode != 0
         assert "refusing" in result.stderr
-        assert not (home / ".code-review-graph").exists()

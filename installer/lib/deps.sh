@@ -17,7 +17,6 @@
 #
 # Exposed:
 #   check_runtime_deps   — probe jq, gemini CLI, nano banana extension.
-#   ensure_code_review_graph  — uv tool install of the code-review-graph CLI.
 #   ensure_graphify           — uv tool install of the graphify CLI (pkg: graphifyy).
 #   ensure_graphify_skill     — link graphify's own SKILL.md to user scope.
 #   ensure_convenience_tools  — opt-in best-effort install of tmux + clipboard.
@@ -54,15 +53,15 @@ check_runtime_deps() {
   fi
 }
 
-# --- code-graph CLIs via uv (code-review-graph, graphify) -------------------
+# --- code-graph CLI via uv (graphify) --------------------------------------
 #
-# Both are installed unconditionally rather than gated behind INSTALL_TOOLS: uv
-# resolves its own Python, so there is no sudo and no platform branching. Warn-
-# and-skip if uv itself is missing — same contract as jq/gemini above.
+# Installed unconditionally rather than gated behind INSTALL_TOOLS: uv resolves
+# its own Python, so there is no sudo and no platform branching. Warn-and-skip
+# if uv itself is missing — same contract as jq/gemini above.
 #
 # Per-project setup is deliberately NOT run here (no `build`, no graph, no
 # per-repo MCP wiring): which repos carry a graph is a per-repo decision, made
-# inside each project that wants one. See templates/project-code-review-graph.md
+# inside each project that wants one. See templates/project-code-graph.md
 # for the routing rules and the per-project `.mcp.json` snippet.
 
 # _bin_present BIN — is BIN on PATH, or present in ~/.local/bin?
@@ -101,11 +100,6 @@ ensure_uv_tool() {
   fi
 }
 
-# ensure_code_review_graph — the code-review-graph CLI, github.com/tirth8205/code-review-graph.
-ensure_code_review_graph() {
-  ensure_uv_tool code-review-graph code-review-graph
-}
-
 # ensure_graphify — the graphify CLI, github.com/Graphify-Labs/graphify. The PyPI
 # distribution is "graphifyy" (two y's) while the command stays `graphify`.
 #
@@ -131,7 +125,7 @@ ensure_code_review_graph() {
 # in place and ships to every other machine on the next sync. With --project all
 # three artifacts (skill, CLAUDE.md block, PreToolUse hooks) land under the
 # project's own .claude/, which is where they belong anyway — the hooks are
-# project-scoped in graphify regardless. See templates/project-code-review-graph.md.
+# project-scoped in graphify regardless. See templates/project-code-graph.md.
 
 # _graphify_extras_ready — are BOTH pinned extras actually importable in
 # graphify's uv-managed environment? `command -v graphify-mcp` is not enough: the
@@ -284,16 +278,17 @@ ensure_tmux_teams_shim() {
   link_or_copy "$src" "$HOME/.local/bin/tmux"
 }
 
-# graph_cli_intro_note — name the three graph CLIs once per machine.
+# graph_cli_intro_note — name the graph CLI once per machine.
 #
-# The gap this fills: the installs above are unconditional and silent on repeat,
-# so a first-time user ends up carrying three tools nobody ever mentioned. The
-# only automatic mention anywhere is runtime/hooks/graph-offer.sh, and it fires
-# ONLY in a project that has no graph at all — `[ -d "$repo/.code-review-graph" ]
-# && exit 0`. A project where CRG got built first is therefore silent forever,
-# and graphify's prose pass — the one a notes or docs repo actually wants — is
-# never named. Measured on the obsidian vault 2026-08-11: CRG index present
-# since 08-03, no graphify graph.json, hook permanently short-circuited.
+# The gap this fills: the install above is unconditional and silent on repeat,
+# so a first-time user ends up carrying a tool nobody ever mentioned. The only
+# automatic mention anywhere is runtime/hooks/graph-offer.sh, and it fires ONLY
+# in a project that has no graph at all, so a project that built one early is
+# silent forever — and graphify's prose pass, the one a notes or docs repo
+# actually wants, is never named. (Until 2026-08-29 this hook also
+# short-circuited on a `.code-review-graph/` directory, which made the silence
+# permanent on any repo CRG had touched. Measured on the obsidian vault
+# 2026-08-11. That second tool is gone; the short-circuit went with it.)
 #
 # Printed, never prompted. install.sh must stay non-interactive-safe, and
 # nothing here needs installing: the decision this informs (which repo gets a
@@ -309,13 +304,12 @@ graph_cli_intro_note() {
   [[ -e "$marker" ]] && return 0
   [[ ${DRY_RUN:-0} -eq 1 ]] && return 0
   # Nothing to introduce where every install above warned-and-skipped.
-  _bin_present code-review-graph || _bin_present graphify || return 0
+  _bin_present graphify || return 0
 
-  log "hint: this machine carries two code-graph CLIs (shown once)"
-  log "  code-review-graph  callers, importers, blast radius — per-project SQLite index"
+  log "hint: this machine carries a code-graph CLI (shown once)"
   log "  graphify           whole-corpus graph; its prose pass is LLM-priced (hours, not seconds)"
-  log "  per project: 'graph-init' builds the two free ones; '/graphify' runs the paid prose pass"
-  log "  which to reach for, and how each fails silently: templates/project-code-review-graph.md"
+  log "  per project: 'graph-init' builds the free AST pass; '/graphify' runs the paid prose pass"
+  log "  when it helps, and how it fails silently: templates/project-code-graph.md"
 
   : >"$marker" 2>/dev/null || true
 }

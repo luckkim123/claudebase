@@ -108,15 +108,15 @@ maybe_record_orchestrator_vendors
 source "$REPO_DIR/installer/lib/omx.sh"
 ensure_omx_install
 
-# Idempotent install of the two code-graph CLIs → deps.sh.
-# code-review-graph (github.com/tirth8205/code-review-graph) answers structural
-# queries over a SQLite index via MCP; graphify (github.com/Graphify-Labs/graphify,
-# PyPI "graphifyy") builds a whole-corpus knowledge graph and exports artifacts.
-# Complementary, not redundant — routing rules in templates/project-code-review-graph.md.
-# None of them builds a graph here: that is a per-repo decision.
-# tokensave was the third until 2026-08-25; removed for zero routing (6 MCP calls
-# in 10,813 over 22 days) — see docs/CHANGELOG.md.
-ensure_code_review_graph
+# Idempotent install of the code-graph CLI → deps.sh.
+# graphify (github.com/Graphify-Labs/graphify, PyPI "graphifyy") builds a
+# whole-corpus knowledge graph and exports artifacts — routing rules in
+# templates/project-code-graph.md. It does not build a graph here: that is a
+# per-repo decision.
+# Two others were removed for the same reason, and it was never usage — nothing
+# routed to them. tokensave 2026-08-25 (6 MCP calls in 10,813 over 22 days);
+# code-review-graph 2026-08-29 (its only binding layer would have had to be
+# written from scratch, while graphify already had one). See docs/CHANGELOG.md.
 ensure_graphify
 
 # graphify ships its own /graphify skill — the chunked-extraction BUILD runbook,

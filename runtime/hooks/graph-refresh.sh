@@ -49,7 +49,7 @@ repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 # Linked-worktree correction — the canonical copy of this block; graph-offer.sh
 # and runtime/bin/graph-init.sh carry the same eight lines and point back here.
 #
-# Every index these scripts touch is gitignored (`.code-review-graph/`, usually
+# Every index these scripts touch is gitignored (`.graphify/`, usually
 # `.graphify/`), so `git worktree add` never copies one.
 # In a linked worktree `--show-toplevel` therefore names a checkout that holds
 # no graph, and the real graphs sit in the main checkout going stale. The common
@@ -102,12 +102,12 @@ launch() {
   ( cd "$dir" && "$@" >/dev/null 2>&1 & ) &
 }
 
-# 발화 여부 플래그 — 두 블록(graphify / code-review-graph) 모두 그래프가 실재할
-# 때만 1로 세팅한다. 실제 파일 기록은 두 블록이 끝난 뒤 한 번만 한다: 한 훅
-# 호출이 그래프를 여러 개 건드리면(예: CRG 중첩 디렉터리 2개, 또는 graphify+CRG
-# 동시 존재) 예전엔 블록/루프 반복마다 한 줄씩 찍혀 발화 1회가 로그 여러 줄이
-# 됐다 — harness_stats.py 는 `len(_read_jsonl(path))`로 발화 횟수를 세므로 다른
-# 5개 훅과 달리 이 훅만 수치가 부풀려졌다. Fix Round 1에서 단일 지점으로 통합.
+# 발화 여부 플래그 — 그래프가 실재할 때만 1로 세팅하고, 실제 파일 기록은
+# 블록이 끝난 뒤 한 번만 한다. 한 훅 호출이 그래프를 여러 개 건드리면 예전엔
+# 반복마다 한 줄씩 찍혀 발화 1회가 로그 여러 줄이 됐다 — harness_stats.py 는
+# `len(_read_jsonl(path))`로 발화 횟수를 세므로 이 훅만 수치가 부풀려졌다.
+# Fix Round 1에서 단일 지점으로 통합. (2026-08-29: CRG 블록 제거로 남은 건
+# graphify 하나지만, 중첩 그래프가 여럿일 수 있어 단일 기록 지점은 유지한다.)
 _touched=0
 
 # graphify — GRAPHIFY_OUT relocates the whole output tree (config/settings.json
@@ -147,52 +147,6 @@ if [ -f "$repo/$gout/graph.json" ] && [ ! -f "$repo/$gout/.no-auto-refresh" ]; t
       launch "$repo" "$gbin" update .
     fi
   fi
-fi
-
-# code-review-graph — per-repo SQLite under .code-review-graph/. --brief keeps
-# the (discarded) output small; the work is the same incremental re-parse.
-#
-# Two things the single `[ -d "$repo/.code-review-graph" ]` test got wrong, both
-# measured on a meta-repo workspace (stonefish_ws, 2026-08-10):
-#
-#   1. The graph is not always at the git root. A meta-repo that gitignores
-#      `src/` and carries independent git repos beneath it holds its real graphs
-#      one or two levels down, so a root-only test refreshed nothing that
-#      mattered. Search to depth 3 instead — measured 0.12 s on that tree, and
-#      `-prune` stops it from descending into the graph directories themselves.
-#
-#   2. Existence is not opt-in, because the tools create it. Any MCP query that
-#      omits `repo_root` makes an empty `graph.db` wherever the server's cwd is
-#      — 0 nodes, `status: "ok"`. That directory then satisfied the test, so the
-#      hook spent every turn refreshing an empty database while the two real
-#      graphs went stale. Rule 1 of this file ("opt in by existence") only holds
-#      if existence means content, so skip any graph with no nodes.
-#
-# sqlite3(1) is not installed on every machine that runs this (it is absent from
-# the container this was found on), so the node count comes from python3's
-# built-in sqlite3 module, read-only so a concurrent update cannot be disturbed.
-has_nodes() {
-  python3 - "$1" <<'PY' 2>/dev/null
-import sqlite3, sys
-try:
-    db = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-    sys.exit(0 if db.execute("select count(*) from nodes").fetchone()[0] else 1)
-except Exception:
-    sys.exit(1)
-PY
-}
-
-cbin="$(resolve code-review-graph)"
-if [ -n "$cbin" ]; then
-  while IFS= read -r gdir; do
-    [ -n "$gdir" ] || continue
-    _touched=1
-    has_nodes "$gdir/graph.db" || continue
-    should_refresh "$gdir/.last-refresh" || continue
-    launch "$(dirname "$gdir")" "$cbin" update --brief
-  done <<EOF
-$(find "$repo" -maxdepth 3 -type d -name .code-review-graph -prune 2>/dev/null)
-EOF
 fi
 
 if [ "$_touched" = 1 ]; then

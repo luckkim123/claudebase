@@ -113,9 +113,9 @@ The current build 2.1.168 is the **worst** (~1.93%), a *different and more sever
 | | Follows the worktree? | Failure |
 |:---|:---|:---|
 | `.omp/`, a tracked `.graphify/` | yes, as branch content | append-only state (e.g. `.hq/config/project/secretary/ledger.jsonl`) forks per branch and collides at merge |
-| `.code-review-graph/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
+| `.graphify/`, `.omc/` | no | the index is simply missing, and a query answers 0 results |
 
-The second half is the dangerous one: an absent index is indistinguishable from a healthy one that found nothing — the same silent-success class `templates/project-code-review-graph.md` documents at length. Worse, an MCP query that omits `repo_root` *creates* an empty `graph.db` at its cwd and answers `status: "ok"`, so the worktree ends up holding a plausible-looking 0-node index.
+The second half is the dangerous one: an absent index is indistinguishable from a healthy one that found nothing — the same silent-success class `templates/project-code-graph.md` documents at length.
 
 **Why `--git-common-dir`.** The common dir is shared by every worktree of a repo, so its parent is the main checkout — where the ignored indexes actually live. Outside a worktree the two forms name the same directory, which is what makes the correction safe to ship: a single-checkout user sees no behaviour change at all.
 

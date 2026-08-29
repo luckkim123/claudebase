@@ -204,7 +204,6 @@
     ".pytest_cache/**",
     ".ruff_cache/**",
     ".superpowers/**",
-    ".code-review-graph/**",
     ".graphify/**",
     "graphify-out/**",
     "eval/runs/**",

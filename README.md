@@ -82,15 +82,14 @@ That symlinks `~/.claude/CLAUDE.md`, your skills and hooks into the repo, and **
 
 ### Code graphs (installed by the same run)
 
-Two of them, because they answer different questions. `code-review-graph`
-serves callers/importers/blast-radius from an incremental SQLite index;
-`graphify` builds a whole-corpus knowledge graph and exports artifacts a human
-opens. A third, `tokensave`, was dropped on 2026-08-25 — nothing routed to it
-(6 MCP calls against 10,813 tool calls over 22 days) while it cost a resident
-server per session and ~80 deferred tool names in every prompt. Full routing
-rules, and the failure modes that make an empty graph look like a healthy one,
-are in
-[`templates/project-code-review-graph.md`](templates/project-code-review-graph.md).
+One: `graphify`, which builds a whole-corpus knowledge graph and exports
+artifacts a human opens. Two others were dropped, both for the same reason and
+neither for lack of quality — **nothing routed to them.** `tokensave` went on
+2026-08-25 (6 MCP calls against 10,813 tool calls over 22 days) and
+`code-review-graph` on 2026-08-29: its only binding layer would have had to be
+written from scratch, while graphify already had one. Full routing rules, and
+the failure modes that make an empty graph look like a healthy one, are in
+[`templates/project-code-graph.md`](templates/project-code-graph.md).
 
 `installer/install.sh` installs the CLIs, renders graphify's `/graphify` skill
 for this machine's `GRAPHIFY_OUT`, and registers the MCP servers. Prerequisites

@@ -96,7 +96,6 @@ gout="${GRAPHIFY_OUT:-graphify-out}"
 for d in "$gout" .graphify graphify-out; do
   [ -f "$repo/$d/graph.json" ] && exit 0
 done
-[ -d "$repo/.code-review-graph" ] && exit 0
 
 if [ "$is_git" -eq 1 ]; then
   # The COMMON dir, so the marker is one per repository rather than one per

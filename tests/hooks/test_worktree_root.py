@@ -1,7 +1,7 @@
 """The linked-worktree correction shared by the three graph scripts.
 
 Why it exists: every index those scripts touch is gitignored
-(`.code-review-graph/`, usually `.graphify/`), so `git worktree
+(`.graphify/`), so `git worktree
 add` never copies one. In a linked worktree `git rev-parse --show-toplevel`
 therefore names a checkout that holds no graph, while the real graphs sit in the
 main checkout and go stale — and nothing errors, because an empty index answers

@@ -2,6 +2,65 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-29 — the third tool nothing pointed at
+
+### Removed
+- **`code-review-graph` (CRG), machine-wide.** The install (`ensure_code_review_graph`),
+  the `graph-refresh.sh` and `graph-offer.sh` branches, the `graph-init.sh` build
+  and sqlite verification, `templates/project-code-review-graphignore`, the
+  `GATEGUARD_EXEMPT_GLOBS` entry, and the `.gitignore` lines in both this repo and
+  `templates/project-gitignore`.
+- **The grounds are not usage — they are the binding layer.** Of the three
+  integration layers (MCP server / `CLAUDE.md` block / `PreToolUse` hook) only the
+  hook is binding, and the only graph guard this repo ships, `graphify-guard.sh`,
+  names graphify's CLI. No hook ever named CRG's. Keeping CRG meant writing that
+  guard from scratch; keeping graphify meant deleting CRG. Third instance of the
+  same failure in this repo — `tokensave` (6 MCP calls in 10,813 over 22 days,
+  2026-08-25) and graphify's own MCP server (0 calls in 30 days, 2026-08-23).
+
+### Changed
+- `templates/project-code-review-graph.md` → **`templates/project-code-graph.md`**,
+  and its install target `<project>/.claude/rules/code-review-graph.md` →
+  `code-graph.md`. Rewritten for one tool.
+- `runtime/skills/sync-claudebase/SKILL.md` — new **`4o. code-review-graph 잔재?`**
+  (detect-then-ask, once per machine), modelled on `4m` (tokensave). `4n` was
+  already taken by the om\* store census, so the next letter is `o`. Step `4l`'s
+  narrative and script also dropped the CRG existence test that made the offer
+  short-circuit.
+- `graph_cli_intro_note` and the `README.md` graph section now describe one CLI.
+
+### Known capability loss — three, all measured, none silently dropped
+- **Nested-graph refresh.** `graph-refresh.sh` found every `.code-review-graph`
+  down to depth 3 and updated each in its own directory. The graphify block reads
+  only `$GRAPHIFY_OUT/graph.json` at the repo root, so a meta-repo whose real
+  graphs live one level down no longer auto-refreshes. Tests
+  `test_a_graph_below_the_git_root_is_refreshed` and
+  `test_the_update_runs_in_the_graphs_own_directory` removed with the capability.
+- **Empty-graph guard.** The sqlite node count that skipped a 0-node `graph.db`
+  (created by any MCP query omitting `repo_root`) has no graphify equivalent.
+  `test_an_empty_graph_is_not_refreshed` removed.
+- **Symbol-level queries** — callers, importers, blast radius. graphify does not
+  answer these; the fallback is `graphify query`'s neighbourhood walk, or `Grep`.
+
+### Verification
+- `pytest tests/ -q` → **419 passed**, exit 0 (7 CRG-specific tests rewritten or
+  removed; none left failing).
+- `bash -n` clean on all five edited shell files.
+- `grep -rl code-review-graph` outside `docs/` and `installer/` → 0. The remaining
+  mentions are historical: CHANGELOG entries, one protocol example, and three
+  comment lines that say *why* it was removed.
+
+### Not done, and why — the plan's own premise was wrong
+- The plan bundled "untrack `.graphify/cache/`" with this removal, arguing
+  graphify's storage cost (`.graphify` at 284 MB) outweighed CRG's 16 MB. Measured
+  on the vault 2026-08-29: the directory is 285 MB but the **tracked** portion is
+  **7.0 MB** (1,352 files, `cache/semantic/` only — `cache/ast/` and every
+  derivative are already ignored). The vault `.gitignore` carries a measured
+  rationale for tracking it: a cold semantic extraction costs ~2 h of LLM time and
+  the cache buys back about half of that on every other machine. 7 MB for an hour
+  of billing per machine is the right trade, so the untracking was **not**
+  executed. Left as the user's call.
+
 ## [Unreleased] — 2026-08-29 — siblings cannot see each other
 
 ### Added

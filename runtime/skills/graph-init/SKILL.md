@@ -1,6 +1,6 @@
 ---
 name: graph-init
-description: 'Use when a project needs its code graphs built, rebuilt, or thrown away (한국어 - "코드 그래프 만들어", "그래프 다시 만들어", "그래프 지워", "여기 그래프 없어?" / English - "build the code graph", "rebuild the graph", "set up code-review-graph", "index this project"). Wraps the graph-init command, which seeds both ignore files, runs the two free tree-sitter builds, and refuses to leave behind a graph made of vendored code. Does NOT run graphify''s paid semantic pass over prose — that is /graphify.'
+description: 'Use when a project needs its code graph built, rebuilt, or thrown away (한국어 - "코드 그래프 만들어", "그래프 다시 만들어", "그래프 지워", "여기 그래프 없어?" / English - "build the code graph", "rebuild the graph", "index this project"). Wraps the graph-init command, which seeds the ignore file, runs the free tree-sitter build, and refuses to leave behind a graph made of vendored code. Does NOT run graphify''s paid semantic pass over prose — that is /graphify.'
 triggers:
   - "/graph-init"
   - "graph-init"
@@ -8,7 +8,7 @@ triggers:
   - "그래프 만들"
   - "그래프 다시"
   - "code graph"
-  - "code-review-graph"
+  - "graphify"
 ---
 
 # graph-init
@@ -42,12 +42,10 @@ this skill.
 | 2 | A vendored tree holds ≥30% of the nodes | The graph describes somebody else's code. Act — see below. |
 | 1 | Nothing was built | Read the warning it printed; usually a missing CLI or an empty tree. |
 
-On **exit 2** the script names the offending top-level directory. Add it to
-**both** ignore files — they are independent and neither falls back to the other
-— then re-run:
+On **exit 2** the script names the offending top-level directory. Add it to the
+ignore file, then re-run:
 
 ```bash
-printf '%s/\n' <dir> >> .code-review-graphignore
 printf '%s/\n' <dir> >> .graphifyignore
 graph-init
 ```

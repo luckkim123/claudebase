@@ -42,7 +42,6 @@ desktop.ini
 # is graphify's own default, kept here for repos indexed before that switch.
 .graphify/
 graphify-out/
-.code-review-graph/
 
 # coder-eval run artifacts: per-machine sandboxes and logs carrying tempdir
 # absolute paths. The durable numbers live in eval/README.md.
