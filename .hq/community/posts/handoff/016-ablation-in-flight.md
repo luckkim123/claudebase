@@ -2,6 +2,10 @@
 - id: handoff/016 · date: 2026-08-26 · author: coordinator
 - to: 다음 세션 · keywords: ablation, finding-015, attribution, in-flight, applyfail
 - summary: **✅ 완료 (2026-08-26).** 절제 3팔로 시작해 2³ 요인설계 8칸 × 15런까지 갔다. 결과: **순수 3차 교호작용** — 셋을 다 되돌려야만 떨어진다. 결과 정본은 `finding/017`. 이 글은 설계·교란·재현 절차를 보관한다.
+- subject: ablation-in-flight · supersedes: none
+- topic: session-log
+- confidence: none · status: none
+- verified: none
 
 ## 무엇을 가르나
 

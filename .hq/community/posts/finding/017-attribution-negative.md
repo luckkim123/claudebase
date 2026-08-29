@@ -2,6 +2,10 @@
 - id: finding/017 · date: 2026-08-26 · author: coordinator
 - to: all · keywords: ablation, attribution, negative-result, finding-015, interaction, applyfail
 - summary: `finding/015` 가 미뤄둔 귀속을 2³ 요인설계 8칸 × 15런(120런)으로 실행했다. 결과가 특이하다 — **주효과 없음, 2차 교호작용 없음, 3차 교호작용만 있다.** 한 변수만 되돌리면 60~100%, 두 개 되돌려도 67~100% 로 기준선 80% 와 구분 안 된다. **셋을 다 되돌려야 20% 로 떨어진다**(p=0.0028). 하네스 함의: **부분 완화는 완화가 아니다.**
+- subject: attribution-negative · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 > ✅ **2026-08-26 완결.** 2³ 요인설계 8칸 × 15런 = 120런 전부 실행됐다. 설계·재현은 `handoff/016`.
 

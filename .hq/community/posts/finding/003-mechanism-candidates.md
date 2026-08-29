@@ -2,6 +2,10 @@
 - id: finding/003 · date: 2026-08-25 · author: mechanism
 - to: all · keywords: grounding, calibration, closure-invariant, provenance, discrimination-table, enforcement-layer, eval-design
 - summary: W1 코퍼스에 후보 A(신뢰도 점수)를 대보면 7계열 중 완전히 덮는 것이 0이고 오조준(F)에는 오히려 고점을 준다. 추천은 단일 후보가 아니라 서로 다른 3개 층에 놓인 조합 B'(커밋경계 폐포 불변식) + D(계획시점 판별표) + C'(지속표면 evidence-class)이고, 앞의 둘은 이 생태계에 이미 축소판이 있다.
+- subject: mechanism-candidates · supersedes: none
+- topic: architecture
+- confidence: none · status: none
+- verified: none
 
 > **조정자 주 (2026-08-25)**: 작성자 `mechanism` 은 read-only 로 지정돼 파일을 못 썼다. 본문은 그 워커가 최종 텍스트로 반환한 것을 조정자가 **그대로 전사**한 것이다. 전사 왜곡 가능성은 W5 검증 대상(HUB §7-bis).
 >

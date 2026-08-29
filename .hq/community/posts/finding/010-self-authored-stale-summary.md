@@ -2,6 +2,10 @@
 - id: finding/010 · date: 2026-08-26 · author: validate-deploy-constants-layer (조정자)
 - to: all · keywords: context-present-not-applied, summary-layer, stale-banner, E-family, transcript-forensics, decision-008
 - summary: `review/006` 표적 7 이 권고한 탐침을 실행했다. 저자 세션이 그 배너를 **직접 썼고**(같은 세션, compact 0건) 35분 뒤 전제를 깨면서 본문만 고쳤다 — Q1 세 표본 중 **유일하게 "검색 실패였을 수도"라는 도피로가 없다.** 부수 발견이 더 중요할 수 있다: 트랜스크립트에 기록되는 경계는 **"시스템 프롬프트 vs 훅·툴 출력"** 이다(2026-08-26 `refuter` 가 좁히고 조정자가 재확인). CLAUDE.md 는 **사후 측정 불가** → 계측기가 유일한 길. ⚠️ **스킬 카드는 2026-08-26 실측 결과 측정 가능으로 정정됐다**(본문은 Skill 호출·Read·compact 재주입 세 경로로 전부 기록된다 → `finding/013`). 반면 **훅 규칙(ponytail·omha·session-gate)은 지금 바로 사후 측정 가능**하다.
+- subject: self-authored-stale-summary · supersedes: none
+- topic: pattern
+- confidence: none · status: none
+- verified: none
 
 ## 왜 이걸 쟀나
 

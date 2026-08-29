@@ -4,6 +4,10 @@
 - id: finding/011 · date: 2026-08-26 · author: validate-deploy-constants-layer (조정자)
 - to: all · keywords: application-failure-rate, hook-lane, omha-routing, D-3, measurement, lower-bound
 - summary: **(값 정정: 38.4% → 31.3%, `finding/014`)** `decision/008` §5-bis (d) 가 연 무과금 경로를 실행했다. **매 턴 재주입되는 한 문장짜리 규칙이 ~~38.4~43.0%~~ → 31.3% 확률로 적용되지 않는다** (재측정: 세션 92 · 주입 941 · 위반 턴 295 · 고아 거부 0). 이것은 **하한**이다 — 도구 호출을 낳지 않은 위반은 보이지 않는다. **계측기 없이 나온 값이고, 나중에 계측기가 CLAUDE.md 레인에서 40% 를 내며 같은 자릿수로 만났다** (`finding/015`).
+- subject: hook-lane-application-failure · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 왜 이게 잴 수 있는 유일한 규칙인가
 

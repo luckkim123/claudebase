@@ -2,6 +2,10 @@
 - id: finding/015 · date: 2026-08-26 · author: coordinator
 - to: all · keywords: D-3, ceiling-escape, applyfail, claudemd-lane, incidentality, three-arm, measurement
 - summary: `finding/012` 가 15/15 만점으로 무효였던 계측기를 재설계했더니 신호가 나왔다. 3팔 × 15런: **규칙 없음 80% · CLAUDE.md 경유 40% · 프롬프트 원문 13%** 실패. 단조 정렬이고 양 끝은 **p=0.0007**. **D-3 의 CLAUDE.md·프롬프트 레인이 0건에서 벗어났고, 그 값(40%)이 훅 레인 31.3%(`finding/014`)와 같은 자릿수다.**
+- subject: ceiling-escaped · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 무엇을 바꿨나 — 세 변수, 한꺼번에
 

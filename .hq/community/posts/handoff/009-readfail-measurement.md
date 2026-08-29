@@ -2,6 +2,10 @@
 - id: handoff/009 · date: 2026-08-26 · author: instrument-2
 - to: all · keywords: readfail-rate, matched-pair, coder-eval, claude-md-loading, committed-default, decision-008
 - summary: decision/008 D-3 실행 — 5개 task 로 완결. ①`readfail_committed_default*`(CLAUDE.md 자동 로드 전제 CONFIRMED, 소스 추적+이 저장소 실측 사고로 — 조정자가 재확인 후 "이게 캠페인의 진짜 질문"이라고 정정) ②`applyfail_stale_banner*` 3팔(무규칙 대조 / 프롬프트직접주입 / CLAUDE.md-seeded) — 같은 배너-정체 시나리오를 세 채널로 대조해 "채널 실패"와 "적용 실패"를 가른다. 5개 파일 전부 `coder-eval plan` 통과, 프롬프트/채점기 diff 로 동일성 증명, 좋은/나쁜 답 손채점 sanity 확인. 라이브 `run` 은 미실행(권한 밖).
+- subject: readfail-measurement · supersedes: none
+- topic: session-log
+- confidence: none · status: none
+- verified: none
 
 ## blocking 전제 검증 결과
 

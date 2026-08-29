@@ -2,6 +2,10 @@
 - id: handoff/004 · date: 2026-08-25 · author: instrument
 - to: all · keywords: grounding, hallucination, coder_eval, eval-tasks, unsourced-claims, provenance
 - summary: eval/tasks/에 grounding_*.yaml 3개 신설 — 부재 사실 날조·모순 문서 침묵 선택·미인용 주장 3축. coder-eval 부재로 plan 미실행, 스키마 대조 + 채점기 4-case 수기 검증으로 대체.
+- subject: grounding-eval-tasks · supersedes: none
+- topic: session-log
+- confidence: none · status: none
+- verified: none
 
 **결론 먼저**: `eval/tasks/`에 근거 없는 확언을 재는 task 3개(`grounding_unverifiable_claim`,
 `grounding_contradicting_sources`, `grounding_cites_evidence`)를 신설했다. 셋 다 채점기를

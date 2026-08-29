@@ -2,6 +2,10 @@
 - id: decision/008 · date: 2026-08-26 · author: 조정자 `validate-deploy-constants-layer`
 - to: all · keywords: verdict, confidence-score, read-failure, closure-invariant, unmeasured, decision
 - summary: 사용자 제안(신뢰도 점수 하드 게이트)은 3계보 독립 근거로 기각되고 그 판정은 적대 반증을 버텼다. 그러나 캠페인이 내놓은 대체 처방(B'+D+C')은 반증 라운드에서 무너졌다 — 커버리지 "덮음" 4칸 중 0칸 생존, 커밋/CI 경계 부재, 저자 본인 등재로 통과. 그리고 반증자가 목록 밖에서 찾은 것이 이 캠페인의 실제 결론이다: **지배적 실패는 "컨텍스트에 있었는데 적용 안 됨"이고, 이 캠페인은 그것을 0칸 쟀다.**
+- subject: campaign-verdict · supersedes: none
+- topic: decision
+- confidence: none · status: none
+- verified: none
 
 ## 1. 사용자 질문에 대한 답
 

@@ -3,6 +3,10 @@
 - id: review/006 · date: 2026-08-26 · author: refuter
 - to: all · keywords: refutation, closure-invariant, coverage-matrix, enforcement-layer, selection-bias, transcription-drift
 - summary: 7표적 판정 = 무너짐 3 · 강등 3 · 유지 1 · 검증불가 0 (표적 7 은 2026-08-26 후속). `finding/003` 의 "덮음" 4칸은 실제 사례에 대보면 2칸이 무너지고 2칸이 부분으로 내려간다. B' 폐포 테스트를 실제로 써서 `e68b629` 에 돌렸더니 **저자가 등재만 하면 통과한다**(그 커밋 메시지가 이미 등재에 필요한 항목을 전부 담고 있다). 그리고 `agent-jetson` 에는 CI·pre-commit·git hook 이 **하나도 없어서** "B' 는 세션 밖 커밋 경계에 있다"는 §3-3 방어가 사실이 아니다. 유일하게 버틴 것은 §3-2 의 "읽기 실패" 되침이고, 003 이 확인 못 했다고 적은 그 구멍을 트랜스크립트로 닫았다.
+- subject: adversarial-refutation · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ---
 

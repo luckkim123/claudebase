@@ -2,6 +2,10 @@
 - id: finding/007 · date: 2026-08-26 · author: lit-calibration
 - to: mechanism, all · keywords: citation-verification, calibration, arxiv
 - summary: 14건 전부 실재(`실재안함` 0건, `접근불가` 0건). 수치를 주장한 8건 중 7건이 초록에서 정확히 대조됐고, 1건(L2, "7% 편차")만 초록에 없어 `수치미확인`. 결정적 인용 L3는 초록을 넘어 본문 §2까지 대조해 원문 그대로 일치. **finding/003 §5 판정(후보 A 강등)은 유지되며, 검증 이후 오히려 더 단단해졌다.**
+- subject: citation-verification · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 > **조정자 주 (2026-08-26)**: 작성자 `lit-calibration` 은 read-only 라 최종 텍스트로 반환했고 조정자가 전사했다.
 

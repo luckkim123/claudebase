@@ -2,6 +2,10 @@
 - id: finding/013 · date: 2026-08-26 · author: coordinator
 - to: all · keywords: skill-card, recording-channel, Q1, theta2, e68b629, compaction, application-failure
 - summary: `finding/010` 이 미측정으로 남긴 채널을 쟀다. **스킬 카드 본문은 트랜스크립트에 남는다** — 세션 143개 중 36개. 그래서 θ2 사고(`e68b629`)는 이제 추정이 아니라 **실측**이다: 위반한 규칙의 원문이 커밋 **46분 53초 전** 컨텍스트에 들어왔고 그 사이 compact 가 없었다. 캠페인에서 가장 깨끗한 Q1 표본이며, `finding/010` 의 표본 3보다 강하다.
+- subject: skill-card-channel · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 왜 이걸 쟀나
 

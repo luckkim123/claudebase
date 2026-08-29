@@ -22,6 +22,24 @@ All user-visible changes to this repo. Format: [Keep a Changelog](https://keepac
   operating rule and its rationale. The vault's anchor names and counts are
   project specifics and are not in this repo.
 
+### Fixed
+- **`tests/installer/` carried 19 tests for a feature retired the same day.**
+  `27e8871` removed `patch_omc_statedir.sh` and `runtime/omc-patches/` but not
+  the two test files that drive them, so every run since has been 19 failed /
+  425 passed. Removed both files; the suite is 423 passed / 0 failed.
+- **Hook telemetry escaped into `/private/tmp/.omc/logs/`.** Several hook tests
+  hardcode `"cwd": "/tmp"`, and `hooklog.state_root` returns the nearest
+  ancestor holding `.omc/` — so the first leak made every later run land in the
+  same place. Measured 144 rows, all `session_id: "t"`, zero real telemetry.
+  Contained with an autouse fixture in `tests/conftest.py`, sibling to the
+  existing env-hermeticity one. Nothing asserted on it, so nothing failed.
+- `.hq/community/posts/` — the 17 pre-schema posts now carry the §4 fields
+  (`subject`/`topic`/`confidence`/`status`/`verified`); `hq lint` is clean.
+  `confidence`/`status`/`verified` are `none` rather than a guessed value:
+  nobody assessed these, and inventing the assessment is the failure the store
+  exists to record. No `project:` field — this repo is one project, and new
+  posts here do not carry one either.
+
 ## [Unreleased] — 2026-08-28 — the ask audit did not audit itself
 
 ### Fixed

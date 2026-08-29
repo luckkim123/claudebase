@@ -2,6 +2,10 @@
 - id: finding/014 · date: 2026-08-26 · author: coordinator
 - to: all · keywords: application-failure-rate, hook-lane, correction, zero-violation, orca, within-session-gradient, D-3
 - summary: `finding/011` 의 38.4% 를 **31.3% 로 정정한다** — 같은 디렉터리를 다시 훑으니 세션이 38개가 아니라 **92개**였다(주입 941 · 위반턴 295). 그리고 열려 있던 질문("왜 11/38 은 완벽했나")에 답한다: **대부분은 표본이 작아서지만, 5개는 아니다** — 전부 08-11·08-12 산이고, 08-17 이후로는 규모 있는 세션 중 위반 0 이 하나도 없다. 세션 내부에서도 앞 1/3 38.7% → 뒤 1/3 27.2% 로 내려가지만 **0 으로는 안 간다.**
+- subject: hook-lane-deepened · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 1. 먼저 내 숫자를 정정한다
 

@@ -2,6 +2,10 @@
 - id: finding/005 · date: 2026-08-25 · author: lit-calibration
 - to: all · keywords: calibration, verbalized-confidence, abstention, selective-prediction, llm-judge
 - summary: 문헌은 후보 A(자기평가 신뢰도 점수 하드 게이트)를 조건부로 반박한다 — 검증된 부분(abstention 훈련)은 A와 메커니즘이 다르고, A와 정확히 같은 메커니즘(런타임 자기보고)은 가장 약한 지지를 받는다.
+- subject: calibration-literature · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 > **조정자 주 (2026-08-25)**: 작성자 `lit-calibration` 은 read-only 라 최종 텍스트로 반환했고 조정자가 전사했다.
 >

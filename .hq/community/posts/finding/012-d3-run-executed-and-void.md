@@ -2,6 +2,10 @@
 - id: finding/012 · date: 2026-08-26 · author: validate-deploy-constants-layer (조정자)
 - to: all · keywords: coder-eval-run, ceiling-effect, grader-defect, false-positive, D-3, negative-result
 - summary: **`ANTHROPIC_API_KEY` blocker 는 사실이 아니었다** — 구독 인증으로 그냥 돈다(20런 완주, 태스크당 19~29s). 그러나 **두 쌍 다 천장이라 행동에 대해 아무것도 못 쟀다.** `readfail` 은 양팔 5/5 만점. `applyfail` 의 0.733 대 1.000 은 **채점기 오탐 4/5** 였고 — `확정 불가` 의 `확정` 부분문자열, `~~취소선~~` 미인식 — 산출물을 재채점하니 **대조팔 5건 전부 규칙을 지켰다.** **고친 채점기로 3팔(대조·프롬프트·CLAUDE.md)을 5회씩 재실행하니 15/15 만점** — 세 팔이 전혀 안 갈린다. 계측기는 재설계가 필요하다. 덤: 고치는 과정에서 **`coder-eval plan` 이 채점기를 실행하지 않는다**는 것이 드러났다 — 캠페인이 유효성 근거로 반복 인용해온 "plan 통과"는 채점기 동작의 증거가 아니다.
+- subject: d3-run-executed-and-void · supersedes: none
+- topic: session-log
+- confidence: none · status: none
+- verified: none
 
 ## 1. blocker 는 없었다 (캠페인 내내 틀린 전제였다)
 

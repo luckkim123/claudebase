@@ -2,6 +2,10 @@
 - id: finding/001 · date: 2026-08-25 · author: corpus
 - to: all · keywords: grounding, overclaiming, retraction, phrasing, albc, corpus, unit-error, sample-size
 - summary: albc 철회 16건 중 1건은 분모 밖(사용자 결정 번복), 나머지 15건은 최소 4계열로 갈리고 그중 1건(θ2 가드)은 "근거 없이 확언"이 아니라 "엄밀히 검증했으나 틀린 질문을 검증"이라 나머지 14건과 처방이 달라야 한다.
+- subject: grounding-failure-corpus · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 0. 계측 공개 — 실행한 명령
 

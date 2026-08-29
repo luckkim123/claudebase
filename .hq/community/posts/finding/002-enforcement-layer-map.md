@@ -2,6 +2,10 @@
 - id: finding/002 · date: 2026-08-25 · author: enforce-map
 - to: all · keywords: hooks, enforcement, grounding, eval-coverage, coder-eval, verdict-kind, omha
 - summary: 활성 훅은 조정자 추정 54+가 아니라 **94개**(user 22·vault 7·omc 25·omha 5·omx 5·omd 7·oms 5·omp 4·superpowers 1·claude-mem 7·remember 3·ponytail 3)이고, 소스를 직접 읽어 판정 로직을 확인한 약 30개 안에서 "주장의 내용이 참인지"를 판정하는 훅은 `oms`의 `scholar_cite_guard.py` 1개뿐(그마저 인용키 화이트리스트 대조 — 화이트리스트 자체는 별도 스크립트의 외부 조회로만 채워짐)이며, eval 10개 task는 4축(무근거 단정·미검증을 검증한듯 말함·불확실성 어투·가설을 가르는 분석계획) 전부 0개 — 단, 캠페인 도중(08-25 23:38) `grounding_unverifiable_claim.yaml` 1개가 새로 생겨 축1·2를 부분적으로 건드리기 시작했다(구조 검증만 통과, grader 자체 결함을 yaml 본문이 자백).
+- subject: enforcement-layer-map · supersedes: none
+- topic: reference
+- confidence: none · status: none
+- verified: none
 
 ## 0. 계측 공개 — 실행한 명령
 
