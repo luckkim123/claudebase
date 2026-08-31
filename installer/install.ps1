@@ -28,22 +28,18 @@ function Check-RuntimeDeps {
         Write-Host '[install]   install: winget install jqlang.jq  (or: scoop install jq)'
     }
 
-    # gemini CLI — required by the gen-image skill (Google nano banana image
-    # generation). Without it /gen-image falls back to direct REST API calls
-    # which work but bypass the MCP tool path documented in the skill.
-    if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
-        Write-Host '[install] WARNING: "gemini" CLI not found — gen-image skill needs it'
-        Write-Host '[install]   install: npm install -g @google/gemini-cli'
-    } else {
-        # gemini present — also verify the nano banana extension is installed.
-        # The extension exposes the mcp_nanobanana_generate_image tool the
-        # gen-image skill expects. Without it the skill silently degrades to
-        # text-only Gemini responses.
-        $nanoExt = Join-Path $env:USERPROFILE ".gemini/extensions/nanobanana"
-        if (-not (Test-Path -LiteralPath $nanoExt)) {
-            Write-Host '[install] WARNING: nano banana extension missing — gen-image MCP path disabled'
-            Write-Host '[install]   install: gemini extensions install https://github.com/gemini-cli-extensions/nanobanana'
-        }
+    # GEMINI_API_KEY — the gen-image skill's only external prerequisite. It calls
+    # Google's /v1beta/interactions endpoint directly with stdlib urllib, so it
+    # needs a key and nothing else. It does NOT need the `gemini` CLI or the
+    # nanobanana extension: those speak :generateContent, which cannot reach the
+    # Gemini 3 image models with resolution control, and the skill deprecates
+    # that path in so many words.
+    $secretsFile = Join-Path $PSScriptRoot "../secrets/secrets.env"
+    $keyInFile = (Test-Path -LiteralPath $secretsFile) -and `
+        ((Get-Content -LiteralPath $secretsFile) -match '^\s*(export\s+)?GEMINI_API_KEY=')
+    if ((-not $env:GEMINI_API_KEY) -and (-not $keyInFile)) {
+        Write-Host '[install] WARNING: GEMINI_API_KEY unset — gen-image skill cannot generate'
+        Write-Host '[install]   get a key at https://aistudio.google.com/apikey, then add it to secrets/secrets.env'
     }
 }
 Check-RuntimeDeps

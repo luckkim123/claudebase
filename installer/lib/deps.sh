@@ -12,11 +12,11 @@
 # preserved — an already-present tool prints the same "present (skip)" line on
 # every run, and when sudo would be needed but isn't available we fall back to
 # the warn-only hint (never a blocking sudo prompt), so a non-interactive / CI
-# sync is safe. jq/gemini stay warn-only regardless: they are not always
-# apt-installable (gemini is npm) and the user may want a specific provenance.
+# sync is safe. jq stays warn-only regardless: it is not uniformly
+# apt-installable and the user may want a specific provenance.
 #
 # Exposed:
-#   check_runtime_deps   — probe jq, gemini CLI, nano banana extension.
+#   check_runtime_deps   — probe jq and the gen-image key (GEMINI_API_KEY).
 #   ensure_graphify           — uv tool install of the graphify CLI (pkg: graphifyy).
 #   ensure_graphify_skill     — link graphify's own SKILL.md to user scope.
 #   ensure_convenience_tools  — opt-in best-effort install of tmux + clipboard.
@@ -32,24 +32,21 @@ check_runtime_deps() {
     esac
   fi
 
-  # gemini CLI — required by the gen-image skill (Google nano banana image
-  # generation). Without it /gen-image falls back to direct REST API calls
-  # which work but bypass the MCP tool path documented in the skill.
-  if ! command -v gemini >/dev/null 2>&1; then
-    printf '[install] WARNING: "gemini" CLI not found — gen-image skill needs it\n'
-    case "$PLATFORM" in
-      macos) printf '[install]   install: brew install gemini-cli  (or: npm install -g @google/gemini-cli)\n' ;;
-      linux) printf '[install]   install: npm install -g @google/gemini-cli\n' ;;
-    esac
-  else
-    # gemini present — also verify the nano banana extension is installed.
-    # The extension exposes the mcp_nanobanana_generate_image tool the
-    # gen-image skill expects. Without it the skill silently degrades to
-    # text-only Gemini responses.
-    if [[ ! -d "$HOME/.gemini/extensions/nanobanana" ]]; then
-      printf '[install] WARNING: nano banana extension missing — gen-image MCP path disabled\n'
-      printf '[install]   install: gemini extensions install https://github.com/gemini-cli-extensions/nanobanana\n'
-    fi
+  # GEMINI_API_KEY — the gen-image skill's only external prerequisite. It calls
+  # Google's /v1beta/interactions endpoint directly with stdlib urllib, so it
+  # needs a key and nothing else (python3 is already required by the installer).
+  # It does NOT need the `gemini` CLI or the nanobanana extension: those speak
+  # :generateContent, which cannot reach the Gemini 3 image models with
+  # resolution control, and the skill deprecates that path in so many words
+  # ("The old `gemini` CLI + `nanobanana` extension path is no longer used").
+  # Checking the env var alone would false-warn under a non-login shell, since
+  # the key reaches the environment via ~/.zshrc sourcing secrets.env — so fall
+  # back to reading the file the same way render_mcp_json does.
+  if [[ -z "${GEMINI_API_KEY:-}" ]] \
+     && ! grep -qE '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' \
+              "$REPO_DIR/secrets/secrets.env" 2>/dev/null; then
+    printf '[install] WARNING: GEMINI_API_KEY unset — gen-image skill cannot generate\n'
+    printf '[install]   get a key at https://aistudio.google.com/apikey, then add it to secrets/secrets.env\n'
   fi
 }
 
@@ -57,7 +54,7 @@ check_runtime_deps() {
 #
 # Installed unconditionally rather than gated behind INSTALL_TOOLS: uv resolves
 # its own Python, so there is no sudo and no platform branching. Warn-and-skip
-# if uv itself is missing — same contract as jq/gemini above.
+# if uv itself is missing — same warn-only contract as jq above.
 #
 # Per-project setup is deliberately NOT run here (no `build`, no graph, no
 # per-repo MCP wiring): which repos carry a graph is a per-repo decision, made
