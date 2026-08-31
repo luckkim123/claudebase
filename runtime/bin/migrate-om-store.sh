@@ -443,6 +443,7 @@ snapshot_if_no_git() {
 run_move() {
   local verb="$1" anchor="$2" store="$3" kind rel new src dst rc
   local n_copy=0 n_same=0 n_skip=0 n_slug=0 n_fail=0 n_conflict=0
+  local in_git=0 n_tracked=0 tracked_mark
 
   anchor="${anchor%/}"
   [ -d "$anchor" ] || { err "$anchor: not a directory"; return 1; }
@@ -451,6 +452,11 @@ run_move() {
     return 3
   fi
   kind=$(kind_of "$store") || { err "$store: unknown store kind"; return 1; }
+  # Ignore policy can flip across the move: legacy store dirs are commonly
+  # gitignored while `.hq/` defaults to tracked (store-spec §5). The flip is
+  # intended, but it must be *visible* before anything is committed — an
+  # operator keeping a subtree private needs to see it become tracked.
+  git -C "$anchor" rev-parse --git-dir >/dev/null 2>&1 && in_git=1
 
   note "== $anchor  [$store -> $HQ, kind=$kind, verb=$verb]"
   if [ "$verb" = apply ]; then
@@ -476,8 +482,14 @@ run_move() {
       note "  CONFLICT $store/$rel -> $HQ/$new  (destination exists, differs)"
       n_conflict=$((n_conflict + 1)); continue
     fi
-    if [ $rc -eq 3 ]; then note "  SLUG   $store/$rel -> $HQ/$new"
-    else                   note "  COPY   $store/$rel -> $HQ/$new"; fi
+    tracked_mark=""
+    if [ "$in_git" = 1 ] && git -C "$anchor" check-ignore -q "$src" \
+       && ! git -C "$anchor" check-ignore -q "$dst"; then
+      tracked_mark=" [becomes-tracked]"
+      n_tracked=$((n_tracked + 1))
+    fi
+    if [ $rc -eq 3 ]; then note "  SLUG   $store/$rel -> $HQ/$new$tracked_mark"
+    else                   note "  COPY   $store/$rel -> $HQ/$new$tracked_mark"; fi
     n_copy=$((n_copy + 1))
     [ "$verb" = apply ] || continue
     mkdir -p "$(dirname "$dst")" || return 1
@@ -490,6 +502,9 @@ $(find "$anchor/$store" -type f 2>/dev/null | LC_ALL=C sort)
 EOF
 
   note "  -- copy=$n_copy (slug $n_slug)  same=$n_same  skip=$n_skip  conflict=$n_conflict  fail=$n_fail"
+  if [ "$n_tracked" -gt 0 ]; then
+    note "  -- $n_tracked file(s) marked [becomes-tracked]: ignored at $store/, tracked at $HQ/ — extend .gitignore before committing if any must stay private"
+  fi
   [ "$n_fail" -gt 0 ] && return 2
   [ "$n_conflict" -gt 0 ] && return 4
   return 0
@@ -861,6 +876,7 @@ case "$verb" in
         [ $r -gt $rc ] && rc=$r
         continue
       fi
+      unfinished=""
       for s in $stores; do
         case "$verb" in
           plan|apply) run_move "$verb" "$a" "$s" ;;
@@ -869,7 +885,17 @@ case "$verb" in
         esac
         r=$?
         [ $r -gt $rc ] && rc=$r
+        [ $r -ne 0 ] && unfinished="$unfinished $s"
       done
+      # The `.anchor` marker declares *every* store under this anchor migrated
+      # (store-spec §7), but each run_move only summarizes its own store — on a
+      # multi-store anchor a clean last summary reads as "done" while a gated
+      # or failed sibling is not. Say so at the one point that sees them all.
+      case "$verb" in plan|apply)
+        if [ -n "$unfinished" ] && [ ! -f "$a/$HQ/.anchor" ]; then
+          err "$a: do not create $HQ/.anchor yet — store(s) not fully migrated:$unfinished"
+        fi ;;
+      esac
     done ;;
 esac
 exit $rc
