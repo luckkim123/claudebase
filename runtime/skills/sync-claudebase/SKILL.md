@@ -1052,6 +1052,37 @@ so it judges liveness but is silent on an anchor that has no ledger row at all.
 Sharing a command between them would collapse both into a single detector with
 one blind spot and no way to notice.
 
+```bash
+for a in "$HOME/ksm_Obsidian" "$HOME/claudebase" "$HOME/workspace"; do
+  [ -d "$a" ] && bash "$CB/runtime/bin/migrate-om-store.sh" audit "$a"
+done                                                              # (4n-c) config drift
+```
+
+`audit` is the **configuration** instrument, and it is here because store-spec
+§5 (four `.gitignore` lines) and §2 (three `merge=union` attributes) are the
+*seed* for a new anchor — nothing re-applies them to an anchor that already
+exists. Every finding in the 2026-08-31 round was that gap: `stonefish_ws` was
+seeded from a two-line §5 and committed `hq`'s write lock; this repo and the
+vault never picked up `**/.harness.lock/` when omo 0.21.0 added it, and had not
+noticed only because no long-running harness session has run here yet; the
+vault's `merge=union` rule pointed at a legacy path for three days after the
+purge deleted it. Exit 7 means the anchor's git config no longer matches the
+spec it was built from.
+
+It probes **behaviour** (`git check-ignore` / `check-attr`), never line text —
+a rule inherited from a parent `.gitignore` is equally valid, and text matching
+would fail a correct anchor while passing a wrong one. Two of its probes are
+*negative*: `config/migrated.jsonl` and `community/INDEX.md` must **not** be
+ignored, because a repo ignoring `.hq/` wholesale satisfies every positive check
+while hiding the tracked layers. An empty `.hq/` is skipped as "not an anchor"
+(measured on the `oh-my-orchestrator` checkout, where a leftover empty directory
+produced two false failures).
+
+Exit 7 is usually safe to fix during a sync — adding an ignore line for a file
+that does not exist yet untracks nothing — but **check `git status --porcelain`
+for `D` lines before committing**, because widening an ignore rule over a file
+that is already tracked does remove it.
+
 **Stated limits — do not report a clean run as full coverage.** Drift cannot
 see an ignored layer (nothing dates the write) or a no-git anchor
 (`~/Desktop/workspace` and its five nested anchors are iCloud, store-spec §8);

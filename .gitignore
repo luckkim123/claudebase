@@ -53,13 +53,22 @@ eval/runs/
 # the legacy store, and `.hq/config/` (tracked) now carries the rules while
 # `**/.hq/work|runtime/` cover the per-machine state.
 
-# hq CLI store lock — the advisory fcntl lock file store.py creates under
-# community_dir(). One line now: the legacy `**/.orchestration/.hq-lock` path
-# is purged, and a stage-2 anchored project only ever locks the new root.
-**/.hq/community/.hq-lock
-
-# .hq unified store: work/ is regenerable output, runtime/ is session state,
-# locks, logs, and anything sensitive. community/ and config/ stay tracked
-# (store-spec §3, §5). The `**/` prefix is required because anchors nest.
+# .hq unified store — the four lines store-spec §5 asks of every repo hosting
+# an anchor, verified by `migrate-om-store audit .` rather than by eye.
+# work/ is regenerable output, runtime/ is session state, locks, logs, and
+# anything sensitive; community/ and config/ stay tracked (§3, §5). The `**/`
+# prefix is required because anchors nest.
 **/.hq/work/
 **/.hq/runtime/
+# omo's state lock, root-local since 0.21.0 — a session that dies holding it
+# leaves an empty lockdir that would otherwise sit in `git status`. This line
+# was missing here until 2026-08-31; it had not bitten only because no
+# long-running harness session has run on this machine yet (`find`: 0 hits).
+**/.harness.lock/
+# hq CLI store lock — the advisory fcntl lock store.py creates under
+# community_dir(), i.e. inside a TRACKED layer, which is why the two `work/`
+# and `runtime/` lines do not cover it. Widened from
+# `**/.hq/community/.hq-lock` to match §5's block: the narrow form is correct
+# only for as long as the lock stays in community/, and nothing promises that.
+# (The legacy `**/.orchestration/.hq-lock` path went with the stage-3 purge.)
+**/.hq/**/.hq-lock

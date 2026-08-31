@@ -47,6 +47,7 @@
 #   migrate-om-store purge   ANCHOR        trash the legacy store (prompts; §7)
 #   migrate-om-store census  [--root DIR]  the anchor roster (find x git ls-files)
 #   migrate-om-store drift   ANCHOR...     split-brain check (ledger vs mtime)
+#   migrate-om-store audit   ANCHOR...     git config vs store-spec §5 + §2
 #   migrate-om-store selftest              round-trip every mapping rule
 #
 # ANCHOR is the directory that holds the legacy store, not the store itself,
@@ -63,7 +64,8 @@
 #   HQ_D2_RELEASED  =1 opens the `.omx` gate (see `is_gated`).
 #
 # Exit codes: 0 ok · 1 usage · 2 unmapped path · 3 refused · 4 conflict · 5 drift ·
-#             6 undefined (no ledger row for this store — it was never cut over).
+#             6 undefined (no ledger row for this store — it was never cut over) ·
+#             7 anchor git config does not satisfy store-spec §5/§2 (`audit`).
 #
 # 6 exists because `drift` used to return 0 there. It said so in prose — "this
 # store was never cut over" — but an acceptance check written against `$?`, which
@@ -803,6 +805,91 @@ PY
 }
 
 # --------------------------------------------------------------------------
+# audit — does this anchor's git config still satisfy the spec's blocks?
+#
+# store-spec §5 (the ignore lines) and §2 (the union-merge attributes) are the
+# *seed* for a new anchor, and nothing re-applies them to an anchor that
+# already exists. That is the whole 2026-08-31 round: `stonefish_ws` seeded
+# from a two-line §5 and committed `hq`'s write lock, and this repo's vault
+# kept a `merge=union` rule pointing at a legacy path three days after the
+# purge deleted it. A spec block that changes and an anchor that never hears
+# about it is the same silent-success shape as everything else here.
+#
+# Checked by BEHAVIOUR (`check-ignore` / `check-attr`), never by grepping for
+# the line text: a rule inherited from a parent `.gitignore` is just as valid,
+# and text matching would fail a correct anchor while passing a wrong one.
+#
+# The two NEGATIVE probes are load-bearing. A repo that ignores `.hq/`
+# wholesale satisfies every positive probe while hiding the tracked layers, so
+# `config/migrated.jsonl` and `community/INDEX.md` are asserted NOT ignored —
+# without them this detector passes exactly the anchor it exists to catch.
+# --------------------------------------------------------------------------
+attr_of() { git -C "$1" check-attr merge -- "$2" 2>/dev/null | sed 's/.*: //'; }
+
+run_audit() {
+  local anchor="$1" bad=0 p a
+  anchor="${anchor%/}"
+  [ -d "$anchor" ] || { err "$anchor: not a directory"; return 1; }
+  note "== $anchor  [audit: store-spec §5 ignore + §2 attributes]"
+  # An anchor is `.hq/.anchor` (stage 2) or a `.hq/` that already holds files
+  # (stage 1, copied but not cut over). An EMPTY `.hq/` is neither — measured
+  # on the `oh-my-orchestrator` checkout, where a leftover empty directory made
+  # this audit report two failures against a repo with nothing to protect. A
+  # checker that fires on directories it has no business in gets ignored, which
+  # costs more than the checks are worth.
+  if [ ! -f "$anchor/$HQ/.anchor" ] &&
+     [ -z "$(find "$anchor/$HQ" -type f 2>/dev/null | head -1)" ]; then
+    note "  SKIP   no $HQ/ store here — not an anchor"
+    return 0
+  fi
+  if ! git -C "$anchor" rev-parse --git-dir >/dev/null 2>&1; then
+    note "  SKIP   not a git anchor — §8 covers these with tar snapshots instead"
+    return 0
+  fi
+
+  for p in "$HQ/work/probe" "$HQ/runtime/probe" ".harness.lock/probe" \
+           "$HQ/community/.hq-lock"; do
+    if git -C "$anchor" check-ignore -q "$p"; then
+      note "  ignored  $p"
+    else
+      err "$anchor: $p is NOT ignored — store-spec §5 asks for four lines"
+      bad=$((bad + 1))
+    fi
+  done
+
+  for p in "$HQ/config/migrated.jsonl" "$HQ/community/INDEX.md"; do
+    if git -C "$anchor" check-ignore -q "$p"; then
+      err "$anchor: $p IS ignored — config/ and community/ are tracked layers (§3, §5)"
+      bad=$((bad + 1))
+    else
+      note "  tracked  $p"
+    fi
+  done
+
+  # migrated.jsonl always; the secretary pair only where omp actually writes
+  # one, so an anchor without a secretary is not nagged about a file it has no
+  # reason to hold.
+  set -- "$HQ/config/migrated.jsonl"
+  if [ -d "$anchor/$HQ/config/project/secretary" ]; then
+    set -- "$@" "$HQ/config/project/secretary/ledger.jsonl" \
+                "$HQ/config/project/secretary/journal/2026-01-01.md"
+  fi
+  for p in "$@"; do
+    a=$(attr_of "$anchor" "$p")
+    if [ "$a" = union ]; then
+      note "  union    $p"
+    else
+      err "$anchor: $p has merge=$a, not union — store-spec §2 (append-only log in a tracked layer)"
+      bad=$((bad + 1))
+    fi
+  done
+
+  [ "$bad" -eq 0 ] || { err "$anchor: $bad check(s) failed"; return 7; }
+  note "  -- audit: all checks pass"
+  return 0
+}
+
+# --------------------------------------------------------------------------
 # selftest — the one runnable check. Two things can silently break the table:
 # a `new` prefix reused within a kind (which makes `reverse` pick the wrong
 # origin) and a rule whose inverse does not return the path it started from.
@@ -875,7 +962,7 @@ root=""
 args=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    plan|apply|reverse|purge|census|drift|selftest) verb="$1" ;;
+    plan|apply|reverse|purge|census|drift|audit|selftest) verb="$1" ;;
     --root)  shift; root="${1:-}" ;;
     --store) shift; ONLY_STORE="${1:-}" ;;
     -h|--help) usage; exit 0 ;;
@@ -897,6 +984,14 @@ case "$verb" in
     [ $# -ge 1 ] || { err "$verb needs at least one anchor directory"; usage >&2; exit 1; }
     for a in "$@"; do
       a="${a%/}"
+      # Per-anchor, not per-store, and it must run before the store lookup:
+      # an anchor whose legacy stores are already purged has none to list, and
+      # that is exactly an anchor whose git config still needs checking.
+      if [ "$verb" = audit ]; then
+        run_audit "$a"; r=$?
+        [ $r -gt $rc ] && rc=$r
+        continue
+      fi
       stores=$(legacy_stores_of "$a") || { rc=1; continue; }
       # Kinds present at this anchor — `reverse` needs it to tell a sibling
       # harness's file apart from a genuine orphan.
@@ -941,6 +1036,16 @@ case "$verb" in
           err "$a: do not create $HQ/.anchor yet — store(s) not fully migrated:$unfinished"
         fi ;;
       esac
+      # The operator's next step after a clean `apply` is a commit, and that is
+      # the moment the §5/§2 blocks decide what lands in git. Advisory: it does
+      # not touch `rc`, because whether the copy succeeded and whether the repo
+      # is configured are different questions and sharing an exit code is how
+      # this tool got exit 6 in the first place. `audit` is the gate; this is
+      # the reminder, in the same stderr channel as the two warnings above.
+      if [ "$verb" = apply ] && [ -z "$unfinished" ]; then
+        run_audit "$a" >/dev/null || \
+          err "$a: apply is done, but the anchor's git config is not — run: migrate-om-store audit $a"
+      fi
     done ;;
 esac
 exit $rc

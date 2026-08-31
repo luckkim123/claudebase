@@ -529,3 +529,99 @@ def test_wiki_pages_are_announced_as_staging_and_the_notice_is_not_inert(anchor)
     quiet = run("plan", str(anchor))
     assert quiet.returncode == 0
     assert "STAGING" not in quiet.stderr
+
+
+# --------------------------------------------------------------------------
+# audit — the spec's §5/§2 blocks seed a NEW anchor and nothing re-applies them
+#
+# Every finding in the 2026-08-31 round reduced to that: `stonefish_ws` was
+# seeded from a two-line §5 and committed `hq`'s write lock; this repo and the
+# vault never picked up `**/.harness.lock/` when 0.21.0 added it; the vault's
+# `merge=union` rule pointed at a legacy path for three days after the purge
+# deleted it. Behaviour is probed (`check-ignore` / `check-attr`), not line
+# text -- a rule inherited from a parent `.gitignore` is equally valid.
+# --------------------------------------------------------------------------
+
+FOUR_LINES = "**/.hq/work/\n**/.hq/runtime/\n**/.harness.lock/\n**/.hq/**/.hq-lock\n"
+UNION = (".hq/config/migrated.jsonl merge=union\n"
+         ".hq/config/project/secretary/ledger.jsonl merge=union\n"
+         ".hq/config/project/secretary/journal/*.md merge=union\n")
+
+
+def _audited(tmp_path, ignore=FOUR_LINES, attrs=UNION, anchored=True):
+    a = tmp_path / "anchored"
+    write(a / ".hq" / "config" / "migrated.jsonl", "")
+    if anchored:
+        write(a / ".hq" / ".anchor", "id: fixture\n")
+    write(a / ".gitignore", ignore)
+    write(a / ".gitattributes", attrs)
+    git(a, "init", "-q")
+    return a
+
+
+def test_audit_passes_a_correct_anchor_and_fails_a_missing_lock_line(tmp_path):
+    ok = run("audit", str(_audited(tmp_path)))
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    assert "all checks pass" in ok.stdout
+
+    short = _audited(tmp_path / "b", ignore="**/.hq/work/\n**/.hq/runtime/\n")
+    bad = run("audit", str(short))
+    assert bad.returncode == 7
+    assert ".harness.lock" in bad.stderr
+    assert ".hq-lock" in bad.stderr
+
+
+def test_audit_fails_a_missing_union_attribute(tmp_path):
+    a = _audited(tmp_path, attrs="")
+    r = run("audit", str(a))
+    assert r.returncode == 7
+    assert "merge=unspecified, not union" in r.stderr
+
+
+def test_audit_rejects_a_repo_that_ignores_the_tracked_layers(tmp_path):
+    """The negative probes, discriminated: ignoring `.hq/` wholesale satisfies
+    every positive check while hiding config/ and community/. Without these two
+    assertions the detector passes exactly the anchor it exists to catch."""
+    a = _audited(tmp_path, ignore=FOUR_LINES + "**/.hq/\n")
+    r = run("audit", str(a))
+    assert r.returncode == 7
+    assert "IS ignored" in r.stderr
+    assert "tracked layers" in r.stderr
+
+
+def test_audit_skips_a_directory_that_is_not_an_anchor(tmp_path):
+    """An empty `.hq/` is not an anchor. Measured on the oh-my-orchestrator
+    checkout, where a leftover empty directory made this audit report two
+    failures against a repo with nothing to protect."""
+    a = tmp_path / "notanchor"
+    (a / ".hq").mkdir(parents=True)
+    write(a / ".gitignore", "")
+    git(a, "init", "-q")
+    r = run("audit", str(a))
+    assert r.returncode == 0
+    assert "not an anchor" in r.stdout
+
+
+def test_audit_skips_a_non_git_anchor(tmp_path):
+    a = tmp_path / "icloud"
+    write(a / ".hq" / ".anchor", "id: fixture\n")
+    r = run("audit", str(a))
+    assert r.returncode == 0
+    assert "not a git anchor" in r.stdout
+
+
+def test_apply_says_so_when_the_anchor_config_is_not_ready(anchor):
+    """`apply` does not gate on the audit -- the copy succeeding and the repo
+    being configured are different questions -- but the operator's next step is
+    a commit, so it says so in the same stderr channel as the other warnings."""
+    r = run("apply", str(anchor))
+    assert r.returncode == 0
+    assert "git config is not" in r.stderr, r.stderr
+
+    (anchor / ".gitignore").write_text(FOUR_LINES, encoding="utf-8")
+    (anchor / ".gitattributes").write_text(UNION, encoding="utf-8")
+    git(anchor, "add", "-A")
+    git(anchor, "commit", "-qm", "configure")
+    again = run("apply", str(anchor))
+    assert again.returncode == 0
+    assert "git config is not" not in again.stderr
