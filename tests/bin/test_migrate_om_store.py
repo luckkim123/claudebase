@@ -435,3 +435,97 @@ def test_no_git_anchor_is_snapshotted_before_apply(tmp_path):
     assert "sha256" in r.stdout
     listing = subprocess.run(["tar", "-tf", str(snaps[0])], capture_output=True, text=True).stdout
     assert ".omd/learned.md" in listing
+
+
+# --------------------------------------------------------------------------
+# the ledger row `apply` owes stage 1, and the staging state it must announce
+#
+# Both are the same defect shape as the rest of this file: the tool's exit
+# signal did not reach the next step. `apply` returned 0 without appending the
+# row store-spec s7 stage 1 promises, so `drift` on a store migrated seconds
+# earlier answered "this store was never cut over"; and a run that filled
+# `community/wiki/` -- a staging state with one exit -- summarised as clean.
+# --------------------------------------------------------------------------
+
+def _ledger_rows(anchor: Path, kind: str = "omp"):
+    p = anchor / ".hq" / "config" / "migrated.jsonl"
+    if not p.exists():
+        return []
+    rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+    return [r for r in rows if r.get("harness") == kind]
+
+
+def _backdate_legacy(anchor: Path, store: str = ".omp"):
+    """`at` has second resolution, so a legacy file written in the same second
+    as the migration reads as newer than it. Real stores are not written during
+    their own migration; the fixture is."""
+    old = time.time() - 3600
+    for p in (anchor / store).rglob("*"):
+        if p.is_file():
+            os.utime(p, (old, old))
+
+
+def test_apply_appends_the_row_and_drift_stops_saying_never_cut_over(anchor):
+    before = run("drift", str(anchor))
+    assert before.returncode == 6, before.stdout
+    assert "no migrated.jsonl" in before.stdout
+
+    assert run("apply", str(anchor)).returncode == 0
+    rows = _ledger_rows(anchor)
+    assert len(rows) == 1, rows
+    assert set(rows[0]) == {"harness", "at", "machine"}
+    assert rows[0]["at"][-3] == ":", rows[0]["at"]      # +09:00, not +0900
+
+    _backdate_legacy(anchor)
+    after = run("drift", str(anchor))
+    assert after.returncode == 0, after.stdout + after.stderr
+
+
+def test_plan_appends_nothing(anchor):
+    assert run("plan", str(anchor)).returncode == 0
+    assert _ledger_rows(anchor) == []
+
+
+def test_a_store_that_failed_to_map_appends_no_row(anchor):
+    """The guard, discriminated: an unmapped file exits 2, and a store that did
+    not fully land must not claim it was migrated."""
+    stray = write(anchor / ".omp" / "stray.md", "unclaimed\n")
+    git(anchor, "add", "-A")
+    git(anchor, "commit", "-qm", "stray")
+    assert run("apply", str(anchor)).returncode == 2
+    assert _ledger_rows(anchor) == []
+
+    stray.unlink()
+    git(anchor, "add", "-A")
+    git(anchor, "commit", "-qm", "drop stray")
+    assert run("apply", str(anchor)).returncode == 0
+    assert len(_ledger_rows(anchor)) == 1
+
+
+def test_second_apply_advances_the_cut_line_rather_than_deduping(anchor):
+    assert run("apply", str(anchor)).returncode == 0
+    assert run("apply", str(anchor)).returncode == 0
+    rows = _ledger_rows(anchor)
+    assert len(rows) == 2, rows          # `drift` takes max(at); dedup freezes it
+
+
+def test_machine_label_is_overridable_because_hostname_is_not_the_roster_name(anchor):
+    env = dict(os.environ, HQ_MACHINE="roster-label")
+    r = subprocess.run(["bash", str(SCRIPT), "apply", str(anchor)],
+                       env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _ledger_rows(anchor)[0]["machine"] == "roster-label"
+
+
+def test_wiki_pages_are_announced_as_staging_and_the_notice_is_not_inert(anchor):
+    staged = run("plan", str(anchor))
+    assert staged.returncode == 0
+    assert "STAGING" in staged.stderr, staged.stderr
+    assert "convert-wiki-form.py" in staged.stderr
+
+    (anchor / ".omp" / "wiki" / "note.md").unlink()
+    git(anchor, "add", "-A")
+    git(anchor, "commit", "-qm", "drop wiki")
+    quiet = run("plan", str(anchor))
+    assert quiet.returncode == 0
+    assert "STAGING" not in quiet.stderr

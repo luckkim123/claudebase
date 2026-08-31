@@ -56,6 +56,12 @@
 #   migrate-om-store plan  ~/Desktop/workspace
 #   migrate-om-store plan  ~/ksm_Obsidian --store .omp
 #
+# Env:
+#   HQ_MACHINE      the `machine` label written to `migrated.jsonl` by `apply`.
+#                   Defaults to `hostname -s`, which is NOT always the label the
+#                   §10 roster uses (this Mac: hostname `gwe52`, roster `ksm-mac`).
+#   HQ_D2_RELEASED  =1 opens the `.omx` gate (see `is_gated`).
+#
 # Exit codes: 0 ok · 1 usage · 2 unmapped path · 3 refused · 4 conflict · 5 drift ·
 #             6 undefined (no ledger row for this store — it was never cut over).
 #
@@ -438,12 +444,38 @@ snapshot_if_no_git() {
 }
 
 # --------------------------------------------------------------------------
+# migrated.jsonl — the row store-spec §7 stage 1 says is appended when a store
+# is migrated. Nothing appended one: the ledger was hand-written or empty, so
+# `drift` on a store copied minutes earlier answered "this store was never cut
+# over" (exit 6) on the very machine that had just migrated it. Written here,
+# at the only point that knows the files actually landed and verified.
+#
+# Appended unconditionally, not deduped: `run_drift` takes `max(at)` over the
+# rows for a kind, so a second `apply` must advance that reference rather than
+# leave the first run's timestamp standing as the split-brain cut line.
+#
+# `machine` is a human-stable LABEL, not necessarily this host's name — the
+# §10 roster says `ksm-mac` where `hostname -s` says `gwe52`. `HQ_MACHINE`
+# sets it; the row is echoed so a wrong label is visible at write time.
+# --------------------------------------------------------------------------
+append_ledger() {
+  local anchor="$1" kind="$2" ledger machine at row
+  ledger="$anchor/$HQ/config/migrated.jsonl"
+  machine="${HQ_MACHINE:-$(hostname -s 2>/dev/null || hostname)}"
+  at=$(date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/')
+  row=$(printf '{"harness":"%s","at":"%s","machine":"%s"}' "$kind" "$at" "$machine")
+  mkdir -p "$(dirname "$ledger")" || return 1
+  printf '%s\n' "$row" >> "$ledger" || return 1
+  note "  -- migrated.jsonl += $row"
+}
+
+# --------------------------------------------------------------------------
 # plan / apply
 # --------------------------------------------------------------------------
 run_move() {
   local verb="$1" anchor="$2" store="$3" kind rel new src dst rc
   local n_copy=0 n_same=0 n_skip=0 n_slug=0 n_fail=0 n_conflict=0
-  local in_git=0 n_tracked=0 tracked_mark
+  local in_git=0 n_tracked=0 tracked_mark n_wiki=0
 
   anchor="${anchor%/}"
   [ -d "$anchor" ] || { err "$anchor: not a directory"; return 1; }
@@ -488,6 +520,7 @@ run_move() {
       tracked_mark=" [becomes-tracked]"
       n_tracked=$((n_tracked + 1))
     fi
+    case "$new" in community/wiki/*) n_wiki=$((n_wiki + 1)) ;; esac
     if [ $rc -eq 3 ]; then note "  SLUG   $store/$rel -> $HQ/$new$tracked_mark"
     else                   note "  COPY   $store/$rel -> $HQ/$new$tracked_mark"; fi
     n_copy=$((n_copy + 1))
@@ -504,6 +537,18 @@ EOF
   note "  -- copy=$n_copy (slug $n_slug)  same=$n_same  skip=$n_skip  conflict=$n_conflict  fail=$n_fail"
   if [ "$n_tracked" -gt 0 ]; then
     note "  -- $n_tracked file(s) marked [becomes-tracked]: ignored at $store/, tracked at $HQ/ — extend .gitignore before committing if any must stay private"
+  fi
+  # `community/wiki/` is a staging state with a single exit, not a destination
+  # (store-spec §9.3, r7 2026-08-30). A clean `conflict=0 fail=0` summary on a
+  # run that filled it reads as finished, and the operator commits a store that
+  # still holds the retired form. Said here because this is the only place that
+  # knows a wiki page moved.
+  if [ "$n_wiki" -gt 0 ]; then
+    err "$anchor ($store): $n_wiki page(s) land in $HQ/community/wiki/ — a STAGING state (store-spec §9.3); this anchor is NOT finished migrating"
+    err "  next: python3 <oh-my-orchestrator>/skills/harness/convert-wiki-form.py plan $anchor"
+  fi
+  if [ "$verb" = apply ] && [ "$n_fail" -eq 0 ] && [ "$n_conflict" -eq 0 ]; then
+    append_ledger "$anchor" "$kind" || return 1
   fi
   [ "$n_fail" -gt 0 ] && return 2
   [ "$n_conflict" -gt 0 ] && return 4
