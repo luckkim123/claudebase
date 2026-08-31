@@ -602,6 +602,30 @@ def test_audit_skips_a_directory_that_is_not_an_anchor(tmp_path):
     assert "not an anchor" in r.stdout
 
 
+def test_an_anchor_path_containing_spaces_survives_argument_parsing(tmp_path):
+    """Anchors were accumulated into a string and re-split unquoted, so a path
+    with a space became several. This tool's own `census` prints exactly such a
+    path -- the Google Drive mirror of `~/workspace` sits under
+    `.../다른 컴퓨터/내 Mac/workspace` -- so a census row pasted into `audit` or
+    `drift` named fragments that do not exist."""
+    a = _audited(tmp_path / "with space" / "내 Mac")
+    r = run("audit", str(a))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "not a directory" not in r.stderr
+    assert str(a) in r.stdout
+
+
+def test_no_anchor_argument_is_a_usage_error_not_an_unbound_variable():
+    """macOS ships bash 3.2, where expanding an empty array under `set -u` is
+    an unbound-variable error rather than nothing. Not a discrimination test --
+    the string form this replaced was already correct here; it guards the array
+    form that replaced it."""
+    r = run("audit")
+    assert r.returncode == 1
+    assert "needs at least one anchor" in r.stderr
+    assert "unbound variable" not in r.stderr
+
+
 def test_audit_skips_a_non_git_anchor(tmp_path):
     a = tmp_path / "icloud"
     write(a / ".hq" / ".anchor", "id: fixture\n")

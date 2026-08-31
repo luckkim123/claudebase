@@ -959,7 +959,15 @@ ONLY_STORE=""
 ANCHOR_KINDS=""
 verb=""
 root=""
-args=""
+# An ARRAY, not a string. Anchors were accumulated into `args="$args $1"` and
+# re-split with an unquoted `set -- $args`, which tears any path containing a
+# space into fragments — and this tool's own `census` prints exactly such
+# paths: the Google Drive mirror of `~/workspace` is under
+# `.../다른 컴퓨터/내 Mac/workspace`. An operator pasting a census row into
+# `drift` or `audit` got three "not a directory" errors naming path fragments.
+# Guarded expansion below because macOS ships bash 3.2, where `"${a[@]}"` on an
+# empty array is an unbound-variable error under `set -u`.
+anchors=()
 while [ $# -gt 0 ]; do
   case "$1" in
     plan|apply|reverse|purge|census|drift|audit|selftest) verb="$1" ;;
@@ -967,7 +975,7 @@ while [ $# -gt 0 ]; do
     --store) shift; ONLY_STORE="${1:-}" ;;
     -h|--help) usage; exit 0 ;;
     -*) err "unknown option: $1"; usage >&2; exit 1 ;;
-    *) args="$args $1" ;;
+    *) anchors+=("$1") ;;
   esac
   shift
 done
@@ -980,7 +988,7 @@ case "$verb" in
   census)   run_census "${root:-$HOME}"; rc=$? ;;
   selftest) run_selftest; rc=$? ;;
   *)
-    set -- $args
+    set -- ${anchors[@]+"${anchors[@]}"}
     [ $# -ge 1 ] || { err "$verb needs at least one anchor directory"; usage >&2; exit 1; }
     for a in "$@"; do
       a="${a%/}"
