@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -300,6 +301,54 @@ def test_apply_summary_counts_update_separately():
 
 
 # ─── post-install registry ──────────────────────────────────────────────────
+
+
+def _update_decision(hooks):
+    d = Decision(plugin="oh-my-claudecode@omc", action=Action.UPDATE,
+                 current_scope="user")
+    d.post_install = list(hooks)
+    return d
+
+
+def test_apply_update_runs_post_install_hooks(monkeypatch):
+    """A successful UPDATE must run the plugin's post_install hooks.
+
+    Before 2026-08-31 the UPDATE branch returned before the hook loop, so hooks
+    only ever ran on a fresh INSTALL. Once install.sh began passing --update,
+    every enabled plugin took the UPDATE branch and the hooks became
+    unreachable in normal operation.
+    """
+    ran = []
+    monkeypatch.setattr(ps.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(returncode=0))
+    monkeypatch.setattr(ps, "run_post_install", lambda name: ran.append(name) or f"ran {name}")
+    log = ps.apply([_update_decision(["install_omc_shell_cli"])], dry_run=False)
+    assert ran == ["install_omc_shell_cli"]
+    assert "ran install_omc_shell_cli" in "\n".join(log)
+
+
+def test_apply_failed_update_skips_post_install(monkeypatch):
+    """A hook must not run behind an update that did not succeed."""
+    ran = []
+    monkeypatch.setattr(ps.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(returncode=1))
+    monkeypatch.setattr(ps, "run_post_install", lambda name: ran.append(name) or "")
+    log = ps.apply([_update_decision(["install_omc_shell_cli"])], dry_run=False)
+    assert ran == []
+    assert "WARNING: failed to update" in "\n".join(log)
+
+
+def test_apply_dry_run_update_skips_post_install(monkeypatch):
+    """Dry run reports the update and touches nothing."""
+    ran = []
+    monkeypatch.setattr(
+        ps.subprocess, "run",
+        lambda *a, **k: pytest.fail("no CLI call expected in dry run"),
+    )
+    monkeypatch.setattr(ps, "run_post_install", lambda name: ran.append(name) or "")
+    log = ps.apply([_update_decision(["install_omc_shell_cli"])], dry_run=True)
+    assert ran == []
+    assert "would update (user)" in "\n".join(log)
 
 
 def test_post_install_hooks_resolved_from_metadata(metadata):

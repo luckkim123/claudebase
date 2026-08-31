@@ -39,14 +39,26 @@ anywhere had it.
     machine has is a question about the machine; building the binary the plugin
     already shipped is finishing the install. Missing Go logs and skips.
 
+### Fixed
+- **`post_install` hooks now run after a successful `UPDATE`,** not only after a
+  fresh `INSTALL`. `apply()`'s `UPDATE` branch returned before the hook loop, so
+  a hook never ran for an already-installed plugin — and passing `--update` by
+  default (above) sends *every* enabled plugin down that branch, which would
+  have left the hooks unreachable in normal operation. A fix that makes an
+  adjacent latent defect load-bearing has to carry it.
+
+  `install_omc_shell_cli` is the only hook registered today and it self-skips on
+  `shutil.which("omc")`, so nothing visible changes yet; the point is that the
+  next hook someone registers will actually run. Three tests lock it (hook runs
+  on success, does not run behind a failed update, does not run in dry-run), and
+  the first was mutation-checked: reverting the branch makes it, and only it,
+  fail.
+
 ### Notes
-- **A `post_install` hook could not have done this.** Hooks are keyed by
+- **A `post_install` hook could not have built the wrapper.** Hooks are keyed by
   *marketplace* (`post_install_hooks_for` → `_marketplace_of`), so one on
-  `heroacademia` fires for omo, omp, omd, oms and omx alike; and `apply()`'s
-  `UPDATE` branch returns before the hook loop, so a hook never runs for an
-  already-installed plugin — exactly the case here. Left as-is: the same gap
-  means `install_omc_shell_cli` never re-runs on update either, which is worth
-  a separate look.
+  `heroacademia` fires for omo, omp, omd, oms and omx alike — so a hook there
+  could not target one plugin. The second half of that gap is fixed below.
 
 ## [Unreleased] — 2026-08-29 — the third tool nothing pointed at
 

@@ -262,8 +262,17 @@ def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
                 capture_output=True,
                 check=False,
             ).returncode
-            log.append(f"plugin updated (user): {d.plugin}" if rc == 0
-                       else f"WARNING: failed to update: {d.plugin}")
+            if rc != 0:
+                log.append(f"WARNING: failed to update: {d.plugin}")
+                continue
+            log.append(f"plugin updated (user): {d.plugin}")
+            # Post-install hooks run on this branch too. They are "ensure X is
+            # present and current" steps rather than first-install steps, and
+            # since install.sh started passing --update every enabled plugin
+            # takes THIS branch instead of INSTALL -- leaving the hooks only on
+            # the install path would make them unreachable in normal operation.
+            for hook in d.post_install:
+                log.append(run_post_install(hook))
             continue
         # INSTALL or REINSTALL
         if dry_run:
