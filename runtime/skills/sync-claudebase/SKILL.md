@@ -385,10 +385,14 @@ On yes:
 cd ~/claudebase && python3 installer/scripts/plugin_sync.py --apply --update
 ```
 
-The summary line reports `… N updated …` — that N is how many the CLI actually
-refreshed (stale ones), not the candidate count. `claude plugin update` notes
-"restart required to apply", so tell the user to relaunch the session if any
-plugin was actually updated. If a plugin fails to update (network, bad
+The summary line reports `… N updated …` — that N is the **candidate** count,
+not how many were actually refreshed. `apply()` increments
+`counts[Action.UPDATE]` while building the plan and afterwards checks the CLI's
+return code only for *failure*, so a plugin the CLI no-ops because it is already
+current still counts. N therefore equals the number of enabled plugins on every
+run. Read it as "N were asked", never as "N were stale". `claude plugin update`
+notes "restart required to apply", so tell the user to relaunch the session if
+any plugin was actually updated. If a plugin fails to update (network, bad
 marketplace), `apply()` logs `WARNING: failed to update: <plugin>` and continues
 — surface it but don't abort the rest.
 
@@ -460,11 +464,20 @@ distinct `CLAUDE_MEM_WORKER_PORT` in its own `~/.claude-mem/settings.json`. Don'
 read the `37701` fallback in the recipe above as the port actually in play —
 the containers measured here carried `37700`. Read the file.
 
-**Why opt-in, not folded into step 5's install.sh:** keeping `--update` off the
-default install path preserves install.sh's idempotency contract (a second run
-prints zero action lines — step 6 depends on this). Bundling auto-update would
-make every install non-idempotent and could swap a plugin's commit at a moment
-the user didn't choose. Detect-then-ask keeps the choice explicit.
+**This step no longer decides anything — step 5 updates regardless (55880cc).**
+`installer/lib/plugins.sh` now appends `--update` unconditionally, because
+without it `plugin_sync` labels every already-installed plugin OK and never moves
+its version (measured: `oh-my-orchestrator` sat at 0.16.0 while 0.17–0.19 had
+shipped). So a "no" here is overridden minutes later by step 5, and asking as if
+it were a gate misrepresents what the run will do. Keep 4g as a **preview** —
+show the `--dry-run --update` candidate list so the user sees what step 5 is
+about to touch, and say plainly that step 5 does it either way. The only real
+choice left is to skip step 5 entirely, which is not what this question offers.
+
+*(Superseded rationale, kept for the record: `--update` used to be opt-in
+precisely so install.sh stayed idempotent — a second run printed zero action
+lines. 55880cc traded that contract for currency. See step 6, which no longer
+expects `0 updated`.)*
 
 **MCP servers are not plugins** and `claude plugin update` does not reach
 them — they are step 4j.
@@ -1178,7 +1191,7 @@ Run install.sh **a second time** and check:
 
 - `mcp.json` line says `unchanged (skip)`, NOT `rendered:` (otherwise: idempotency regression — go to step 7)
 - Symlink lines all say `already linked` in verbose mode (otherwise: relink churn)
-- Plugin sync line: `0 fixed, 0 updated`. The `drift-kept` count may be non-zero — that's expected when reverse drift exists (warn-only is the default; the installer never removes a recipient's own plugins). A `fixed` count that never drops to 0 across passes is a real regression → step 7.
+- Plugin sync line: `0 fixed`. **Do not also expect `0 updated` — that is no longer reachable.** Since 55880cc, `installer/lib/plugins.sh` appends `--update` unconditionally, and `apply()` increments `counts[Action.UPDATE]` when the plan is built rather than when a plugin actually moves, so `updated` equals the enabled-plugin count on every run — a second, fully no-op pass included (measured 2026-08-31: 18 then 19, the extra being the plugin the first pass installed). Reading that as a regression sends a healthy machine to step 7. The `drift-kept` count may be non-zero — that's expected when reverse drift exists (warn-only is the default; the installer never removes a recipient's own plugins). A `fixed` count that never drops to 0 across passes is a real regression → step 7.
 - Zero new directories under `~/.claude/.backup-*` from the past minute. Use a portable ISO timestamp — `bfs` (the find on recent macOS) rejects `"1 minute ago"`:
   ```bash
   REF=$(date -u -v-1M +'%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
