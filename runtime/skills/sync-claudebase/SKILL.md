@@ -1034,7 +1034,7 @@ pattern` line plus any row whose GATE column reads `legacy` (an anchor with no
 `.hq/.anchor` yet).
 
 ```bash
-for a in "$HOME/ksm_Obsidian" "$HOME/claudebase" "$HOME/Desktop/workspace"; do
+for a in "$HOME/ksm_Obsidian" "$HOME/claudebase" "$HOME/workspace"; do
   [ -d "$a" ] && bash "$CB/runtime/bin/migrate-om-store.sh" drift "$a"
 done                                                              # (4n-b) split-brain
 ```
@@ -1085,7 +1085,11 @@ that is already tracked does remove it.
 
 **Stated limits — do not report a clean run as full coverage.** Drift cannot
 see an ignored layer (nothing dates the write) or a no-git anchor
-(`~/Desktop/workspace` and its five nested anchors are iCloud, store-spec §8);
+(`~/workspace` and its five nested anchors are no-git, store-spec §8 — that
+path moved from `~/Desktop/workspace` and iCloud to `~/workspace` and Google
+Drive, and this loop kept naming the old one, so `[ -d "$a" ]` was false and
+workspace has had **zero** drift coverage since the move; store-spec §8 still
+says Desktop and iCloud as of omo 0.21.2);
 those are covered only by the `tar` hashes `migrate-om-store.sh apply` writes to
 `~/.claude/hq-snapshots/`. Census cannot see an anchor outside `$HOME`.
 

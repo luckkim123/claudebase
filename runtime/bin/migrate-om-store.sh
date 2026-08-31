@@ -54,7 +54,7 @@
 # and one anchor routinely holds several (the vault has `.omp` + `.oms` +
 # `.omha`). Every store present is processed; `--store .omp` narrows to one,
 # and `purge` requires that narrowing when there is more than one:
-#   migrate-om-store plan  ~/Desktop/workspace
+#   migrate-om-store plan  ~/workspace
 #   migrate-om-store plan  ~/ksm_Obsidian --store .omp
 #
 # Env:
@@ -698,6 +698,17 @@ census_excluded() {
     */.Trash/*|*/.Trash)                    return 0 ;;
     */.phase0-scratch/*)                    return 0 ;;
     */.hq/*)                                return 0 ;;
+    # A cloud provider's virtual tree is never an anchor THIS machine owns. It
+    # is either a mirror of a local path already counted, or — measured here,
+    # 2026-08-31 — a backup of a different computer: Google Drive's "other
+    # computers" area held a `workspace` whose `.omp`/`.oms`/`.omd` are dated
+    # 08-10 and 08-20, i.e. a snapshot from BEFORE the 2026-08-28 stage-3 purge
+    # that emptied the live `~/workspace`. Census counted those 8 rows as `in
+    # scope`, and a round reading that roster would have tried to migrate
+    # another machine's backup. Matched on the provider directory rather than
+    # on the localized folder name ("다른 컴퓨터" here, "Other computers"
+    # elsewhere), which would not survive a differently-localized machine.
+    */Library/CloudStorage/*)               return 0 ;;
     # A store directory nested INSIDE another legacy store is a path within that
     # store, not an anchor of its own. albc's `.omx/.omx` (store-spec §9.1 row 5,
     # a wiki log left by a misrooted `--root .../.omx` call) is mapped as a row of

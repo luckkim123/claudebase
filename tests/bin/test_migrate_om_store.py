@@ -602,6 +602,22 @@ def test_audit_skips_a_directory_that_is_not_an_anchor(tmp_path):
     assert "not an anchor" in r.stdout
 
 
+def test_census_excludes_a_cloud_providers_tree_but_not_a_real_anchor(tmp_path):
+    """A cloud provider's virtual tree is never an anchor this machine owns.
+    Measured 2026-08-31: Google Drive's other-computers area held a `workspace`
+    whose legacy stores predate the stage-3 purge that emptied the live one, and
+    census counted its 8 rows as `in scope` — a roster a later round would have
+    read as anchors needing migration."""
+    write(tmp_path / "real" / ".omp" / "rules.json", "{}\n")
+    write(tmp_path / "Library" / "CloudStorage" / "GoogleDrive-x" /
+          "other computers" / "a mac" / "workspace" / ".omp" / "rules.json", "{}\n")
+    r = run("census", "--root", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert "in scope: 1" in r.stdout, r.stdout
+    assert "CloudStorage" not in r.stdout
+    assert "/real" in r.stdout
+
+
 def test_an_anchor_path_containing_spaces_survives_argument_parsing(tmp_path):
     """Anchors were accumulated into a string and re-split unquoted, so a path
     with a space became several. This tool's own `census` prints exactly such a
