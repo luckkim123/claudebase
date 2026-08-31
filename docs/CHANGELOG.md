@@ -2,6 +2,52 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-08-31 — the sync that installed but never updated
+
+Two holes in the one path that is supposed to make a second machine match this
+one. Both were found the same way: omo shipped 0.19.0 on 2026-08-30 and nothing
+anywhere had it.
+
+### Changed
+- **`installer/lib/plugins.sh` now passes `--update`.** `plugin_sync.py` labels
+  an already-installed plugin `OK` and moves on; `UPDATE` only happens when
+  `--update` is requested, and `install.sh` never requested it. So the installer
+  installed missing plugins forever and updated existing ones never. Measured on
+  this machine: `oh-my-orchestrator` sat at **0.16.0** while 0.17, 0.18 and
+  0.19.0 had all shipped. `claude plugin update` is idempotent, so the cost of
+  always asking is one CLI round trip per enabled plugin.
+
+### Added
+- **`ensure_codeagent_wrapper` in `installer/lib/orchestrator_vendors.sh`,**
+  called from `install.sh` after `sync_plugins`. omo ships `codeagent-wrapper`
+  as Go *source* inside the plugin, and nothing in this installer built Go — so
+  the binary was the one layer no sync reached, on any machine. After omo's call
+  ledger shipped, it recorded three rows in seven hours because `PATH` still
+  resolved to a build from two days earlier, and omo's own pre-flight check
+  (`command -v codeagent-wrapper`) passes on a stale binary.
+
+  Three decisions worth stating:
+  - **The version is injected, not derived.** The wrapper's Makefile takes it
+    from `git describe`, and a plugin cache has no `.git`, so a plain build
+    there reports `dev` — useless for the `--version` comparison omo's SKILL.md
+    now tells a session to make. The cache directory *name* is the plugin
+    version, so that is what goes into `-ldflags`.
+  - **A symlink at the target is left alone.** omo's README tells a contributor
+    to link `PATH` at their own build so `make install` is live with no second
+    step; overwriting that would remove their dev loop with no warning.
+  - **Not opt-in,** unlike the vendor probe beside it. Probing which CLIs a
+    machine has is a question about the machine; building the binary the plugin
+    already shipped is finishing the install. Missing Go logs and skips.
+
+### Notes
+- **A `post_install` hook could not have done this.** Hooks are keyed by
+  *marketplace* (`post_install_hooks_for` → `_marketplace_of`), so one on
+  `heroacademia` fires for omo, omp, omd, oms and omx alike; and `apply()`'s
+  `UPDATE` branch returns before the hook loop, so a hook never runs for an
+  already-installed plugin — exactly the case here. Left as-is: the same gap
+  means `install_omc_shell_cli` never re-runs on update either, which is worth
+  a separate look.
+
 ## [Unreleased] — 2026-08-29 — the third tool nothing pointed at
 
 ### Removed

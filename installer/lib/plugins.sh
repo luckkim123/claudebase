@@ -23,6 +23,15 @@ sync_plugins() {
   fi
   local args=(--apply)
   [[ $DRY_RUN -eq 1 ]] && args=(--dry-run)
+  # --update is passed unconditionally: without it plugin_sync labels every
+  # already-installed plugin OK and never moves its version, so a machine that
+  # ran install.sh a year ago and runs it again today keeps the year-old copy.
+  # Measured 2026-08-31: oh-my-orchestrator sat at 0.16.0 on this machine while
+  # 0.17/0.18/0.19.0 had all shipped, because presence was the only thing
+  # checked. `claude plugin update` is idempotent -- a no-op when current -- so
+  # the cost of always asking is one CLI round trip per enabled plugin, and the
+  # cost of not asking is a silently stale harness.
+  args+=(--update)
   python3 "$REPO_DIR/installer/scripts/plugin_sync.py" "${args[@]}" 2>&1 \
     | while IFS= read -r line; do log "$line"; done
 }

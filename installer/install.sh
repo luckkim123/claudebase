@@ -99,6 +99,10 @@ maybe_enable_claude_mouse
 # shellcheck source=lib/orchestrator_vendors.sh
 source "$REPO_DIR/installer/lib/orchestrator_vendors.sh"
 maybe_record_orchestrator_vendors
+# The wrapper itself is Go source inside the plugin; `plugin update` moves the
+# source and never the binary on PATH. Runs after sync_plugins so the cache is
+# current. Not opt-in -- this completes an install rather than probing a machine.
+ensure_codeagent_wrapper
 
 # Idempotent editable (re)install of the omx-core CLI → lib/omx.sh. Re-pins the
 # editable install to the current oh-my-experiments checkout so a moved repo
