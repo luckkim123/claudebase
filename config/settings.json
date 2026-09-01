@@ -147,12 +147,6 @@
           },
           {
             "type": "command",
-            "command": "# EMOJI_GUARD\npython3 ~/claudebase/runtime/hooks/emoji_guard.py 2>/dev/null || true",
-            "timeout": 10,
-            "statusMessage": "Checking response text for emoji"
-          },
-          {
-            "type": "command",
             "command": "# GRAPH_REFRESH\nbash ~/claudebase/runtime/hooks/graph-refresh.sh",
             "timeout": 10,
             "statusMessage": "Refreshing this repo's code graphs"

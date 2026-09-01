@@ -14,7 +14,6 @@ A rule in `CLAUDE.md` is advisory — the model can read it and still not follow
 | `askuserquestion_retry.py` | Stop | The same defect caught after the fact — forces an immediate retry instead of ending the turn on a dead call. |
 | `detect_malformed_toolcall.py` | Stop | Tool-call markup leaking into the assistant's **text** channel. It self-poisons the session (retries reproduce it), so early detection is the only cheap fix. |
 | `fix_surrogate.py` | Stop · SessionStart | Lone UTF-16 surrogates written into the session transcript, corrupting it. Common in non-ASCII sessions. |
-| `emoji_guard.py` | Stop | Emoji in the final response — they mangle drag-select copying, so a copied answer comes back broken. |
 | `agent-routing-guard.py` | PreToolUse · Agent/Task | Research-shaped work dispatched to a subagent that cannot do research. |
 | `session-title-3words.py` | UserPromptSubmit | The built-in session namer ignoring its own stated length limit. Deterministic, no model call. |
 | `hud-ensure.sh` | SessionStart | Plugin updates silently overwriting the customized HUD wrapper. |

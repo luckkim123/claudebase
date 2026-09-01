@@ -2,6 +2,31 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-09-01 — the emoji guard comes out, the rule stays
+
+### Removed
+- **`runtime/hooks/emoji_guard.py` and its Stop wiring.** The guard blocked a
+  Stop and demanded the *whole* response again, so every trip cost a full
+  regeneration — and because the rewrite has to carry the routing header back
+  over, a dropped header trips a second guard and regenerates twice in one turn.
+  That chain is recorded in `docs/harness/measurements/2026-08-23-hook-inventory-and-cost.md`,
+  which also measured 22 blocks of which 10 were false positives before the
+  carve-outs narrowed it. Removed by operator decision.
+
+  **The instruction is not removed.** `config/CLAUDE.md`'s Output Form and
+  `runtime/output-styles/concise.md` both still say no emoji in response text,
+  with the same reason (emoji mangle terminal drag-select copy). What goes is
+  the enforcement layer, not the rule — this moves emoji from a blocking guard
+  back to a text-layer instruction, which is the trade the operator chose.
+
+  Also removed: `tests/hooks/test_emoji_guard.py` (16 tests), the `EMOJI_GUARD`
+  marker in `config/settings.critical.json`'s Stop list — the manifest must
+  change in the same commit or `settings_verify.py` fails the pre-commit hook —
+  and the README hook-inventory row. `~/.claude/settings.json` is *rendered*
+  from `config/settings.json` rather than symlinked, and `hooks` is a
+  baseline-owned key, so a machine keeps firing the hook until the render is
+  re-run.
+
 ## [Unreleased] — 2026-08-31 — the sync that installed but never updated
 
 Two holes in the one path that is supposed to make a second machine match this
