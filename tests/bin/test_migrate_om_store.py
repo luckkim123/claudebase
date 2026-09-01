@@ -650,18 +650,221 @@ def test_audit_skips_a_non_git_anchor(tmp_path):
     assert "not a git anchor" in r.stdout
 
 
-def test_apply_says_so_when_the_anchor_config_is_not_ready(anchor):
-    """`apply` does not gate on the audit -- the copy succeeding and the repo
-    being configured are different questions -- but the operator's next step is
-    a commit, so it says so in the same stderr channel as the other warnings."""
+def test_apply_seeds_the_config_it_used_to_only_complain_about(anchor):
+    """`apply` WRITES the §5 ignore lines and §2 attributes, then audits them.
+
+    This test used to assert the opposite half: that apply printed "git config
+    is not [ready]" and left the operator to fix it. That warning was the whole
+    gap -- `audit` had asked for these blocks since 2026-08-31 and nothing ever
+    wrote them, so every anchor this tool created started non-compliant and was
+    told about it in a line under a summary that said the migration succeeded.
+    The contract is now the stronger one, so the assertion moved with it rather
+    than being deleted.
+    """
     r = run("apply", str(anchor))
     assert r.returncode == 0
-    assert "git config is not" in r.stderr, r.stderr
+    assert "seeded .gitignore" in r.stdout, r.stdout
+    assert "seeded .gitattributes" in r.stdout, r.stdout
+    # The audit that follows the seed must now pass, so its complaint is gone.
+    assert "git config is not" not in r.stderr, r.stderr
+    assert run("audit", str(anchor)).returncode == 0
 
-    (anchor / ".gitignore").write_text(FOUR_LINES, encoding="utf-8")
-    (anchor / ".gitattributes").write_text(UNION, encoding="utf-8")
+    ignore = (anchor / ".gitignore").read_text(encoding="utf-8")
+    for line in FOUR_LINES.strip().split("\n"):
+        assert line in ignore, ignore
+    attrs = (anchor / ".gitattributes").read_text(encoding="utf-8")
+    for line in UNION.strip().split("\n"):
+        assert line in attrs, attrs
+
+
+def test_seeding_is_additive_and_idempotent(anchor):
+    """A second run adds nothing, and nothing already present is rewritten."""
+    (anchor / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     git(anchor, "add", "-A")
-    git(anchor, "commit", "-qm", "configure")
+    git(anchor, "commit", "-qm", "pre-existing ignore")
+
+    assert run("apply", str(anchor)).returncode == 0
+    first = (anchor / ".gitignore").read_text(encoding="utf-8")
+    assert first.startswith("node_modules/\n")
+
+    second = run("apply", str(anchor))
+    assert "seeded" not in second.stdout, second.stdout
+    assert (anchor / ".gitignore").read_text(encoding="utf-8") == first
+
+
+def test_the_secretary_attributes_are_seeded_before_the_directory_exists(tmp_path):
+    """The measured failure, and why seeding rather than auditing is the fix.
+
+    `run_audit` probes the secretary pair only when
+    `config/project/secretary/` already exists, so at apply time on a fresh
+    anchor the audit passes VACUOUSLY -- which is what happened on the `albc`
+    anchor (ksm-MS-7E01, 2026-09-01): it got `migrated.jsonl merge=union` and
+    nothing else, and six hours later omp's secretary wrote its first stub into
+    an undeclared append-only tracked path. The declaration has to be written
+    before the writer arrives, not checked after.
+    """
+    # A store with NO secretary, unlike the shared fixture -- that is the whole
+    # condition. `albc` was exactly this shape when it was migrated.
+    a = tmp_path / "nosec"
+    write(a / ".omp" / "rules.json", '{"version": 1}\n')
+    write(a / ".hq" / ".anchor", "id: nosec\n")
+    git(a, "init", "-q")
+    git(a, "config", "user.email", "t@example.invalid")
+    git(a, "config", "user.name", "t")
+    git(a, "add", "-A")
+    git(a, "commit", "-qm", "fixture")
+
+    assert run("apply", str(a)).returncode == 0
+    secretary = a / ".hq" / "config" / "project" / "secretary"
+    assert not secretary.exists()
+    # The audit passes here, and it passes VACUOUSLY -- it never probed the two
+    # paths, because the directory it gates on is absent. That is the check the
+    # seed has to stand in front of, not behind.
+    assert run("audit", str(a)).returncode == 0
+    attrs = (a / ".gitattributes").read_text(encoding="utf-8")
+    assert ".hq/config/project/secretary/ledger.jsonl merge=union" in attrs
+    assert ".hq/config/project/secretary/journal/*.md merge=union" in attrs
+
+
+def test_apply_offers_omo_init_when_the_community_payload_is_absent(anchor):
+    """`rules/` + `HUB.md` are not a git-config question, so `audit` is blind to
+    them; both anchors migrated on ksm-MS-7E01 had neither. Offered on stderr,
+    never seeded -- omo's own census says the user decides."""
+    r = run("apply", str(anchor))
+    assert "no omo payload" in r.stderr, r.stderr
+    assert "omo-init" in r.stderr
+
+    rules = anchor / ".hq" / "community" / "rules"
+    write(rules / "domain.md", "# rules\n")
+    write(anchor / ".hq" / "community" / "HUB.md", "# hub\n")
     again = run("apply", str(anchor))
-    assert again.returncode == 0
-    assert "git config is not" not in again.stderr
+    assert "no omo payload" not in again.stderr, again.stderr
+
+
+def test_purge_reports_what_still_names_the_deleted_store(anchor):
+    """After a purge, list every tracked file that still names the dead path.
+
+    Two findings from ksm-MS-7E01 (2026-09-01) collapse into one question.
+    Three `.gitignore` rules guarded `.omx/` trees the purge had just removed,
+    and ten sites across `CLAUDE.md` and `.claude/rules/*.md` sent readers to
+    `.omx/programs/` and friends. `audit` catches neither and correctly so: it
+    checks positive assertions, and a rule pointing at a path that is gone
+    violates none of them.
+
+    Exercised directly rather than through `purge`, which reads its
+    confirmation from `/dev/tty` and refuses without one by design (§7) -- the
+    same reason `test_purge_refuses_without_a_terminal` exists.
+    """
+    (anchor / ".gitignore").write_text(".omp/state/\n**/.omp\n", encoding="utf-8")
+    write(anchor / "CLAUDE.md", "see .omp/wiki/note.md for the convention\n")
+    write(anchor / "unrelated.md", "the omp harness does things\n")
+    # The regex trap, planted. `git grep -e ".omp/"` is a BASIC regex, so the
+    # leading `.` matches any character and this line reads as a dead `.omp/`
+    # reference. The old version of this test used only the prose file above,
+    # which fails for a different reason (no slash) and let the wildcard through.
+    write(anchor / "app.ts", 'import x from "components/comp/Button";\n')
+    git(anchor, "add", "-A")
+    git(anchor, "commit", "-qm", "docs naming the legacy path")
+
+    r = subprocess.run(
+        ["bash", "-c",
+         'HQ=.hq; note() { printf "%s\\n" "$*"; }; '
+         f'eval "$(sed -n \'/^report_dead_paths()/,/^}}$/p\' {SCRIPT})"; '
+         f'report_dead_paths "{anchor}" ".omp"'],
+        capture_output=True, text=True)
+    # ONE stream. Asserted on stdout alone, because concatenating the two is
+    # what hid the header/body split this call used to have.
+    out = r.stdout
+    assert ".gitignore:1:.omp/state/" in out, out
+    assert "CLAUDE.md" in out, out
+    # The bare rule, which the slash-suffixed pattern cannot see -- caught by
+    # the second pass, scoped to the two files where a bare store name is
+    # always a rule and never a word.
+    assert "**/.omp" in out, out
+    # Prose that merely says "omp" is not a path and must not be listed --
+    # otherwise the report is noise and gets scrolled past like every other
+    # detector in this file that fired on the wrong thing.
+    assert "unrelated.md" not in out, out
+    assert "app.ts" not in out, out
+    # Reports, never edits.
+    assert (anchor / ".gitignore").read_text(encoding="utf-8") == ".omp/state/\n**/.omp\n"
+
+
+def test_the_ignore_probes_survive_a_generic_rule_that_matches_their_name(tmp_path):
+    """A probe named for a file is answered by any rule matching that basename.
+
+    The probes used to be `.hq/work/probe` and friends, so a repo carrying a
+    generic `*probe*` in `.gitignore` satisfied all three while
+    `.hq/work/audit.json` stayed tracked -- the seed wrote nothing and the audit
+    passed, both looking at a name rather than at the directory. Probing the
+    directory asks the question actually being asked.
+    """
+    a = tmp_path / "decoy"
+    write(a / ".gitignore", "*probe*\n")
+    write(a / ".omp" / "rules.json", '{"version": 1}\n')
+    write(a / ".hq" / ".anchor", "id: decoy\n")
+    git(a, "init", "-q")
+    git(a, "config", "user.email", "t@example.invalid")
+    git(a, "config", "user.name", "t")
+    git(a, "add", "-A")
+    git(a, "commit", "-qm", "fixture")
+
+    r = run("apply", str(a))
+    assert r.returncode == 0
+    ignore = (a / ".gitignore").read_text(encoding="utf-8")
+    for line in FOUR_LINES.strip().split("\n"):
+        assert line in ignore, ignore
+    # And the real files are ignored now, which is the point of the four lines.
+    for probe in (".hq/work/audit.json", ".hq/runtime/board.json"):
+        assert git(a, "check-ignore", "-q", probe).returncode == 0, probe
+
+
+def test_a_narrow_lock_rule_does_not_pass_for_the_wide_one(tmp_path):
+    """§5's rule is `**/.hq/**/.hq-lock`; the narrow `.hq/community/.hq-lock`
+    covers only one place the lock lands. Probing only the community path is
+    satisfied by the narrow form and leaves `.hq/.hq-lock` tracked -- which is
+    the shape `stonefish_ws` was seeded with."""
+    a = tmp_path / "narrow"
+    write(a / ".gitignore", "**/.hq/work/\n**/.hq/runtime/\n**/.harness.lock/\n"
+                            ".hq/community/.hq-lock\n")
+    write(a / ".omp" / "rules.json", '{"version": 1}\n')
+    write(a / ".hq" / ".anchor", "id: narrow\n")
+    git(a, "init", "-q")
+    git(a, "config", "user.email", "t@example.invalid")
+    git(a, "config", "user.name", "t")
+    git(a, "add", "-A")
+    git(a, "commit", "-qm", "fixture")
+
+    assert git(a, "check-ignore", "-q", ".hq/.hq-lock").returncode != 0
+    assert run("apply", str(a)).returncode == 0
+    assert "**/.hq/**/.hq-lock" in (a / ".gitignore").read_text(encoding="utf-8")
+    assert git(a, "check-ignore", "-q", ".hq/.hq-lock").returncode == 0
+
+
+def test_the_journal_glob_is_declared_as_a_glob_not_as_todays_file(anchor):
+    """`journal/*.md` must reach `.gitattributes` intact.
+
+    The shared probe list is emitted by a function, and reading it with
+    `for p in $(union_paths)` both word-splits AND pathname-expands. The
+    `anchor` fixture carries `.omp/secretary/journal/2026-08-01.md`, so after
+    the migration that glob had a real file to match and expanded to it: the
+    seed declared `merge=union` on ONE dated file and left every future day
+    undeclared — reintroducing the add/add conflict §2 exists to prevent, inside
+    the fix for it.
+    """
+    # `cwd=anchor` is the trigger, not decoration. The glob expands against the
+    # SCRIPT'S working directory, so `migrate-om-store.sh apply /some/anchor`
+    # run from elsewhere leaves it literal and the defect hides. Run from inside
+    # the anchor -- `cd ~/repo && migrate-om-store.sh apply .` is the ordinary
+    # way to use this tool -- and the pattern has a real file to swallow.
+    assert run("apply", str(anchor), cwd=anchor).returncode == 0
+    journal = anchor / ".hq" / "config" / "project" / "secretary" / "journal"
+    assert list(journal.glob("*.md")), "fixture must have a journal file to expand"
+
+    attrs = (anchor / ".gitattributes").read_text(encoding="utf-8")
+    assert ".hq/config/project/secretary/journal/*.md merge=union" in attrs, attrs
+    assert "2026-08-01.md merge=union" not in attrs, attrs
+    # And the declaration must actually cover a day that does not exist yet.
+    probe = ".hq/config/project/secretary/journal/2099-12-31.md"
+    got = git(anchor, "check-attr", "merge", "--", probe).stdout
+    assert got.strip().endswith("union"), got

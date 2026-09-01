@@ -1069,6 +1069,17 @@ vault's `merge=union` rule pointed at a legacy path for three days after the
 purge deleted it. Exit 7 means the anchor's git config no longer matches the
 spec it was built from.
 
+**`apply` now WRITES both blocks on the anchor it just migrated** (2026-09-01),
+so a *new* anchor no longer starts non-compliant — which is what every 08-31
+finding actually was. `audit` keeps its job here unchanged: it is the only thing
+that reaches an anchor which is already migrated and will never run `apply`
+again, and this sync loop is where those anchors are seen. The seeding also
+covers a case auditing cannot: `run_audit` probes the two secretary attributes
+only when `config/project/secretary/` exists, and on a fresh anchor it does not,
+so an apply-time audit passes *vacuously* and the anchor is wrong hours later
+once omp's secretary writes there (measured on `ksm-MS-7E01`, 2026-09-01). A
+check whose subject has not been created yet cannot be the binding layer.
+
 It probes **behaviour** (`git check-ignore` / `check-attr`), never line text —
 a rule inherited from a parent `.gitignore` is equally valid, and text matching
 would fail a correct anchor while passing a wrong one. Two of its probes are

@@ -547,7 +547,13 @@ EOF
   # knows a wiki page moved.
   if [ "$n_wiki" -gt 0 ]; then
     err "$anchor ($store): $n_wiki page(s) land in $HQ/community/wiki/ — a STAGING state (store-spec §9.3); this anchor is NOT finished migrating"
-    err "  next: python3 <oh-my-orchestrator>/skills/harness/convert-wiki-form.py plan $anchor"
+    # `--harness` is not optional and this is the only place that knows the
+    # answer: the pages land FLAT in community/wiki/, and `harness:` is what
+    # replaced the per-harness directory (store-spec §1), so by conversion time
+    # nothing in the page or its path carries it. Omitting it is what dropped
+    # the field on 300 albc posts (ksm-MS-7E01, 2026-09-01). `$kind` is this
+    # run's store kind, already resolved above.
+    err "  next: python3 <oh-my-orchestrator>/skills/harness/convert-wiki-form.py plan $anchor --harness $kind"
   fi
   if [ "$verb" = apply ] && [ "$n_fail" -eq 0 ] && [ "$n_conflict" -eq 0 ]; then
     append_ledger "$anchor" "$kind" || return 1
@@ -683,6 +689,73 @@ run_purge() {
     mkdir -p "$(dirname "$dest")" && mv "$anchor/$store" "$dest" || return 1
     note "  no trash command — moved aside to $dest"
   fi
+  report_dead_paths "$anchor" "$store"
+}
+
+# --------------------------------------------------------------------------
+# report_dead_paths — what still names the store that was just deleted.
+#
+# Two findings from ksm-MS-7E01, 2026-09-01, and they are one question:
+#
+#   * three `.gitignore` rules (`.omx/registry/.wiki-lock`, `.omx/scratch/`,
+#     `.omx/state/`) guarding trees the purge had just removed. store-spec §5
+#     says the per-harness ignore lines go "with the stage-3 purge itself,
+#     which is the order the rule requires"; the purge ran and they stayed.
+#   * ten sites across `CLAUDE.md` and `.claude/rules/*.md` pointing at
+#     `.omx/programs/`, `.omx/registry/findings/`, `.omx/profile/...` and
+#     `/workspace .omp/ .omd/`. The migration commit edited `CLAUDE.md` and
+#     missed every one of them.
+#
+# `audit` cannot catch either, and correctly: it checks positive assertions
+# ("this path must be ignored/tracked/union") and a rule pointing at a path
+# that no longer exists violates none of them. That blind spot is a known
+# class in this file already -- the vault kept a `merge=union` rule on a legacy
+# path three days after the purge deleted it.
+#
+# REPORTS, never edits. What replaces a dead documentation path is a judgment
+# (`.omx/programs/` -> `.hq/community/programs/`) and a wrong automatic rewrite
+# is worse than a printed list. One grep over tracked files rather than a
+# `.gitignore` scanner plus a docs scanner: "what still names the dead path" is
+# the same question in both, and the merged form covers the sites a
+# `.gitignore`-only pass would have missed.
+# --------------------------------------------------------------------------
+report_dead_paths() {
+  local anchor="$1" store="$2" hits rules
+  git -C "$anchor" rev-parse --git-dir >/dev/null 2>&1 || return 0
+
+  # -F is load-bearing, not tidiness. Without it `git grep -e ".omp/"` is a
+  # BASIC REGEX and the leading `.` matches any character, so a line reading
+  # `import x from "components/comp/Button"` is reported as a dead `.omp/`
+  # reference. Measured: one such line, one false hit (agy, 2026-09-01). A
+  # report whose hits are mostly noise gets scrolled past, which is the same
+  # end state as not reporting at all.
+  #
+  # -I skips binaries. The pattern keeps the trailing slash so the store reads
+  # as a PATH SEGMENT: `.omx/` matches and the prose word "omx" does not, which
+  # is what keeps this list short enough to act on.
+  hits=$(git -C "$anchor" grep -In -F -e "$store/" -- ':!*.lock' 2>/dev/null | head -40)
+
+  # A second, NARROWER pass for the one form the slash misses. An ignore rule
+  # can name the store with no trailing slash (`**/.omp`, `.omx`), and that is
+  # a dead rule exactly like the others. Widening the first pattern to catch it
+  # is not an option -- `.omp` without the slash matches the word in prose, and
+  # this file already documents what a detector that fires on the wrong thing
+  # costs. So the bare form is searched ONLY in the two files where a bare
+  # store name is always a rule and never a word.
+  rules=$(git -C "$anchor" grep -In -F -e "$store" -- \
+            '.gitignore' '.gitattributes' '**/.gitignore' '**/.gitattributes' \
+            2>/dev/null | head -20)
+
+  [ -n "$hits" ] || [ -n "$rules" ] || return 0
+  note ""
+  note "  These still name $store, which no longer exists. Nothing was edited:"
+  # One stream. `note` writes stdout, so sending the hits to stderr split the
+  # header from its own list the moment either was redirected (agy).
+  [ -n "$hits" ]  && printf '%s\n' "$hits"  | sed 's/^/    /'
+  [ -n "$rules" ] && printf '%s\n' "$rules" | sed 's/^/    /' | sort -u
+  note "  (a .gitignore or .gitattributes rule here now guards nothing; a doc here"
+  note "   sends the next reader to a dead path — store-spec section 5 puts both"
+  note "   in the same work as the purge)"
 }
 
 # --------------------------------------------------------------------------
@@ -816,6 +889,112 @@ PY
 }
 
 # --------------------------------------------------------------------------
+# seed — write the §5 ignore lines and §2 attributes an anchor is supposed to
+# have. `audit` has checked for these since 2026-08-31; NOTHING HAS EVER
+# WRITTEN THEM. Both blocks were prose in store-spec, copied by hand, which is
+# the same "prose is not a binding layer" shape as everything else in this
+# file -- one layer below where it was diagnosed.
+#
+# What that cost, measured on ksm-MS-7E01 2026-09-01: the `albc` anchor was
+# seeded by a migration and got `migrated.jsonl merge=union` and nothing else.
+# Six hours later omp's secretary wrote its first `session_end` stub into
+# `config/project/secretary/`, an undeclared append-only tracked path -- the
+# exact setup for the add/add conflict the vault hit on 2026-08-17 and that §2
+# exists to prevent.
+#
+# And running `audit` at apply time would NOT have caught it, which is the part
+# worth writing down: `run_audit` probes the secretary pair only when
+# `config/project/secretary/` already EXISTS, and at apply time on a fresh
+# anchor it does not. The audit passes vacuously and the anchor is wrong six
+# hours later. A check whose subject has not been created yet cannot be the
+# binding layer; writing the declaration is.
+#
+# Seeded unconditionally for that reason -- a `merge=union` rule for a path
+# that does not exist yet is inert, and the path is the one omp creates on its
+# own schedule. Additive: a line already in effect is left alone, judged by
+# `check-ignore`/`check-attr` and not by grepping for its text, so a rule
+# inherited from a parent `.gitignore` counts. Never removes anything.
+# --------------------------------------------------------------------------
+# The §5 probes and the §2 paths, in ONE place because `seed_git_config` writes
+# what `run_audit` checks and the two drifting apart is worse than either being
+# wrong: the seed would satisfy a probe the audit does not make, or write a rule
+# the audit never asked for, and both read as green.
+#
+# The probes are DIRECTORIES, not a file inside them. A probe named
+# `.hq/work/probe` is satisfied by any rule matching the basename, so a repo
+# whose `.gitignore` carries a generic `*probe*` passes all three checks while
+# `.hq/work/audit.json` stays tracked — measured (agy, 2026-09-01): three probes
+# ignored, three real files not. `check-ignore` on the directory answers the
+# question actually being asked.
+#
+# `.hq/.hq-lock` is probed alongside `.hq/community/.hq-lock` for the same
+# reason. §5's rule is `**/.hq/**/.hq-lock`, which covers the lock wherever it
+# lands; probing only the `community/` path is satisfied by the NARROW rule
+# `.hq/community/.hq-lock`, which does not cover the root one. That narrow form
+# is what `stonefish_ws` was seeded with, and this repo and the vault each
+# widened theirs by hand afterwards.
+# One per LINE, and every consumer reads them through a here-doc rather than
+# `for p in $(...)`. That form word-splits and then PATHNAME-EXPANDS, and
+# `union_paths` ends in a glob: on an anchor that already has a journal file,
+# `journal/*.md` expanded to `journal/2026-01-01.md` and the seed declared
+# `merge=union` on that ONE dated file, leaving every future day undeclared —
+# the exact add/add setup §2 exists to prevent, reintroduced by the fix for it.
+# Measured while wiring the shared list, 2026-09-01.
+ignore_probes() {
+  printf '%s\n' "$HQ/work/" "$HQ/runtime/" ".harness.lock/" \
+                "$HQ/community/.hq-lock" "$HQ/.hq-lock"
+}
+
+union_paths() {
+  printf '%s\n' "$HQ/config/migrated.jsonl" \
+                "$HQ/config/project/secretary/ledger.jsonl" \
+                "$HQ/config/project/secretary/journal/*.md"
+}
+
+rule_for() {
+  case "$1" in
+    "$HQ/work/")     printf '**/%s/work/\n' "$HQ" ;;
+    "$HQ/runtime/")  printf '**/%s/runtime/\n' "$HQ" ;;
+    ".harness.lock/") printf '**/.harness.lock/\n' ;;
+    *.hq-lock)       printf '**/%s/**/.hq-lock\n' "$HQ" ;;
+    *)               return 1 ;;
+  esac
+}
+
+seed_git_config() {
+  local anchor="$1" f p rule added=0
+  git -C "$anchor" rev-parse --git-dir >/dev/null 2>&1 || return 0
+
+  f="$anchor/.gitignore"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    git -C "$anchor" check-ignore -q "$p" && continue
+    rule=$(rule_for "$p") || { err "$anchor: no §5 rule for probe $p"; return 1; }
+    [ -f "$f" ] && [ -n "$(tail -c 1 "$f" 2>/dev/null)" ] && printf '\n' >> "$f"
+    printf '%s\n' "$rule" >> "$f" || { err "$anchor: cannot write $f — $rule not declared"; return 1; }
+    note "  seeded .gitignore += $rule (store-spec section 5)"
+    added=$((added + 1))
+  done <<EOF
+$(ignore_probes)
+EOF
+
+  f="$anchor/.gitattributes"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ "$(attr_of "$anchor" "$p")" = union ] && continue
+    [ -f "$f" ] && [ -n "$(tail -c 1 "$f" 2>/dev/null)" ] && printf '\n' >> "$f"
+    printf '%s merge=union\n' "$p" >> "$f" || { err "$anchor: cannot write $f — $p not declared"; return 1; }
+    note "  seeded .gitattributes += $p merge=union (store-spec section 2)"
+    added=$((added + 1))
+  done <<EOF
+$(union_paths)
+EOF
+
+  [ "$added" -eq 0 ] || note "  -- $added declaration(s) added; review them before committing"
+  return 0
+}
+
+# --------------------------------------------------------------------------
 # audit — does this anchor's git config still satisfy the spec's blocks?
 #
 # store-spec §5 (the ignore lines) and §2 (the union-merge attributes) are the
@@ -858,15 +1037,19 @@ run_audit() {
     return 0
   fi
 
-  for p in "$HQ/work/probe" "$HQ/runtime/probe" ".harness.lock/probe" \
-           "$HQ/community/.hq-lock"; do
+  # Same list `seed_git_config` writes from -- see `ignore_probes` for why the
+  # probes are directories and why the root lock is probed too.
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
     if git -C "$anchor" check-ignore -q "$p"; then
       note "  ignored  $p"
     else
       err "$anchor: $p is NOT ignored — store-spec §5 asks for four lines"
       bad=$((bad + 1))
     fi
-  done
+  done <<EOF
+$(ignore_probes)
+EOF
 
   for p in "$HQ/config/migrated.jsonl" "$HQ/community/INDEX.md"; do
     if git -C "$anchor" check-ignore -q "$p"; then
@@ -885,6 +1068,11 @@ run_audit() {
     set -- "$@" "$HQ/config/project/secretary/ledger.jsonl" \
                 "$HQ/config/project/secretary/journal/2026-01-01.md"
   fi
+  # Still conditional, and now that is a nag-avoidance choice rather than the
+  # only line of defence: `seed_git_config` writes all three unconditionally at
+  # `apply`, so a fresh anchor is declared before this check could have probed
+  # it. Kept because this verb also runs against anchors nobody will migrate
+  # again, where a secretary that does not exist is not a finding.
   for p in "$@"; do
     a=$(attr_of "$anchor" "$p")
     if [ "$a" = union ]; then
@@ -1062,8 +1250,36 @@ case "$verb" in
       # this tool got exit 6 in the first place. `audit` is the gate; this is
       # the reminder, in the same stderr channel as the two warnings above.
       if [ "$verb" = apply ] && [ -z "$unfinished" ]; then
+        # Write the declarations BEFORE auditing them. `audit` has asked for
+        # these since 2026-08-31 and nothing wrote them, so every anchor this
+        # tool created started non-compliant and the audit reported it after
+        # the fact -- to an operator the summary had just told "done".
+        seed_git_config "$a"
         run_audit "$a" >/dev/null || \
           err "$a: apply is done, but the anchor's git config is not — run: migrate-om-store audit $a"
+        # The omo payload is the other half of a finished anchor, and it is not
+        # a git-config question so `audit` cannot see it. `community/rules/` +
+        # `HUB.md` are what make a vendor a worker under this project's rules
+        # rather than "a stranger who happens to answer questions"
+        # (omo shared-context.md). Measured ksm-MS-7E01 2026-09-01: two anchors
+        # migrated, purged, and reported clean by every layer, with neither
+        # path existing in either of them.
+        #
+        # OFFERED, not seeded. omo's own census answers the same finding with
+        # "Do not seed silently and do not proceed silently; the user decides"
+        # (omo-census.py), and the detector it computes for this
+        # (`seeded_rules`/`has_hub`) and the fixer that repairs it
+        # (`bin/omo-init`) both already ship. Neither has ever been reachable
+        # from the migration path: the census hook fires only on a prompt
+        # containing `/omo`, which a migration session has no reason to type.
+        # Said here for the same reason as the STAGING warning above -- this is
+        # the point that knows an anchor was just finished.
+        if [ ! -d "$a/$HQ/community/rules" ] ||
+           [ -z "$(find "$a/$HQ/community/rules" -name '*.md' 2>/dev/null | head -1)" ] ||
+           [ ! -f "$a/$HQ/community/HUB.md" ]; then
+          err "$a: $HQ/community/ has no omo payload (rules/ + HUB.md) — a vendor here runs without this project's rules"
+          err "  offer: python3 <oh-my-orchestrator>/bin/omo-init $a"
+        fi
       fi
     done ;;
 esac
