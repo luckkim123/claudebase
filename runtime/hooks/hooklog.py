@@ -22,7 +22,6 @@ stem 이 확장자를 포함하는 이유:
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -36,15 +35,23 @@ def _redirect(root: str) -> str:
     따라잡느라 큐가 막힌다 — 2026-09-04 실측, 대용량 파일 11 개가 한 시간 넘게
     다운로드 순번을 못 받았고 두 머신 사이에 충돌 사본 17 개가 생겼다.
 
-    `<이름>-<해시>` 로 프로젝트별 구분은 유지한다 — 홈 한 곳으로 고이면
-    state_root 가 애초에 막으려던 그 결함이 된다. 셸 쪽 hooklog_redirect() 와
-    같은 이름을 내야 하므로 sha256 앞 8 자리로 규칙을 맞춘다.
+    원래 경로를 그대로 이어붙여 프로젝트별 구분은 유지한다 — 홈 한 곳으로
+    고이면 state_root 가 애초에 막으려던 그 결함이 된다.
+
+    해시가 아니라 경로를 그대로 쓰는 이유:
+      한 디렉터리에는 이름이 여러 벌 있다. 훅 페이로드의 `cwd` 는 어떤 훅은
+      NFC, 어떤 훅은 NFD 로 주고, getcwd 는 들어갈 때 쓴 표기를 보존해서
+      `/bin/pwd` 조차 접어주지 않는다. 해시는 그 바이트를 그대로 먹으므로
+      한 프로젝트가 두 갈래로 갈린다 — 2026-09-04 실측, 같은 vault 가
+      `내 드라이브-c59bcd93`(py, NFC) 과 `내 드라이브-717e4a44`(sh, NFD) 로
+      갈렸다. 경로를 디렉터리 이름으로 쓰면 APFS 가 조회에서 정규화를
+      무시하므로 두 표기가 같은 디렉터리에 떨어진다. state_root 의 realpath 가
+      심볼릭 링크를, 이 중첩이 표기를 각각 하나로 모은다.
     """
     override = os.environ.get("HOOKLOG_ROOT")
     if not override:
         return root
-    digest = hashlib.sha256(root.encode("utf-8")).hexdigest()[:8]
-    return os.path.join(override, f"{os.path.basename(root)}-{digest}")
+    return os.path.join(override, root.lstrip("/"))
 
 
 def state_root(cwd) -> str:
@@ -60,9 +67,13 @@ def state_root(cwd) -> str:
     거기까지 올라가면 모든 프로젝트의 계측이 홈 디렉터리로 고인다.
     `.omc/` 를 가진 조상이 없으면 `.git` 을 가진 가장 가까운 조상으로
     떨어진다(신규 프로젝트의 첫 발화가 하위 디렉터리에서 나도 루트에 남게).
+
+    abspath 가 아니라 realpath 인 이유: 같은 디렉터리를 심볼릭 링크로도
+    부르면(`~/workspace` → Drive 실경로) 루트가 둘로 갈라진다. 셸 쪽
+    hooklog_state_root() 의 `cd -P` 와 같은 뜻이다.
     """
-    start = os.path.abspath(cwd or os.getcwd())
-    home = os.path.abspath(os.path.expanduser("~"))
+    start = os.path.realpath(cwd or os.getcwd())
+    home = os.path.realpath(os.path.expanduser("~"))
     git_root = None
     d = start
     while d != home and os.path.dirname(d) != d:

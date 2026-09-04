@@ -11,19 +11,30 @@ All user-visible changes to this repo. Format: [Keep a Changelog](https://keepac
 
 ### Added
 - **`HOOKLOG_ROOT` 탈출구 — `runtime/hooks/hooklog.sh`, `runtime/hooks/hooklog.py`.**
-  설정된 머신에서만 로그 루트를 `$HOOKLOG_ROOT/<이름>-<sha256 앞 8자리>` 로 옮긴다.
-  미설정이면 반환값이 기존과 **완전히 동일**하므로 다른 머신은 영향이 없다.
+  설정된 머신에서만 로그 루트를 `$HOOKLOG_ROOT` 아래 **원래 경로 그대로** 옮긴다
+  (`~/.claude/hooklogs/Users/kimseungmin/.../내 드라이브/.omc/logs`). 미설정이면
+  반환값이 기존과 **완전히 동일**하므로 다른 머신은 영향이 없다.
 
   왜 홈 한 곳에 몰지 않는가: `state_root` 이 `$HOME` 에서 멈추는 이유가 "모든
   프로젝트의 계측이 한 곳으로 고이는 것은 흩어지는 것과 같은 결함"이기 때문이다.
-  `<이름>-<해시>` 서브디렉터리는 그 분리를 그대로 유지한다 — `OMC_STATE_DIR` 이
-  이미 쓰는 규칙과 같은 모양이다.
+  경로를 그대로 이어붙이면 그 분리가 유지되고, 어느 프로젝트 것인지 `ls` 만으로
+  읽힌다.
 
-  **셸과 파이썬이 같은 이름을 내야 한다.** 두 구현이 갈리면 같은 프로젝트의 로그가
-  두 디렉터리로 나뉘고, `harness_stats` 는 각각을 반쪽만 세면서 아무 에러도 내지
-  않는다. `printf '%s' | shasum -a 256 | cut -c1-8` 와
-  `hashlib.sha256(root.encode()).hexdigest()[:8]` 가 같은 바이트를 먹도록 맞췄고,
-  `~/workspace` 로 양쪽 모두 `workspace-f4f09a64` 를 내는 것을 확인했다.
+  **왜 해시가 아닌가 — 처음엔 `<이름>-<sha256 앞 8자리>` 였고, 한 시간 만에
+  갈라졌다.** 한 디렉터리에는 이름이 여러 벌 있다. 훅 페이로드의 `cwd` 는 어떤
+  훅은 NFC, 어떤 훅은 NFD 로 주고, `getcwd` 는 들어갈 때 쓴 표기를 보존해서
+  `/bin/pwd` 로도 접히지 않는다. 해시는 그 바이트를 그대로 먹으므로 같은 vault 가
+  `내 드라이브-c59bcd93`(py, NFC) 과 `내 드라이브-717e4a44`(sh, NFD) 로 갈렸고,
+  거기에 `~/workspace` 심볼릭 링크로 들어온 셸 훅이 `workspace-f4f09a64` 를 더해
+  **한 프로젝트가 루트 3 개**가 됐다. `harness_stats` 는 각각을 반쪽만 세면서 아무
+  에러도 내지 않는다 — `state_root` 이 애초에 막으려던 그 결함이다.
+
+  경로를 디렉터리 이름으로 쓰면 APFS 가 조회에서 정규화를 무시하므로 두 표기가
+  같은 디렉터리에 떨어진다(실측: NFC 로 만든 폴더를 NFD 표기로 열어 같은 파일에
+  append 됐고 부모 아래 디렉터리는 1 개였다). 심볼릭 링크 쪽은 `cd -P` /
+  `os.path.realpath` 가 접는다. 셸·파이썬이 {심볼릭 링크, NFC, NFD} × {미설정,
+  설정} 6 개 입력 모두에서 같은 경로를 내는 것을 확인했다. 덤으로 셸 훅 발화마다
+  돌던 `shasum` 프로세스가 사라졌다.
 
   측정 (2026-09-04, Drive 로 미러되는 vault):
   - `.omc/` 디렉터리 **30 개**, 충돌 사본 **17 개** (`graphify_guard (1).jsonl` 등)

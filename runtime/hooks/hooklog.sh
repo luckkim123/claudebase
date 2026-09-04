@@ -20,25 +20,33 @@
 #   결함이 된다. jsonl 이 초 단위로 바뀌면 sync 엔진이 그걸 따라잡느라 큐가
 #   막힌다 — 2026-09-04 실측, 대용량 파일 11 개가 한 시간 넘게 다운로드 순번을
 #   못 받았고 두 머신 사이에 충돌 사본 17 개가 생겼다. 설정된 머신에서만
-#   동작이 바뀌고, `<이름>-<해시>` 로 프로젝트별 구분은 그대로 유지한다.
+#   동작이 바뀌고, 원래 경로를 그대로 이어붙여 프로젝트별 구분은 유지한다.
 
 # 계산된 루트를 HOOKLOG_ROOT 아래로 옮긴다. 미설정이면 그대로 통과.
-# Python 쪽 hooklog._redirect() 와 같은 이름을 내야 한다 (같은 sha256 앞 8 자리).
+# Python 쪽 hooklog._redirect() 와 같은 경로를 내야 한다.
+#
+# 해시가 아니라 경로를 그대로 중첩하는 이유:
+#   한 디렉터리에는 이름이 여러 벌 있다. getcwd 는 들어갈 때 쓴 표기를 보존해서
+#   같은 폴더가 NFC 로도 NFD 로도 나온다 — `/bin/pwd` 조차 접어주지 않는다.
+#   해시는 바이트를 그대로 먹으므로 그대로 두 갈래가 된다: 2026-09-04 실측,
+#   같은 vault 가 `내 드라이브-c59bcd93`(py, NFC) 과 `내 드라이브-717e4a44`
+#   (sh, NFD) 로 갈렸다. 경로를 디렉터리 이름으로 쓰면 APFS 가 조회에서 정규화를
+#   무시하므로 두 표기가 같은 디렉터리에 떨어진다 — 갈라짐이 원천에서 없어진다.
+#   덤으로 셸 훅 발화마다 돌던 shasum 프로세스가 사라진다.
 hooklog_redirect() {
     if [ -z "${HOOKLOG_ROOT:-}" ]; then
         printf '%s\n' "$1"
         return 0
     fi
-    _hl_h="$(printf '%s' "$1" | shasum -a 256 2>/dev/null | cut -c1-8)"
-    [ -n "$_hl_h" ] || _hl_h="$(printf '%s' "$1" | sha256sum 2>/dev/null | cut -c1-8)"
-    [ -n "$_hl_h" ] || _hl_h="nohash"
-    printf '%s\n' "$HOOKLOG_ROOT/$(basename "$1")-$_hl_h"
+    printf '%s\n' "$HOOKLOG_ROOT$1"
 }
 
 hooklog_state_root() {
+    # `-P` 가 심볼릭 링크를 푼다. 없으면 `~/workspace` 로 들어온 세션과
+    # 실경로로 들어온 세션이 서로 다른 루트를 잡는다 (Python 쪽 realpath 와 같은 뜻).
     _hl_start="${1:-$PWD}"
-    _hl_start="$(cd "$_hl_start" 2>/dev/null && pwd)" || _hl_start="$PWD"
-    _hl_home="$(cd "$HOME" 2>/dev/null && pwd)" || _hl_home="$HOME"
+    _hl_start="$(cd -P "$_hl_start" 2>/dev/null && pwd)" || _hl_start="$PWD"
+    _hl_home="$(cd -P "$HOME" 2>/dev/null && pwd)" || _hl_home="$HOME"
     _hl_git=""
     _hl_d="$_hl_start"
     while [ "$_hl_d" != "$_hl_home" ] && [ "$_hl_d" != "/" ] && [ -n "$_hl_d" ]; do
