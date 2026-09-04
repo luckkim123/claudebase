@@ -22,9 +22,29 @@ stem 이 확장자를 포함하는 이유:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
+
+
+def _redirect(root: str) -> str:
+    """HOOKLOG_ROOT 가 설정된 머신에서만 로그 루트를 그 아래로 옮긴다.
+
+    왜: 프로젝트 루트가 동기화 폴더(Google Drive 미러) 안이면 state_root 의
+    규칙이 그대로 결함이 된다. jsonl 이 초 단위로 바뀌면 sync 엔진이 그걸
+    따라잡느라 큐가 막힌다 — 2026-09-04 실측, 대용량 파일 11 개가 한 시간 넘게
+    다운로드 순번을 못 받았고 두 머신 사이에 충돌 사본 17 개가 생겼다.
+
+    `<이름>-<해시>` 로 프로젝트별 구분은 유지한다 — 홈 한 곳으로 고이면
+    state_root 가 애초에 막으려던 그 결함이 된다. 셸 쪽 hooklog_redirect() 와
+    같은 이름을 내야 하므로 sha256 앞 8 자리로 규칙을 맞춘다.
+    """
+    override = os.environ.get("HOOKLOG_ROOT")
+    if not override:
+        return root
+    digest = hashlib.sha256(root.encode("utf-8")).hexdigest()[:8]
+    return os.path.join(override, f"{os.path.basename(root)}-{digest}")
 
 
 def state_root(cwd) -> str:
@@ -47,11 +67,11 @@ def state_root(cwd) -> str:
     d = start
     while d != home and os.path.dirname(d) != d:
         if os.path.isdir(os.path.join(d, ".omc")):
-            return d
+            return _redirect(d)
         if git_root is None and os.path.exists(os.path.join(d, ".git")):
             git_root = d
         d = os.path.dirname(d)
-    return git_root or start
+    return _redirect(git_root or start)
 
 
 def fire(stem, cwd, session_id=None, **fields) -> None:

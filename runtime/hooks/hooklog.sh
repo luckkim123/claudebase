@@ -14,6 +14,26 @@
 #   `$HOME` 에 닿으면 멈춘다 — `~/.omc` 가 실재하는 머신에서 모든 프로젝트의
 #   계측이 홈 한 곳으로 고이는 것은 흩어지는 것과 같은 결함이다.
 #   `.git` 을 1순위로 쓰면 안 된다: 중첩 git repo 가 있으면 거기에 다시 만든다.
+#
+# 탈출구 `HOOKLOG_ROOT`:
+#   프로젝트 루트가 동기화 폴더(Google Drive 미러) 안이면 위 규칙이 그대로
+#   결함이 된다. jsonl 이 초 단위로 바뀌면 sync 엔진이 그걸 따라잡느라 큐가
+#   막힌다 — 2026-09-04 실측, 대용량 파일 11 개가 한 시간 넘게 다운로드 순번을
+#   못 받았고 두 머신 사이에 충돌 사본 17 개가 생겼다. 설정된 머신에서만
+#   동작이 바뀌고, `<이름>-<해시>` 로 프로젝트별 구분은 그대로 유지한다.
+
+# 계산된 루트를 HOOKLOG_ROOT 아래로 옮긴다. 미설정이면 그대로 통과.
+# Python 쪽 hooklog._redirect() 와 같은 이름을 내야 한다 (같은 sha256 앞 8 자리).
+hooklog_redirect() {
+    if [ -z "${HOOKLOG_ROOT:-}" ]; then
+        printf '%s\n' "$1"
+        return 0
+    fi
+    _hl_h="$(printf '%s' "$1" | shasum -a 256 2>/dev/null | cut -c1-8)"
+    [ -n "$_hl_h" ] || _hl_h="$(printf '%s' "$1" | sha256sum 2>/dev/null | cut -c1-8)"
+    [ -n "$_hl_h" ] || _hl_h="nohash"
+    printf '%s\n' "$HOOKLOG_ROOT/$(basename "$1")-$_hl_h"
+}
 
 hooklog_state_root() {
     _hl_start="${1:-$PWD}"
@@ -23,11 +43,11 @@ hooklog_state_root() {
     _hl_d="$_hl_start"
     while [ "$_hl_d" != "$_hl_home" ] && [ "$_hl_d" != "/" ] && [ -n "$_hl_d" ]; do
         if [ -d "$_hl_d/.omc" ]; then
-            printf '%s\n' "$_hl_d"
+            hooklog_redirect "$_hl_d"
             return 0
         fi
         [ -z "$_hl_git" ] && [ -e "$_hl_d/.git" ] && _hl_git="$_hl_d"
         _hl_d="$(dirname "$_hl_d")"
     done
-    printf '%s\n' "${_hl_git:-$_hl_start}"
+    hooklog_redirect "${_hl_git:-$_hl_start}"
 }

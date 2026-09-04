@@ -2,6 +2,43 @@
 
 All user-visible changes to this repo. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 2026-09-04 — 동기화 폴더 안의 계측 로그
+
+`.omc/logs/` 를 프로젝트 루트 옆에 두는 규칙(`hooklog.state_root`)은 git repo 에서
+맞고, Google Drive 가 미러링하는 워크스페이스에서는 그대로 결함이 된다. 훅 jsonl 이
+초 단위로 바뀌면 sync 엔진이 그걸 따라잡느라 큐가 막힌다 — 파일이 커서가 아니라
+**너무 자주 바뀌어서** 막히는 종류의 실패다.
+
+### Added
+- **`HOOKLOG_ROOT` 탈출구 — `runtime/hooks/hooklog.sh`, `runtime/hooks/hooklog.py`.**
+  설정된 머신에서만 로그 루트를 `$HOOKLOG_ROOT/<이름>-<sha256 앞 8자리>` 로 옮긴다.
+  미설정이면 반환값이 기존과 **완전히 동일**하므로 다른 머신은 영향이 없다.
+
+  왜 홈 한 곳에 몰지 않는가: `state_root` 이 `$HOME` 에서 멈추는 이유가 "모든
+  프로젝트의 계측이 한 곳으로 고이는 것은 흩어지는 것과 같은 결함"이기 때문이다.
+  `<이름>-<해시>` 서브디렉터리는 그 분리를 그대로 유지한다 — `OMC_STATE_DIR` 이
+  이미 쓰는 규칙과 같은 모양이다.
+
+  **셸과 파이썬이 같은 이름을 내야 한다.** 두 구현이 갈리면 같은 프로젝트의 로그가
+  두 디렉터리로 나뉘고, `harness_stats` 는 각각을 반쪽만 세면서 아무 에러도 내지
+  않는다. `printf '%s' | shasum -a 256 | cut -c1-8` 와
+  `hashlib.sha256(root.encode()).hexdigest()[:8]` 가 같은 바이트를 먹도록 맞췄고,
+  `~/workspace` 로 양쪽 모두 `workspace-f4f09a64` 를 내는 것을 확인했다.
+
+  측정 (2026-09-04, Drive 로 미러되는 vault):
+  - `.omc/` 디렉터리 **30 개**, 충돌 사본 **17 개** (`graphify_guard (1).jsonl` 등)
+  - ksm-mac 의 Drive 미러 큐가 `PushTask` 를 **3 시간 6 분** 붙들고 있었고,
+    `graphify_scope_filter.jsonl` 은 40 초 만에 version 1564 → 1569 로 올라가며
+    `ITEM_DOWNLOAD_CANCELLED` 를 반복했다
+  - 그 뒤에 줄 선 대용량 파일 11 개(75.8 GB)가 **한 시간 넘게** 다운로드 순번을
+    받지 못했다
+
+  값은 리포에 넣지 않는다 — `OMC_STATE_DIR`·`PATH` 와 같은 사용자별 절대경로라
+  각 머신의 `~/.claude/settings.json` 에 둔다. 이 머신은
+  `/Users/kimseungmin/.claude/hooklogs`.
+
+  `harness_stats.py` 는 루트를 인자로 받으므로(`--help`: "project root holding
+  `.omc/logs`") 새 경로를 넘기면 그대로 동작한다. 끊기는 계측은 없다.
 ## [Unreleased] — 2026-09-01 — the emoji guard comes out, the rule stays
 
 ### Removed
