@@ -244,10 +244,9 @@ if (Test-Path $PlatformInstaller) {
 }
 
 # 5b. plugin marketplaces — mirror of install.sh's sync_plugins marketplace-add
-#     block. install.ps1 does NOT yet implement the full plugin-sync flow
-#     (parity gap vs install.sh — tracked separately); these adds are a no-op
-#     until a Windows machine actually exercises `claude plugin install`, but
-#     keeping them aligned avoids drift later.
+#     block. The full plugin sync now runs in 5c below (parity closed), but
+#     these bootstrap adds stay: plugin_sync.py resolves a marketplace source
+#     from config/settings.json only, and omc also needs its shell CLI here.
 $Enabled = @()
 try {
     $Enabled = (Get-Content "$ClaudeHome/settings.json" -Raw | ConvertFrom-Json).enabledPlugins.PSObject.Properties | Where-Object { $_.Value -eq $true } | ForEach-Object { $_.Name }
@@ -289,6 +288,35 @@ if ($Enabled -match '@omc') {
         } else {
             Log "  WARNING: npm not found; skipping omc shell CLI install"
         }
+    }
+}
+
+# 5c. plugin sync — parity with install.sh's sync_plugins (lib/plugins.sh).
+#     Until now install.ps1 stopped at the marketplace adds, so a Windows
+#     machine never ran `claude plugin install` at all and every plugin in the
+#     repo pool stayed missing with nothing reporting it. The Python module
+#     owns all the Action/Decision logic; this is argv mapping only, exactly
+#     like the bash wrapper.
+#
+#     --update is unconditional for the same reason bash passes it: without it
+#     an already-installed plugin is labelled OK and never moves its version.
+$PluginSync = Join-Path $RepoDir "installer/scripts/plugin_sync.py"
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    Log "skip plugin sync: 'claude' not in PATH (install Claude Code, then re-run)"
+} elseif (-not $Python) {
+    Log "skip plugin sync: python not available"
+} elseif (-not (Test-Path -LiteralPath $PluginSync)) {
+    Log "skip plugin sync: $PluginSync missing"
+} else {
+    $SyncArgs = @($PluginSync, $(if ($DryRun) { "--dry-run" } else { "--apply" }), "--update")
+    # plugin_sync.py emits UTF-8 (the CLI's marketplace marker is U+276F); on a
+    # non-UTF-8 console codepage the child would die decoding its own output.
+    $PrevPyIO = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = "utf-8"
+    try {
+        & $Python.Source @SyncArgs 2>&1 | ForEach-Object { Log $_ }
+    } finally {
+        $env:PYTHONIOENCODING = $PrevPyIO
     }
 }
 
