@@ -320,6 +320,128 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     }
 }
 
+# 5d. OMC HUD wrapper - parity with install.sh's maybe_install_omc_hud
+#     (lib/omc.sh). install.ps1 never referenced it, so on Windows claudebase
+#     had never installed the HUD at all: the only omc-hud.mjs on such a
+#     machine is the raw template a plugin update drops, carrying neither the
+#     cache shim the baseline statusLine invokes nor the local customization.
+#
+#     Runs after 5c on purpose - plugin sync may have just moved the omc
+#     plugin, and the template is read out of its cache.
+function Resolve-Bash {
+    $b = Get-Command bash -ErrorAction SilentlyContinue
+    if ($b) { return $b.Source }
+    # Git for Windows ships bash but does not put it on PATH; git.exe lives in
+    # <root>\cmd, bash in <root>\bin.
+    $g = Get-Command git -ErrorAction SilentlyContinue
+    if ($g) {
+        $cand = Join-Path (Split-Path (Split-Path $g.Source -Parent) -Parent) "bin\bash.exe"
+        if (Test-Path -LiteralPath $cand) { return $cand }
+    }
+    foreach ($c in @("$env:ProgramFiles\Git\bin\bash.exe",
+                     "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+                     "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe")) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return $c }
+    }
+    return $null
+}
+
+if ($Enabled -match 'oh-my-claudecode@omc') {
+    $OmcRoot = Join-Path $ClaudeHome "plugins/cache/omc/oh-my-claudecode"
+    $Tmpl = $null; $CfgDir = $null
+    if (Test-Path -LiteralPath $OmcRoot) {
+        # Highest version that actually ships the template, newest first.
+        $vers = Get-ChildItem $OmcRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+' } |
+            Sort-Object { try { [version](($_.Name -split '-')[0]) } catch { [version]'0.0.0' } } -Descending
+        foreach ($v in $vers) {
+            $t = Join-Path $v.FullName "scripts/lib/hud-wrapper-template.txt"
+            if (Test-Path -LiteralPath $t) {
+                $Tmpl = $t
+                $CfgDir = Join-Path $v.FullName "scripts/lib/config-dir.mjs"
+                break
+            }
+        }
+    }
+
+    if (-not $Tmpl) {
+        Log "next: open Claude Code and run '/oh-my-claudecode:omc-setup' to finish HUD install (template not found in plugin cache)"
+    } elseif ($DryRun) {
+        Log "would install HUD wrapper from $Tmpl"
+    } else {
+        $HudDir  = Join-Path $ClaudeHome "hud"
+        $Dest    = Join-Path $HudDir "omc-hud.mjs"
+        $DestCfg = Join-Path $HudDir "lib/config-dir.mjs"
+        $Marker  = "OMC HUD local customization"
+        $LibDir     = Split-Path $CfgDir -Parent          # ...\scripts\lib
+        $ScriptsDir = Split-Path $LibDir -Parent          # ...\scripts
+
+        # Shims first, mirroring bash: the baseline statusLine runs
+        # `sh .../omc-hud-cache.sh .../omc-hud.mjs`, so a healthy wrapper that
+        # early-returns below must not be allowed to skip these - a missing
+        # shim is a silently blank HUD.
+        Run { New-Item -ItemType Directory -Path (Join-Path $HudDir "lib") -Force | Out-Null }
+        $shims = @(
+            @{ src = Join-Path $LibDir     "hud-cache-wrapper.sh"; dst = Join-Path $HudDir "omc-hud-cache.sh" },
+            @{ src = Join-Path $ScriptsDir "find-node.sh";         dst = Join-Path $HudDir "find-node.sh" },
+            @{ src = Join-Path $LibDir     "config-dir.sh";        dst = Join-Path $HudDir "lib/config-dir.sh" }
+        )
+        foreach ($sh in $shims) {
+            if (Test-Path -LiteralPath $sh.src) { Run { Copy-Item -LiteralPath $sh.src -Destination $sh.dst -Force } }
+        }
+
+        # Skip gate, same three conditions as bash: marker present AND
+        # config-dir.mjs byte-identical AND the wrapper still parses. The
+        # marker alone is not enough - a doubly-customized wrapper keeps it and
+        # throws "already been declared" at runtime.
+        $upToDate = $false
+        if ((Test-Path -LiteralPath $Dest) -and (Test-Path -LiteralPath $DestCfg) -and
+            (Select-String -LiteralPath $Dest -SimpleMatch -Pattern $Marker -Quiet) -and
+            -not (Compare-Object (Get-Content -LiteralPath $CfgDir -Raw) (Get-Content -LiteralPath $DestCfg -Raw))) {
+            $node = Get-Command node -ErrorAction SilentlyContinue
+            if ($node) { & $node.Source --check $Dest 2>$null | Out-Null; $upToDate = ($LASTEXITCODE -eq 0) }
+        }
+
+        if ($upToDate) {
+            Debug "HUD wrapper up to date (skip)"
+        } else {
+            Run { Copy-Item -LiteralPath $Tmpl -Destination $Dest -Force }
+            Run { Copy-Item -LiteralPath $CfgDir -Destination $DestCfg -Force }
+            $legacy = Join-Path $HudDir "omc-hud.js"
+            if (Test-Path -LiteralPath $legacy) { Run { Remove-Item -LiteralPath $legacy -Force } }
+            Log "installed HUD wrapper -> $Dest"
+
+            # The fresh copy dropped any customization; re-inject it. This is a
+            # bash script and there is no PowerShell equivalent, so a machine
+            # without bash gets the plain wrapper plus a warning rather than a
+            # silent downgrade.
+            $Bash = Resolve-Bash
+            $Customize = Join-Path $RepoDir "installer/scripts/hud-customize.sh"
+            if (-not $Bash) {
+                Log "  WARNING: bash not found - HUD customization not applied (install Git for Windows, then re-run)"
+            } elseif (-not (Test-Path -LiteralPath $Customize)) {
+                Log "  WARNING: $Customize missing - HUD customization not applied"
+            } else {
+                $env:CLAUDEBASE_DIR = $RepoDir.Replace('\', '/')
+                try {
+                    & $Bash $Customize.Replace('\', '/') 2>&1 | ForEach-Object { Log $_ }
+                } finally {
+                    Remove-Item Env:CLAUDEBASE_DIR -ErrorAction SilentlyContinue
+                }
+            }
+
+            $node = Get-Command node -ErrorAction SilentlyContinue
+            if ($node) {
+                & $node.Source --check $Dest 2>$null | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Log "WARNING: HUD wrapper failed syntax check after install -> $Dest"
+                    Log "  run: node --check $Dest   (to see the parse error)"
+                }
+            }
+        }
+    }
+}
+
 # 6. local-overrides hint
 $LocalFile = Join-Path $ClaudeHome "settings.local.json"
 if (-not (Test-Path -LiteralPath $LocalFile)) {
