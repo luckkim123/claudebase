@@ -85,7 +85,13 @@ function Already-Linked([string]$target, [string]$src) {
     if (-not (Test-Path -LiteralPath $target)) { return $false }
     $item = Get-Item -LiteralPath $target -Force
     if (-not $item.LinkType) { return $false }
-    return ($item.Target -eq $src) -or ($item.Target -contains $src)
+    # Normalize separators before comparing. Callers build $src with mixed
+    # separators ("$RepoDir/config/CLAUDE.md") while $item.Target is always
+    # OS-normalized to backslashes, so a raw -eq never matches and that file
+    # is torn down and relinked on every run.
+    $want = $src -replace '/', '\'
+    $have = @($item.Target) | ForEach-Object { $_ -replace '/', '\' }
+    return ($have -contains $want)
 }
 
 function Remove-IfExists([string]$target) {

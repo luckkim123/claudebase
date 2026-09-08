@@ -192,6 +192,16 @@ def plan_actions(settings: dict, installed: dict, metadata: dict,
 # ─── side-effect layer (apply) ───────────────────────────────────────────────
 
 
+def _bin(name: str) -> str:
+    """Resolve an executable to its full path.
+
+    On Windows `claude`/`npm` are `.cmd` shims: shutil.which() finds them via
+    PATHEXT but CreateProcess does not, so a bare "claude" in argv raises
+    FileNotFoundError. Resolving here keeps every call site unchanged.
+    """
+    return shutil.which(name) or name
+
+
 def _claude_available() -> bool:
     return shutil.which("claude") is not None
 
@@ -203,7 +213,7 @@ def install_omc_shell_cli() -> str:
     if not shutil.which("npm"):
         return "WARNING: npm not found; cannot install oh-my-claude-sisyphus"
     rc = subprocess.run(
-        ["npm", "i", "-g", "oh-my-claude-sisyphus@latest"],
+        [_bin("npm"), "i", "-g", "oh-my-claude-sisyphus@latest"],
         capture_output=True,
         check=False,
     ).returncode
@@ -258,7 +268,7 @@ def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
                 log.append(f"would update (user): {d.plugin}")
                 continue
             rc = subprocess.run(
-                ["claude", "plugin", "update", d.plugin],
+                [_bin("claude"), "plugin", "update", d.plugin],
                 capture_output=True,
                 check=False,
             ).returncode
@@ -281,12 +291,12 @@ def apply(decisions: list[Decision], dry_run: bool) -> list[str]:
             continue
         if d.action is Action.REINSTALL:
             subprocess.run(
-                ["claude", "plugin", "uninstall", "-s", d.current_scope, "-y", d.plugin],
+                [_bin("claude"), "plugin", "uninstall", "-s", d.current_scope, "-y", d.plugin],
                 capture_output=True,
                 check=False,
             )
         rc = subprocess.run(
-            ["claude", "plugin", "install", "-s", "user", d.plugin],
+            [_bin("claude"), "plugin", "install", "-s", "user", d.plugin],
             capture_output=True,
             check=False,
         ).returncode
@@ -313,8 +323,8 @@ def _existing_marketplaces() -> set[str]:
     if not _claude_available():
         return set()
     out = subprocess.run(
-        ["claude", "plugin", "marketplace", "list"],
-        capture_output=True, text=True,
+        [_bin("claude"), "plugin", "marketplace", "list"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
         check=False,
     ).stdout
     names = set()
@@ -364,7 +374,7 @@ def ensure_marketplaces(settings: dict, metadata: dict, platform: str,
             log.append(f"would add marketplace: {name} ({source})")
             continue
         rc = subprocess.run(
-            ["claude", "plugin", "marketplace", "add", source],
+            [_bin("claude"), "plugin", "marketplace", "add", source],
             capture_output=True,
             check=False,
         ).returncode
@@ -390,7 +400,7 @@ def lab_wide_settings(repo_dir: Path | None = None) -> dict:
     """
     repo = repo_dir or Path(__file__).resolve().parents[2]
     path = repo / "config" / "settings.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 def load_inputs(repo_dir: Path | None = None) -> tuple[dict, dict, dict, dict]:
@@ -400,14 +410,14 @@ def load_inputs(repo_dir: Path | None = None) -> tuple[dict, dict, dict, dict]:
     settings_path = home / "settings.json"
     if not settings_path.exists():
         settings_path = repo / "config" / "settings.json"
-    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    settings = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
     installed_path = home / "plugins" / "installed_plugins.json"
-    installed = json.loads(installed_path.read_text()) if installed_path.exists() else {}
-    metadata = json.loads((repo / "installer" / "marketplace-metadata.json").read_text())
+    installed = json.loads(installed_path.read_text(encoding="utf-8")) if installed_path.exists() else {}
+    metadata = json.loads((repo / "installer" / "marketplace-metadata.json").read_text(encoding="utf-8"))
     local_path = home / "settings.local.json"
     local_enabled = {}
     if local_path.exists():
-        local_enabled = json.loads(local_path.read_text()).get("enabledPlugins", {})
+        local_enabled = json.loads(local_path.read_text(encoding="utf-8")).get("enabledPlugins", {})
     return settings, installed, metadata, local_enabled
 
 
