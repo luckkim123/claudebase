@@ -57,21 +57,46 @@ if (-not (Has-Winget)) {
 $VenvDir = Join-Path $HOME ".claude\.venv"
 $VenvPy  = Join-Path $VenvDir "Scripts\python.exe"
 
-# Probe base interpreter >=3.10 via the py launcher (never 3.9).
+# Probe base interpreter >=3.10 — skipped entirely once the venv already
+# exists (nothing downstream needs it then). Prefer the py launcher, but it
+# isn't always installed alongside python.org's interpreter, so `2>$null`
+# can't save us: a missing `py` command is a PowerShell command-not-found
+# error, not process stderr, and survives that redirect. Guard with
+# Get-Command and fall back to whatever python3/python resolves on PATH.
 $basePy = $null
-foreach ($ver in @("3.12","3.13","3.11","3.10")) {
-    & py "-$ver" --version 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { $basePy = $ver; break }
+$basePyExe = $null
+if (-not (Test-Path $VenvPy)) {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        foreach ($ver in @("3.12","3.13","3.11","3.10")) {
+            & py "-$ver" --version 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { $basePy = $ver; break }
+        }
+    }
+    if (-not $basePy) {
+        foreach ($cmd in @("python3", "python")) {
+            $exe = Get-Command $cmd -ErrorAction SilentlyContinue
+            if (-not $exe) { continue }
+            $verOut = & $exe.Source --version 2>&1
+            if ($verOut -match '(\d+)\.(\d+)' -and ([int]$Matches[1] -gt 3 -or ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 10))) {
+                $basePyExe = $exe.Source
+                break
+            }
+        }
+    }
 }
 
-if (-not $basePy) {
-    Write-Host "[platform/windows] HINT: no Python >=3.10 found - omd document skills need it."
-    Write-Host "[platform/windows]       install: winget install Python.Python.3.12"
-} elseif (-not (Test-Path $VenvPy)) {
-    Write-Host "[platform/windows] creating venv (py -$basePy) at $VenvDir"
-    & py "-$basePy" -m venv $VenvDir
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[platform/windows] WARNING: venv creation failed - skipping pip packages"
+if (-not (Test-Path $VenvPy)) {
+    if (-not $basePy -and -not $basePyExe) {
+        Write-Host "[platform/windows] HINT: no Python >=3.10 found - omd document skills need it."
+        Write-Host "[platform/windows]       install: winget install Python.Python.3.12"
+    } else {
+        $creatorExe = if ($basePy) { "py" } else { $basePyExe }
+        $creatorArgs = if ($basePy) { @("-$basePy", "-m", "venv", $VenvDir) } else { @("-m", "venv", $VenvDir) }
+        Write-Host "[platform/windows] creating venv ($creatorExe $($creatorArgs -join ' ')) at $VenvDir"
+        & $creatorExe @creatorArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[platform/windows] WARNING: venv creation failed - skipping pip packages"
+        }
     }
 }
 
