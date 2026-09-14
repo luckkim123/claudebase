@@ -70,6 +70,11 @@ import tempfile
 
 from pathlib import Path as _Path
 
+try:
+    import fcntl
+except ImportError:  # ponytail: no flock on Windows — merge+replace still stops erasure, parallel required Reads can lose one; msvcrt.locking if a Windows machine ever gates
+    fcntl = None
+
 sys.path.insert(0, str(_Path(__file__).resolve().parent))
 try:
     import hooklog  # noqa: E402
@@ -121,9 +126,27 @@ def _load_state(path):
 
 
 def _save_state(path, seen):
+    """Merge `seen` into the state file; the set only ever grows.
+
+    Parallel tool calls run this hook as parallel processes on one file. The old
+    truncate-then-dump let a concurrent call load an empty file — an in-scope call
+    then denied, an out-of-scope one saved that empty set back over the record
+    (albc session, 2026-09-14). So: lock, re-read what is on disk, union, and land
+    it with os.replace, which a lock-free reader sees as old-or-new, never torn.
+    """
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(sorted(seen), f)
+        with open(path + ".lock", "a") as lock:
+            # ponytail: unbounded wait — holders are sibling hook runs (ms); a hung one dies at the 5s hook timeout and releases. LOCK_NB + deadline if that ever bites
+            if fcntl:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            current = _load_state(path)
+            merged = current | set(seen)
+            if merged == current:
+                return
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".session-gate-")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(sorted(merged), f)
+            os.replace(tmp, path)
     except Exception:  # noqa: BLE001
         pass
 
@@ -252,8 +275,7 @@ def main():
 
     hooklog.fire("session_gate.jsonl", payload.get("cwd"), payload.get("session_id"),
                  decision="allow")
-    _save_state(state_path, seen)
-    return 0
+    return 0  # nothing new to record — saving here is what erased state under races
 
 
 def _safe_search(pattern, text):
