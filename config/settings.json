@@ -104,11 +104,6 @@
             "type": "command",
             "command": "# SESSION_TITLE_3WORDS\npython3 ~/claudebase/runtime/hooks/session-title-3words.py 2>/dev/null || true",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "# COMPACT_GUARD_CONSUME\npython3 ~/claudebase/runtime/hooks/compact-guard.py prompt-submit 2>/dev/null || true",
-            "timeout": 5
           }
         ]
       }
@@ -264,7 +259,7 @@
     "locale": "en",
     "contextLimitWarning": {
       "threshold": 40,
-      "autoCompact": true
+      "autoCompact": false
     },
     "elements": {
       "contextBar": true,
